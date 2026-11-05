@@ -10,6 +10,7 @@ import { signedUrlMap } from "../../lib/inmemory-store.js";
 import { projectIdentifierToId } from "./TCG-utils/api.js";
 import { BrowserStackConfig } from "../../lib/types.js";
 import { getTMBaseURL } from "../../lib/tm-base-url.js";
+import { wrapUntrusted } from "../../lib/untrusted-content.js";
 import {
   validateUploadPath,
   TEST_MANAGEMENT_ATTACHMENT_EXTENSIONS,
@@ -131,7 +132,9 @@ export async function uploadFile(
         ],
       };
     } else {
-      throw new Error(`Unexpected response: ${JSON.stringify(response.data)}`);
+      throw new Error(
+        `Unexpected response: ${wrapUntrusted("API response", JSON.stringify(response.data))}`,
+      );
     }
   } catch (error) {
     return {

@@ -18,6 +18,13 @@ import { getTMBaseURL } from "../../lib/tm-base-url.js";
 import { discoverBaseUrl, HostSource } from "./discovery.js";
 import { Credentials, Transport, fetchTransport } from "./egress.js";
 import { FLAT_SUFFIX, INDEX_FILE, InvocationError } from "./index-loader.js";
+import {
+  assertRegionKnown,
+  assertUsAccount,
+  getRegionalHost,
+  usesRegionalHosts,
+  RegionalHostKind,
+} from "../../lib/regional-host.js";
 
 /**
  * The environment this DEPLOYMENT points at, e.g. "preprod".
@@ -52,8 +59,8 @@ function environmentMap(): Record<string, Record<string, string>> {
  *
  * The general mechanism lives in `discovery.ts` and is driven by the index's `base_urls`.
  * This map is the bridge for products that predate that: tm's hosts are still hardcoded in
- * `lib/tm-base-url.ts` and shared with the hand-written Test Management tools. Once tm's
- * product.yaml declares `base_urls`, this entry can go and nothing else changes.
+ * `lib/tm-base-url.ts` and shared with the hand-written Test Management tools. Once a
+ * product.yaml declares `base_urls`, its entry can go and nothing else changes.
  */
 const BUILTIN_DISCOVERY: Record<
   string,
@@ -61,6 +68,52 @@ const BUILTIN_DISCOVERY: Record<
 > = {
   tm: getTMBaseURL,
 };
+
+/**
+ * Hosts used when the account's region is routed here, ahead of discovery and the
+ * index's declared hosts. `hosts` covers the capabilities that name a host.
+ */
+const REGIONAL_HOSTS: Record<
+  string,
+  { base: RegionalHostKind; hosts?: Record<string, RegionalHostKind> }
+> = {
+  tm: { base: "testManagement" },
+  tra: { base: "observabilityApi" },
+  app_accessibility: { base: "appAccessibilityApi" },
+  web_accessibility: { base: "accessibilityApi" },
+  devicecontrol: { base: "automateHubUrl", hosts: { api: "automateApi" } },
+  mobiledevicecontrol: {
+    base: "appAutomateHubUrl",
+    hosts: { api: "appAutomateCloud" },
+  },
+};
+
+/** Products served from US hosts only, refused for accounts in other regions. */
+const US_ONLY_PRODUCTS: Record<string, string> = {
+  loadtesting: "Load Testing",
+};
+
+/** True for a product this package knows by name, as opposed to a name the agent typed. */
+export function isKnownProduct(name: unknown): boolean {
+  return (
+    typeof name === "string" &&
+    (Object.hasOwn(REGIONAL_HOSTS, name) ||
+      Object.hasOwn(US_ONLY_PRODUCTS, name))
+  );
+}
+
+function regionalHost(product: string, host?: string): string | undefined {
+  if (US_ONLY_PRODUCTS[product]) {
+    assertUsAccount(US_ONLY_PRODUCTS[product]);
+    return undefined;
+  }
+  const entry = REGIONAL_HOSTS[product];
+  const kind = host ? entry?.hosts?.[host] : entry?.base;
+  if (!kind) return undefined;
+  // Test Management finds the account's region by probing; the others need it known.
+  if (kind !== "testManagement") assertRegionKnown();
+  return usesRegionalHosts() ? getRegionalHost(kind) : undefined;
+}
 
 /** True when this product's host is account-specific and must be discovered per call. */
 export function isRegionSharded(product: string, source?: HostSource): boolean {
@@ -98,15 +151,70 @@ function credentialsFrom(config: BrowserStackConfig): Credentials {
  * Refusing rather than guessing is deliberate: a guessed host fails as a DNS error or a 404
  * that reads like the caller's problem, when it is our missing configuration.
  */
+/**
+ * The host a capability named, as opposed to the product's own.
+ *
+ * `_HOST_` is in the override variable deliberately. The environment-suffixed form is
+ * `CAPABILITY_REGISTRY_BASE_URL_<PRODUCT>_<ENV>`, so a bare
+ * `CAPABILITY_REGISTRY_BASE_URL_APPAUTOMATE_HUB` would mean the hub host or the "hub"
+ * environment depending on which the reader had in mind — and whichever the code chose,
+ * the other reading sends a call to the wrong origin silently.
+ *
+ * A named environment refuses rather than falling back to the declared host, for the same
+ * reason the product-level resolver does: a preprod session must not reach production
+ * because nobody defined preprod's hub.
+ */
+function resolveNamedHost(
+  product: string,
+  key: string,
+  host: string,
+  source: HostSource | undefined,
+  environment: string | undefined,
+): string {
+  const trim = (url: string) => url.replace(/\/$/, "");
+  const suffix = `${key}_HOST_${host.toUpperCase().replace(/[^A-Z0-9]+/g, "_")}`;
+  const override = process.env[`CAPABILITY_REGISTRY_BASE_URL_${suffix}`];
+  if (override) return trim(override);
+
+  if (environment) {
+    throw new InvocationError(
+      `environment '${environment}' has no '${host}' host for product '${product}'. Set ` +
+        `CAPABILITY_REGISTRY_BASE_URL_${suffix}.`,
+    );
+  }
+
+  const regional = regionalHost(product, host);
+  if (regional) return regional;
+
+  const declared = source?.hosts?.[host];
+  if (declared) return trim(declared);
+
+  const known = Object.keys(source?.hosts ?? {});
+  throw new InvocationError(
+    `that capability is served from the '${host}' host, which product '${product}' does ` +
+      `not declare. ` +
+      (known.length
+        ? `Its index defines: ${known.join(", ")}.`
+        : `Its index defines no named hosts.`) +
+      ` Set CAPABILITY_REGISTRY_BASE_URL_${suffix} to override.`,
+  );
+}
+
 export async function resolveBaseUrl(
   product: string,
   config: BrowserStackConfig,
   source?: HostSource,
   transport?: Transport,
+  host?: string,
 ): Promise<string> {
   const key = product.toUpperCase();
   const environment = selectedEnvironment();
   const trim = (url: string) => url.replace(/\/$/, "");
+
+  // A capability that names a host is asking for one fixed origin, so none of the rungs
+  // below apply: discovery answers with the product's own host, and the declared
+  // `base_url` cannot serve this capability's paths at all.
+  if (host) return resolveNamedHost(product, key, host, source, environment);
 
   const explicit = process.env[`CAPABILITY_REGISTRY_BASE_URL_${key}`];
   if (explicit) return trim(explicit);
@@ -140,6 +248,9 @@ export async function resolveBaseUrl(
     );
     return trim(source.base_url);
   };
+
+  const regional = regionalHost(product);
+  if (regional) return regional;
 
   if ((source?.base_urls?.length ?? 0) > 0) {
     try {

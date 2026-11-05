@@ -25,7 +25,7 @@ import { z } from "zod";
 import logger from "../../logger.js";
 import { MCPEventExtras, trackMCP } from "../../lib/instrumentation.js";
 import { BrowserStackConfig } from "../../lib/types.js";
-import { GroupedArguments } from "./bind.js";
+import { GroupedArguments, replacedFixed, withoutFixed } from "./bind.js";
 import { indexPaths, isEnabled, resolveBaseUrl } from "./config.js";
 import { redact } from "./redact.js";
 import { Credentials, Transport, fetchTransport } from "./egress.js";
@@ -35,7 +35,15 @@ import {
   ResponseSelection,
   resolveResponses,
 } from "./index-loader.js";
+import { assertSelectable, narrowResponse } from "./narrow.js";
+import { invokeWithFallbacks } from "./fallback.js";
 import { invoke } from "./resolve.js";
+import { agentHandoff, agentSummary, agentsOf, matchAgents } from "./agents.js";
+import { isEnabled as askIsEnabled } from "../ask-browserstack/config.js";
+import { PRODUCTS as ASK_PRODUCTS } from "../ask-browserstack/types.js";
+import { decodedLength, detachImage, noteImage } from "./media.js";
+import { maybeCompressBase64 } from "../../lib/image.js";
+import { answerContent } from "./answer.js";
 import {
   ambiguousProducts,
   productAnchors,
@@ -43,9 +51,10 @@ import {
   searchCapabilities,
   singular,
   terms,
+  unreadable,
   vocabularyOf,
 } from "./search.js";
-import { Mode } from "./types.js";
+import { Mode, guidanceLines } from "./types.js";
 
 export const PERMISSION_VALUES = ["not_asked", "granted", "denied"] as const;
 
@@ -64,9 +73,15 @@ export interface RegistryDeps {
    * Per-product base URL. Never baked into the artifact — it is environment AND account
    * specific: tm is region-sharded, so this is resolved per call, not once at startup.
    */
-  baseUrlFor: (product: string) => Promise<string>;
+  baseUrlFor: (product: string, host?: string) => Promise<string>;
   credentialsFor: () => Credentials;
   transport?: Transport;
+  /**
+   * Whether a product's BrowserStack AI agents may be advertised. Absent means never: an
+   * agent the client is told about but cannot reach through askBrowserStackAI is worse
+   * than no hint at all, because the CRUD route it displaced still worked.
+   */
+  agentsEnabled?: (product: string) => boolean;
 }
 
 /**
@@ -138,18 +153,41 @@ export function addCapabilityRegistryToolsFromConfig(
       registry,
       // The whole product bundle, not just its host: a region-sharded product declares
       // several candidates and the probe needs an endpoint from its own capabilities.
-      baseUrlFor: (product) =>
-        resolveBaseUrl(product, config, registry.index.products[product]),
+      baseUrlFor: (product, host) =>
+        resolveBaseUrl(
+          product,
+          config,
+          registry.index.products[product],
+          undefined,
+          host,
+        ),
       // Read per call, not captured: the remote server rebuilds config per session, so a
       // captured credential would outlive the session it belongs to.
       credentialsFor: () => ({
         username: config["browserstack-username"],
         accessKey: config["browserstack-access-key"],
       }),
+      // Read per call, like askBrowserStackAI's own kill switch, so flipping it hides the
+      // agents too without a restart.
+      agentsEnabled: (product) =>
+        askIsEnabled() && (ASK_PRODUCTS as readonly string[]).includes(product),
     },
     config,
   );
 }
+
+/**
+ * Titles for products whose index does not carry one yet.
+ *
+ * The infra indexes are authored here and declare `title`; tm, tra and loadtesting come
+ * out of the products-os export, which does not emit it yet, and re-formatting three
+ * 80k-line files to add one key was the wrong trade. These go away when the export does.
+ */
+const DEFAULT_TITLES: Record<string, string> = {
+  tm: "Test Management",
+  tra: "Test Reporting & Analytics",
+  loadtesting: "Load Testing",
+};
 
 function ok(payload: unknown): CallToolResult {
   return { content: [{ type: "text", text: JSON.stringify(payload) }] };
@@ -194,6 +232,12 @@ export function addCapabilityRegistryTools(
   /** "tm, loadtesting" — for prose that has to name them. */
   const productList = productNames.join(", ") || "none loaded";
 
+  /** The agents a client may be pointed at for this product, gated on reachability. */
+  const reachableAgents = (product: string) =>
+    deps.agentsEnabled?.(product)
+      ? registry.index.products[product]
+      : undefined;
+
   // NO PRODUCT CATALOG IN ANY DESCRIPTION. listProducts used to restate every product's
   // trimmed summary in its own description — duplicating, as static context on every
   // single request, the exact thing the tool returns when called. Authored summaries are
@@ -228,7 +272,12 @@ export function addCapabilityRegistryTools(
    * below pin each branch against the message its source actually produces; if you reword
    * a refusal, one of them will tell you.
    */
-  const invocationReason = (message: string): string => {
+  const invocationReason = (message: string, error?: unknown): string => {
+    // A WITHHELD HANDLE IS REPORTED TO THE CALLER AS NOT FOUND, so the message cannot be
+    // what distinguishes it. The flag on the error can, which keeps the refusal countable
+    // without the wording admitting the capability exists.
+    if (error instanceof InvocationError && error.withheld)
+      return "capability_disabled";
     if (message.startsWith("unknown_capability:")) return "unknown_capability";
     if (message.startsWith("unknown_endpoint:")) return "unknown_endpoint";
     // The outcome this PR turns on: 46 of 244 capabilities are withheld, so this is the
@@ -279,26 +328,13 @@ export function addCapabilityRegistryTools(
 
   tools.listProducts = server.tool(
     "listProducts",
-    "List the BrowserStack products this surface can reach: what each one does, the " +
-      "entities it models, and a line saying what each entity is. START HERE — " +
-      "searchCapability needs a product, and this is what tells you which one. If two " +
-      "products could both fit the task, ask the user rather than choosing for them. " +
-      "ALWAYS pass the user's request, in their own words, as `query`: the answer then " +
-      "says outright whether the products clash over the words in it. WHEN IT REPORTS A " +
-      "CLASH — two products claiming the same word for different things — ASK THE USER " +
-      "WHICH PRODUCT THEY MEAN AND WAIT FOR THEIR ANSWER BEFORE SEARCHING OR INVOKING " +
-      "ANYTHING. The response carries the question to put to them and what the shared " +
-      "word means in each product. Choosing for them, or searching each product in turn " +
-      "and merging the results, is the failure this call exists to prevent.",
+    "List BrowserStack products and their entities. START HERE: searchCapability needs a product name from this. Pass the user's request as `query`; if it reports a clash, ask the user which product they mean and wait. Never pick for them or merge products.",
     {
       query: z
         .string()
         .optional()
         .describe(
-          "The user's request, in their own words. With it the response carries a " +
-            "`routing` block saying whether the products share the vocabulary this " +
-            "request uses — and, when they do, the question to put to the user before " +
-            "searching either product.",
+          "The user's request, in their own words; enables clash detection.",
         ),
     },
     {
@@ -309,7 +345,6 @@ export function addCapabilityRegistryTools(
       openWorldHint: false,
     },
     async ({ query }) => {
-      track("listProducts");
       // THE CLASH, STATED RATHER THAN LEFT TO BE NOTICED. The entity lists below carry
       // the evidence — `report` under two products — but reading two lists and spotting
       // the overlap is work an agent skips when it already has a product in mind. So the
@@ -331,19 +366,26 @@ export function addCapabilityRegistryTools(
       const listingToken = query
         ? signRouting(
             ambiguity.products.length > 1
-              ? { verdict: "clash", terms: ambiguity.terms }
+              ? {
+                  verdict: "clash",
+                  terms: ambiguity.terms,
+                  products: ambiguity.products,
+                }
               : ambiguity.unknown
                 ? { verdict: "blank" }
                 : { verdict: "settled", product: ambiguity.settled },
           )
         : undefined;
+      /** The product's title for the question put to a person; the key stays the handle. */
+      const label = (name: string) =>
+        registry.index.products[name]?.title ?? DEFAULT_TITLES[name] ?? name;
       const routing =
         ambiguity.products.length > 1
           ? {
               verdict: "products_clash" as const,
               note:
                 `These products clash over ${ambiguity.terms.map((t) => `'${t}'`).join(", ")} — ` +
-                `the same word means something different in ${ambiguity.products.join(" and ")}. ` +
+                `the same word means something different in ${ambiguity.products.map(label).join(" and ")}. ` +
                 "ASK THE USER which they mean before searching or invoking anything; do not " +
                 "search each product in turn and merge the results. Searching before you " +
                 "ask will be refused: send the user's answer in `user_words` with this " +
@@ -351,9 +393,10 @@ export function addCapabilityRegistryTools(
               routing_token: listingToken,
               shared_terms: ambiguity.terms,
               products: ambiguity.products,
-              question: `Which product do you mean — ${ambiguity.products.join(" or ")}?`,
+              question: `Which product do you mean — ${ambiguity.products.map(label).join(" or ")}?`,
               senses: ambiguity.products.map((name) => ({
                 product: name,
+                title: label(name),
                 means: ambiguity.terms
                   .map((term) => {
                     const entities =
@@ -390,6 +433,7 @@ export function addCapabilityRegistryTools(
                 routing_token: listingToken,
                 question: `Which product do you mean — ${registry
                   .productNames()
+                  .map(label)
                   .join(" or ")}?`,
               }
             : query
@@ -411,11 +455,36 @@ export function addCapabilityRegistryTools(
                     : {}),
                 }
               : undefined;
+      // ONLY ONCE THE PRODUCT IS SETTLED. A clash is the user's question to answer first,
+      // and an agent hint beside it would read as the answer.
+      const settledOn =
+        routing?.verdict === "no_clash" ? ambiguity.settled : undefined;
+      const agentMatches = settledOn
+        ? matchAgents(reachableAgents(settledOn), query)
+        : [];
+      track(
+        "listProducts",
+        agentMatches.length
+          ? { product: settledOn, agent_match: agentMatches[0].agent.name }
+          : undefined,
+      );
       return ok({
         ...(routing ? { routing } : {}),
+        ...(agentMatches.length
+          ? { agent_match: agentHandoff(settledOn as string, agentMatches) }
+          : {}),
         products: registry.productNames().map((name) => ({
           name,
+          ...((registry.index.products[name].title ?? DEFAULT_TITLES[name])
+            ? {
+                title:
+                  registry.index.products[name].title ?? DEFAULT_TITLES[name],
+              }
+            : {}),
           summary: registry.index.products[name].summary,
+          ...(agentsOf(reachableAgents(name)).length
+            ? { agents: agentsOf(reachableAgents(name)).map(agentSummary) }
+            : {}),
           // THE ENTITIES AND WHAT EACH ONE IS. Routing is this tool's whole job, and a
           // product summary alone does not do it: "add a tag to xyz test" reads as
           // either product until you can see that `tag` exists in one and not the other.
@@ -461,9 +530,7 @@ export function addCapabilityRegistryTools(
 
   tools.describeEntity = server.tool(
     "describeEntity",
-    "Describe one entity: what it is, what identifies it, what it relates to, and the " +
-      "vocabulary the product uses for it. Read this before filtering or writing, because " +
-      "ids and field values usually have to be resolved first.",
+    "Describe an entity: identifiers, relations and product vocabulary. Read before filtering or writing; ids often need resolving first.",
     {
       product: productArg().describe(
         `Which product the entity belongs to: ${productList}.`,
@@ -500,41 +567,11 @@ export function addCapabilityRegistryTools(
 
   tools.searchCapability = server.tool(
     "searchCapability",
-    "Find endpoints this surface can call, by plain language, within ONE product. " +
-      "CALL listProducts FIRST, passing the user's request as its `query`: it names the " +
-      "products, says whether they clash over the words in that request, and gives you " +
-      "the question to ask when they do. You need it anyway — `product` here takes a name " +
-      "exactly as listProducts spells it. Where two products use the same word for " +
-      "different things, ask the USER and wait for an answer rather than picking. " +
-      "Search matches the product's OWN words, not synonyms. When your words are not the " +
-      "product's, the response says so: `weak_match: true` with a `suggested_vocabulary` " +
-      "map of the product's entities and their aliases. Results are still returned, but " +
-      "treat them as unconfirmed — pick the closest entity from that map and search again " +
-      "using its vocabulary, or call describeEntity on it for the fuller picture. That one " +
-      "extra round trip is far cheaper than invoking the wrong capability. " +
-      "Narrowing further with `entity` sharpens results. " +
-      "THIS IS A SHORTLIST, NOT A CONTRACT. Each result carries only what you need to " +
-      "CHOOSE: `name` (the handle), `product`, `mode` (whether it writes), `intent` and " +
-      "`guidance` (what it does and what goes wrong), and `method`/`path` for products " +
-      "that publish no name yet. " +
-      "It does NOT carry parameters or response shapes. Once you have picked one, call " +
-      "describeCapability for its full contract, then invokeCapability. Fetching the " +
-      "contract only for the one you chose is the difference between ~1k and ~8.6k tokens " +
-      "a search. Results are ranked and capped. " +
-      "TO SEE EVERYTHING rather than search, pass query='*' — that lists the product " +
-      "(honouring `entity` and `mode`) in a stable order instead of ranking it, which is " +
-      "what you want when the task is 'what can this product do' rather than a lookup. " +
-      "TO PAGE, send `offset`: every response carries `offset` and, when more matched, " +
-      "`next_offset` — resend the SAME query with that value. `next_offset` is absent on " +
-      "the last page, so walk until it stops rather than comparing counts.",
+    "Find capabilities in ONE product by plain language. CALL listProducts FIRST; `product` must be spelled exactly as listProducts spells it. If `weak_match` is true, search again with `suggested_vocabulary` before invoking. Results are a shortlist: call describeCapability for the contract, then invokeCapability. query='*' lists all; page with `next_offset` until it is absent.",
     {
       query: z
         .string()
-        .describe(
-          "What you are trying to do, in plain language. Pass '*' (or 'all') to BROWSE " +
-            "instead of search: every capability in the product, in a stable order, " +
-            "paginated — use it when you want to see the surface rather than find one thing.",
-        ),
+        .describe("Goal in plain language, or '*' to list every capability."),
       entity: z
         .string()
         .optional()
@@ -562,11 +599,7 @@ export function addCapabilityRegistryTools(
       // refused here instead, by a message that names listProducts.
       product: z
         .string()
-        .describe(
-          "Which product to search, named exactly as listProducts spells it. Call " +
-            "listProducts with the user's request to get the name — and to find out " +
-            "whether the products clash over it, in which case ask the user first.",
-        ),
+        .describe("Product name, exactly as listProducts spells it."),
       // `product_choice` USED TO LIVE HERE, AND WAS ITS OWN DEFEAT.
       //
       // A required enum of 'user_confirmed' | 'not_asked' publishes, in the schema every
@@ -580,20 +613,13 @@ export function addCapabilityRegistryTools(
         .string()
         .optional()
         .describe(
-          "The `routing_token` from the last listProducts call or product_ambiguous " +
-            "refusal — it carries what that step concluded about the user's request, " +
-            "signed. Always pass the most recent one. When it reports a clash, send the " +
-            "user's answer in `user_words` alongside it; neither works alone.",
+          "Latest `routing_token` from listProducts or a clash refusal; send with `user_words` after a clash.",
         ),
       user_words: z
         .string()
         .optional()
         .describe(
-          "The USER'S OWN words, verbatim, that settle which product this is — either " +
-            "the product's name or a term only one product uses ('quality gate', 'test " +
-            "plan'). Quote them; do not paraphrase, and do not write words the user did " +
-            "not say. When a query could mean either product this is what lifts the " +
-            "refusal, because it is checked against the index rather than taken on trust.",
+          "The user's own words, verbatim, naming the product or a term only it uses. Never paraphrase.",
         ),
       mode: z
         .enum(["read", "write", "destructive"])
@@ -603,10 +629,7 @@ export function addCapabilityRegistryTools(
       offset: z
         .number()
         .optional()
-        .describe(
-          "Skip this many results — send the `next_offset` from the previous response " +
-            "with the SAME query to get the next page. Omit for the first page.",
-        ),
+        .describe("`next_offset` from the previous page, with the same query."),
     },
     {
       title: "Search Capabilities",
@@ -663,6 +686,8 @@ export function addCapabilityRegistryTools(
           { product },
         );
       }
+      /** The product was taken on the caller's word, for a quote the index cannot read. */
+      let routingUnverified = false;
       if (!isBrowseQuery(query)) {
         // JUDGE THE USER'S WORDS, NOT THE AGENT'S REWRITE.
         //
@@ -689,10 +714,25 @@ export function addCapabilityRegistryTools(
         // A clash the routing step already reported is only cleared by the user's own
         // words: the token shows the question was put, `user_words` says what came back.
         // Neither works alone — a token on its own is just proof of having been refused.
+        // AN ANSWER THE INDEX CANNOT READ. Its vocabulary is English and so is the
+        // tokenizer, so a user who answered the question in German or Japanese quoted
+        // words that anchor nothing here and was refused for it — the user's own choice
+        // rejected, which is the one outcome a gate that exists to ask the user must not
+        // produce. The token proves the clash was put and names the products it was
+        // between; the quote is in a script the index could never have matched; so the
+        // caller's product is taken at its word, and the row says so, which is what
+        // keeps this path countable. A quote the index CAN read is still judged.
+        const unverifiable =
+          routed?.verdict === "clash" &&
+          (routed.products ?? []).includes(product) &&
+          anchor.products.length === 0 &&
+          unreadable(user_words);
+        routingUnverified = unverifiable;
         const answered =
-          routed?.verdict !== "settled" &&
-          anchor.products.length === 1 &&
-          anchor.products[0] === product;
+          (routed?.verdict !== "settled" &&
+            anchor.products.length === 1 &&
+            anchor.products[0] === product) ||
+          unverifiable;
         // One product anchored, and it is the one being searched: the user settled it.
         // A routing step that already settled on this product counts the same way — it
         // read the user's whole request, which is more than the fragment quoted here.
@@ -736,7 +776,11 @@ export function addCapabilityRegistryTools(
         ) {
           const token = signRouting(
             ambiguity.products.length > 1
-              ? { verdict: "clash", terms: ambiguity.terms }
+              ? {
+                  verdict: "clash",
+                  terms: ambiguity.terms,
+                  products: ambiguity.products,
+                }
               : mismatch
                 ? { verdict: "settled", product: ambiguity.settled }
                 : { verdict: "blank" },
@@ -833,17 +877,33 @@ export function addCapabilityRegistryTools(
       // Whether the search FOUND anything useful: zero results, or a weak match (the
       // caller's words are not the product's), is a miss worth counting even though the
       // call succeeded.
+      // A TASK AN AGENT OWNS IS HANDED OVER, NOT ASSEMBLED. The capabilities still come
+      // back — a later "save these to folder X" may genuinely need one — but the handoff
+      // leads, so it is read before the shortlist that would otherwise be acted on.
+      const agentMatches = isBrowseQuery(query)
+        ? []
+        : // `user_words` settles the product, not the task, so it is matched WITH the
+          // query: alone it drops the words ("generate", "PRD") that name the agent.
+          matchAgents(
+            reachableAgents(product),
+            [query, user_words].filter(Boolean).join(" "),
+          );
       track("searchCapability", {
         product,
         entity,
+        agent_match: agentMatches[0]?.agent.name,
         search_query: redact(query),
         results_returned: hits.length,
         total_matched: rest.total_matched,
         truncated: rest.truncated,
         weak_match: weak,
         coverage: Math.round(rest.coverage * 100) / 100,
+        ...(routingUnverified ? { routing_unverified: true } : {}),
       });
       return ok({
+        ...(agentMatches.length
+          ? { use_agent: agentHandoff(product, agentMatches) }
+          : {}),
         // NO build_id. It is provenance — for our logs and for cache busting — and
         // resolution must never depend on it, which is exactly why no caller has anything
         // to do with it. It was also the WHOLE registry's id, so a search scoped to one
@@ -876,8 +936,8 @@ export function addCapabilityRegistryTools(
           mode: capability.mode,
           entity: capability.entity,
           ...(capability.intent ? { intent: capability.intent } : {}),
-          ...(capability.guidance?.length
-            ? { guidance: capability.guidance }
+          ...(guidanceLines(capability.guidance).length
+            ? { guidance: guidanceLines(capability.guidance) }
             : {}),
         })),
         ...rest,
@@ -911,16 +971,7 @@ export function addCapabilityRegistryTools(
 
   tools.describeCapability = server.tool(
     "describeCapability",
-    "The full contract for ONE capability you picked from searchCapability: its " +
-      "parameters grouped into path_params / query / body under the spec's own names, " +
-      "what it returns, and its declared response shapes fully expanded. Call this after " +
-      "search and before invokeCapability — search deliberately omits all of it, because " +
-      "it is only needed for the one capability you actually call. " +
-      "Identify it by `name`, exactly as search returned it; only when a result carries " +
-      "no `name` (some products publish none yet) pass `method` and `path` instead. " +
-      "Every parameter lists its type, whether it is required, its allowed values where " +
-      "the set is closed, and any limits the product declares — obey those before calling " +
-      "rather than discovering them from a rejected request.",
+    "Full contract (parameters, returns, response shapes) for ONE capability from searchCapability. Call it before invokeCapability. Identify by `name`; use `method` + `path` only when no name was returned.",
     {
       name: z
         .string()
@@ -942,17 +993,12 @@ export function addCapabilityRegistryTools(
         ),
       product: productArg()
         .optional()
-        .describe(
-          `Which product owns it (${productList}). searchCapability returns it on every ` +
-            "result; required only when two products share a name or a path.",
-        ),
+        .describe("Owning product; needed only when names or paths collide."),
       include_responses: z
         .enum(["success", "all", "none"])
         .optional()
         .describe(
-          "Which declared responses to expand: 'success' (default, the 2xx shape), 'all' " +
-            "(adds the error shapes — several times larger, and near-identical across " +
-            "endpoints), or 'none'.",
+          "'success' (default), 'all' (adds error shapes, larger) or 'none'.",
         ),
     },
     {
@@ -1002,8 +1048,37 @@ export function addCapabilityRegistryTools(
         // Dropped rather than overwritten: the raw field holds `{"$response": …}` pointers,
         // and spreading the capability would leak them through whenever the resolved value
         // is absent.
-        const { responses: unresolved, method, path, ...contract } = capability;
+        //
+        // THE WIRE FIELDS GO WITH IT, for the same reason the route does: they describe how
+        // WE reach the product, not anything the caller supplies or acts on. `host` names
+        // which of the product's origins serves this one capability; `encoding` and
+        // `send_empty_body` say how the request body is framed; `local_only` and `disabled`
+        // are claims about which surface publishes it, already answered by the capability
+        // being present at all. A contract that shows them invites a caller to reason about
+        // plumbing it cannot influence — and `host: "api"` was doing exactly that in a
+        // shipped describe response.
+        //
+        // `invocable` STAYS, and is the one of these that is not plumbing. Presence says the
+        // capability is published, which is not the same as callable: a reference-only entry
+        // is published precisely so search can still find it and say what to do instead.
+        // Stripping the flag would leave that fact only in a prose guidance line.
+        const {
+          responses: unresolved,
+          method,
+          path,
+          host,
+          encoding,
+          send_empty_body,
+          local_only,
+          disabled,
+          ...contract
+        } = capability;
         void unresolved;
+        void host;
+        void encoding;
+        void send_empty_body;
+        void local_only;
+        void disabled;
         return ok({
           // No build_id here either, same reason. `product` stays: describeCapability
           // resolves by NAME and its product argument is optional, so the answer has to
@@ -1021,13 +1096,20 @@ export function addCapabilityRegistryTools(
           // product is in that state today.
           ...(capability.name ? {} : { method, path }),
           ...contract,
+          // A FIXED PARAMETER IS NOT THE CALLER'S TO SEND. Where the contract allows a
+          // required parameter exactly one value, bind fills it in, so the view drops it:
+          // a caller who never sees `script` cannot leave it out or paraphrase it, which
+          // were the two commonest refusals on the device-control surface. The same view
+          // strips `form_name`, the multipart field a file travels under: plumbing, not
+          // something the caller supplies.
+          ...withoutFixed(capability),
           ...(responses ? { responses } : {}),
         });
       } catch (error) {
         if (error instanceof InvocationError)
           return refuse(
             "describeCapability",
-            invocationReason(error.message),
+            invocationReason(error.message, error),
             error.message,
             undefined,
             identity,
@@ -1049,24 +1131,13 @@ export function addCapabilityRegistryTools(
 
   tools.invokeCapability = server.tool(
     "invokeCapability",
-    "Call a capability whose contract you have from describeCapability. Pass `name` exactly " +
-      "as given — that is the handle. Only when a result carries no `name` (some products " +
-      "do not publish them yet) pass `method` and `path` instead, exactly as returned. " +
-      "Arguments go in path_params / query / body under the spec's own names. One call " +
-      "makes exactly one request and returns the product's own response untouched; when " +
-      "`completed` is false there is another page, which you fetch by sending the " +
-      "capability's own page parameter. If the mode is 'write' you MUST ask the user " +
-      "first, then resend with user_permission='granted' and a change_summary; both are " +
-      "recorded. Capabilities whose mode is 'destructive' (deletes) are refused outright — " +
-      "archiving, closing and merging are ordinary writes and DO run, so read the mode and " +
-      "intent before confirming with the user.",
+    "Run a capability after describeCapability, by `name` (or `method` + `path` if unnamed); args go in path_params / query / body. `select` narrows the response only where the contract carries `narrowable`. If `completed` is false, fetch the next page with the capability's own page parameter, not `offset`. Writes: ask the user first, then resend with user_permission='granted' and a change_summary. Deletes are refused; archive, close and merge are writes.",
     {
       name: z
         .string()
         .optional()
         .describe(
-          "The capability's published name, exactly as returned (e.g. 'create_test_run_by_integer_id'). " +
-            "Preferred over method/path.",
+          "Capability name exactly as returned. Preferred over method/path.",
         ),
       method: z
         .string()
@@ -1094,10 +1165,7 @@ export function addCapabilityRegistryTools(
         .describe("Body fields, under the spec's names."),
       product: productArg()
         .optional()
-        .describe(
-          `Which product owns the capability (${productList}). searchCapability returns it ` +
-            "on every result; required only when two products share a name or a path.",
-        ),
+        .describe("Owning product; needed only when names or paths collide."),
       user_permission: z
         .enum(PERMISSION_VALUES)
         .optional()
@@ -1108,6 +1176,32 @@ export function addCapabilityRegistryTools(
         .string()
         .optional()
         .describe("What will change. Required for writes."),
+      select: z
+        .object({
+          where: z
+            .record(z.string(), z.any())
+            .optional()
+            .describe(
+              "Field -> the value it must take, or an array of accepted values. Strings " +
+                "match case-insensitively.",
+            ),
+          distinct: z
+            .array(z.string())
+            .optional()
+            .describe(
+              "Return one row per distinct combination of these fields and nothing else — " +
+                "the cheapest way to ask what values exist.",
+            ),
+          fields: z
+            .array(z.string())
+            .optional()
+            .describe("Keep only these fields on each row."),
+          limit: z.number().optional().describe("At most this many rows."),
+        })
+        .optional()
+        .describe(
+          "Fields to keep; only when the contract carries `narrowable`.",
+        ),
     },
     {
       title: "Invoke Capability",
@@ -1165,6 +1259,29 @@ export function addCapabilityRegistryTools(
           body: input.body,
         };
 
+        if (capability.invocable === false) {
+          // THE ONE PLACE describe AND invoke DIVERGE, deliberately. Everywhere else a name
+          // that describes is a name that invokes, and breaking that is its own bug class —
+          // but a reference-only capability exists precisely to be read and not called. The
+          // refusal carries the instruction, because the note is the whole point of it
+          // still being published.
+          return refuse(
+            "invokeCapability",
+            "capability_not_invocable",
+            `${handle} cannot be called on this server. ` +
+              (guidanceLines(capability.guidance)[0] ??
+                "Describe it for what to do instead.") +
+              " Follow that instead of retrying.",
+            undefined,
+            identity,
+          );
+        }
+
+        // A `select` the capability cannot honour is refused HERE, with the other
+        // pre-flight checks: refusing it on the way back meant the request had already
+        // been sent — a device allocated, a build uploaded — and the answer thrown away.
+        assertSelectable(capability, input.select);
+
         if (capability.mode === "destructive") {
           // Refused before binding, so consent is never sought for something that cannot run.
           return refuse(
@@ -1207,15 +1324,100 @@ export function addCapabilityRegistryTools(
           }
         }
 
-        const result = await invoke(
+        // The base URL is resolved per target rather than once: a fallback step may sit
+        // on a different named host from the capability that declared it.
+        const { result, attempts } = await invokeWithFallbacks(
           capability,
           args,
-          await deps.baseUrlFor(product),
-          deps.credentialsFor(),
-          transport,
-          registry.index.products[product]?.auth,
-          product,
+          async (target, targetArgs) =>
+            invoke(
+              target,
+              targetArgs,
+              await deps.baseUrlFor(product, target.host),
+              deps.credentialsFor(),
+              transport,
+              registry.index.products[product]?.auth,
+              product,
+            ),
+          (name) => registry.byNameLookup(name, product).capability,
         );
+        // NARROWING IS APPLIED TO A SUCCESS ONLY. A 4xx body is the diagnosis the caller
+        // needs whole, and a selection that happened to match none of its keys would
+        // quietly empty it. `narrowResponse` refuses an unsupported `select` by throwing,
+        // which lands in the InvocationError branch below with the accepted fields listed.
+        const narrowed = result.ok
+          ? narrowResponse(capability, result.http_response.body, input.select)
+          : undefined;
+        // A REPLACED VALUE IS SAID OUT LOUD. `bind` overwrites a fixed parameter the caller
+        // sent its own value for; the answer names it, so a 200 is not read as "my
+        // version ran".
+        const replaced = replacedFixed(capability, args);
+        const answer = {
+          ...(replaced.length > 0
+            ? {
+                note:
+                  `${replaced.map((name) => `\`${name}\``).join(", ")} ` +
+                  `${replaced.length > 1 ? "were" : "was"} replaced by the server's own ` +
+                  "value, which is the only one this capability can run; the value you " +
+                  "sent did not run. The contract withholds these parameters for that reason.",
+              }
+            : {}),
+          ...(narrowed
+            ? {
+                ...result,
+                http_response: { ...result.http_response, body: narrowed.body },
+                narrowed: narrowed.narrowing,
+              }
+            : result),
+          // Only when the chain ran: a capability without `fallbacks` answers exactly as
+          // before, and one whose first call succeeded has nothing to report.
+          ...(attempts ? { fallback: { attempts } } : {}),
+        };
+        // AN IMAGE LEAVES THE JSON. Where the capability says its body carries one, the
+        // base64 is lifted out and sent as an MCP image block beside the text, so the
+        // client renders it and the model sees a picture rather than paying for every
+        // character of it as text. Only on a success: an error body is the diagnosis and
+        // goes back whole. Large images are compressed the way the legacy screenshot
+        // tools compress theirs, so the hosted server's response stays bounded — and the
+        // note and the reported size describe the block as attached, not as received.
+        //
+        // THE CAPABILITY THAT ANSWERED DECIDES. After a fallback chain the 2xx body is the
+        // last step's, so its `media` (or lack of one) is what applies, not the original's.
+        const answered = attempts
+          ? registry.byNameLookup(
+              attempts[attempts.length - 1].capability,
+              product,
+            ).capability
+          : capability;
+        const detached = result.ok
+          ? detachImage(answered, answer.http_response.body)
+          : undefined;
+        const attached = detached
+          ? await maybeCompressBase64(detached.data)
+          : undefined;
+        const attachedBytes = attached ? decodedLength(attached) : 0;
+        const image =
+          detached && attached
+            ? {
+                type: "image" as const,
+                data: attached,
+                mimeType: detached.mimeType,
+              }
+            : undefined;
+        const text = detached
+          ? {
+              ...answer,
+              http_response: {
+                ...answer.http_response,
+                body: noteImage(
+                  answer.http_response.body,
+                  detached,
+                  attachedBytes,
+                ),
+              },
+              image: { mime: detached.mimeType, bytes: attachedBytes },
+            }
+          : answer;
         // The one row for a completed invoke. invoke() returns a 4xx/5xx rather than
         // throwing, so `success` keeps its tool-level meaning and these two fields carry
         // whether the product call worked. Status 0 means it could not be reached.
@@ -1224,13 +1426,29 @@ export function addCapabilityRegistryTools(
           upstream_ok: result.ok,
           upstream_status: result.http_response.status,
           change_summary: redact(input.change_summary),
+          ...(attempts ? { fallback_steps: attempts.length - 1 } : {}),
+          ...(narrowed
+            ? {
+                narrowed_from: narrowed.narrowing.from,
+                narrowed_to: narrowed.narrowing.to,
+              }
+            : {}),
+          ...(detached
+            ? {
+                image_bytes: attachedBytes,
+                image_bytes_received: detached.bytes,
+              }
+            : {}),
         });
-        return ok(result);
+        // THE PRODUCT'S BODY IS DATA, NOT INSTRUCTIONS. It goes back in its own block
+        // inside the untrusted-content boundary; the server's own fields stay plain JSON.
+        const content = answerContent(text);
+        return { content: image ? [...content, image] : content };
       } catch (error) {
         if (error instanceof InvocationError)
           return refuse(
             "invokeCapability",
-            invocationReason(error.message),
+            invocationReason(error.message, error),
             error.message,
             undefined,
             identity,

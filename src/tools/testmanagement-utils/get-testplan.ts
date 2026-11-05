@@ -79,7 +79,7 @@ export async function getTestPlan(
         content: [
           {
             type: "text",
-            text: `Failed to fetch test plan: ${JSON.stringify(planResp.data)}`,
+            text: `Failed to fetch test plan: ${wrapUntrusted("API response", JSON.stringify(planResp.data))}`,
           },
         ],
         isError: true,
@@ -105,7 +105,7 @@ export async function getTestPlan(
     }
 
     const header = [
-      `Test Plan ${plan.identifier}: ${plan.name}`,
+      `Test Plan ${plan.identifier}: ${wrapUntrusted("test plan name", plan.name)}`,
       `Status: ${plan.active_state}`,
       plan.description
         ? `Description:\n${wrapUntrusted("test plan description", plan.description)}`
@@ -126,12 +126,15 @@ export async function getTestPlan(
 
     const runsBlock = runs.length
       ? "\n\nLinked test runs:\n" +
-        runs
-          .map(
-            (r) =>
-              `• ${r.identifier}: ${r.name} [${r.run_state}] — ${r.test_cases_count} case(s)${r.assignee ? ` (assignee: ${r.assignee})` : ""}`,
-          )
-          .join("\n")
+        wrapUntrusted(
+          "linked test run list",
+          runs
+            .map(
+              (r) =>
+                `• ${r.identifier}: ${r.name} [${r.run_state}] — ${r.test_cases_count} case(s)${r.assignee ? ` (assignee: ${r.assignee})` : ""}`,
+            )
+            .join("\n"),
+        )
       : "\n\nNo test runs linked to this plan.";
 
     return {

@@ -4,6 +4,7 @@ import { getBrowserStackAuth } from "../../lib/get-auth.js";
 import { BrowserStackConfig } from "../../lib/types.js";
 import { apiClient } from "../../lib/apiClient.js";
 import globalConfig from "../../config.js";
+import { sessionApiHost } from "../../lib/regional-host.js";
 import { MAX_LOG_BYTES } from "../failurelogs-utils/utils.js";
 
 export const MAX_SCREENSHOT_BYTES = globalConfig.REMOTE_MCP
@@ -18,7 +19,9 @@ async function extractScreenshotUrls(
   const authString = getBrowserStackAuth(config);
   const auth = Buffer.from(authString).toString("base64");
 
-  const baseUrl = `https://api.browserstack.com/${sessionType === SessionType.Automate ? "automate" : "app-automate"}`;
+  const isAutomate = sessionType === SessionType.Automate;
+  const host = sessionApiHost(sessionType);
+  const baseUrl = `${host}/${isAutomate ? "automate" : "app-automate"}`;
 
   const url = `${baseUrl}/sessions/${sessionId}/logs`;
   const response = await apiClient.get({
@@ -46,7 +49,7 @@ async function extractScreenshotUrls(
   return parseScreenshotUrls(text);
 }
 
-const LOG_PREFIX = String.raw`^\d{4}-\d{2}-\d{2} \d{1,2}:\d{1,2}:\d{1,2}:\d{1,3} `;
+const LOG_PREFIX = String.raw`^\d{4}-\d{1,2}-\d{1,2} \d{1,2}:\d{1,2}:\d{1,2}:\d{1,3} `;
 const LINE_TYPE_PATTERN = new RegExp(`${LOG_PREFIX}([A-Z_]+) `);
 const SCREENSHOT_REQUEST_PATTERN = new RegExp(
   String.raw`${LOG_PREFIX}REQUEST \[[^\]]+\] GET /session/[^/\s]+/screenshot(\s|$)`,

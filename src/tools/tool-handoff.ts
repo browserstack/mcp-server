@@ -25,9 +25,7 @@
 
 /** No tool lists projects, so this genuinely has to go to the agent. */
 export const NEEDS_PROJECT_ID =
-  " Requires a project identifier (PR-*). No tool here lists projects, so if you do not " +
-  "have one, use the capability functions to list the Test Management projects, then " +
-  "retry this tool with the identifier they return.";
+  " Needs a project id (PR-*); no tool lists projects, so get it from the capability functions.";
 
 /** A sibling tool can produce the id — prefer it over the agent. */
 export function needsIdFrom(idLabel: string, sourceTool: string): string {
@@ -41,9 +39,8 @@ export function needsIdFrom(idLabel: string, sourceTool: string): string {
  * "create me a project" through the agent before letting the tool run.
  */
 export const PROJECT_ID_ONLY_FOR_FOLDER =
-  " Creating a project needs no identifier. Creating a folder inside an EXISTING project " +
-  "needs that project's identifier (PR-*); no tool here lists projects, so use the " +
-  "capability functions to look it up.";
+  " Creating a project needs no identifier; a folder inside an EXISTING project needs " +
+  "its id (PR-*); no tool lists projects, so use the capability functions.";
 
 /** A test plan id (TP-*) comes from listTestPlans. */
 export const NEEDS_TEST_PLAN_ID = needsIdFrom(
@@ -69,9 +66,8 @@ export const NEEDS_TEST_PLAN_ID = needsIdFrom(
  * refused rather than performed.
  */
 export const PLAN_WRITES_VIA_CAPABILITIES =
-  " Creating a test plan or sub-plan, and linking or unlinking test runs on one, are not " +
-  "available as tools here: use the capability functions, which reach Test Management's " +
-  "own API for these operations. They ask you to confirm before changing anything.";
+  " Creating a test plan or sub-plan, and linking or unlinking test runs, are not " +
+  "available as tools here: use the capability functions (they ask you to confirm first).";
 
 /** A build id comes from either build-lookup tool. */
 export const NEEDS_BUILD_ID = needsIdFrom(
@@ -85,18 +81,19 @@ export const NEEDS_BUILD_ID = needsIdFrom(
  * pointing at the agent when a real tool exists is exactly what the header above forbids.
  */
 export const NEEDS_SESSION_ID =
-  " Requires a session id. listSessions lists them for a build; if you do not have the " +
-  "build either, getBuildId or listBuildId resolves one from a project and build name.";
+  " Needs a session id: listSessions lists them; getBuildId or listBuildId finds the build.";
 
 /**
  * A scan run's ids come from startAccessibilityScan; a build's id is printed by the SDK at
  * the end of its run. The tool takes a report's dashboard link, or an Automate link, and
- * looks the ids up itself; for a past run, Ask AI can locate it. App Accessibility's builds
- * and manual reports are listed by its capabilities, which the id arguments name, as this
- * line has no room left within the description budget.
+ * looks the ids up itself. For a past report, the web_accessibility capabilities list
+ * Workflow Analyzer reports, scans and their runs, and Automated Tests builds with the id
+ * each takes; App Accessibility's builds and manual reports are listed by its own
+ * capabilities, which the id arguments name, as this line has no room left within the
+ * description budget.
  */
 export const NEEDS_A11Y_SCAN_ID =
-  ' Ids: startAccessibilityScan, a link, or askBrowserStackAI with product "a11y".';
+  " Ids: a link, startAccessibilityScan, or web_accessibility lists (searchCapability).";
 
 /** Auth-config ids are not listable by any tool here; Ask AI can find one. */
 export const NEEDS_A11Y_CONFIG_ID =

@@ -12,7 +12,13 @@
  *    capability needing an id it cannot possibly have yet.
  */
 
-import { Capability, EntityDoc, Mode, ProductIndex } from "./types.js";
+import {
+  Capability,
+  EntityDoc,
+  Mode,
+  ProductIndex,
+  guidanceLines,
+} from "./types.js";
 
 /**
  * Every non-alphanumeric character separates, `_` included.
@@ -130,11 +136,67 @@ export function isBrowseQuery(query?: string): boolean {
   return q === "*" || q === "all";
 }
 
+/**
+ * OUR OWN NAME, WHICH IS NOT ROUTING VOCABULARY.
+ *
+ * Every product here is BrowserStack's, so the word distinguishes none of them — it is a
+ * stopword in the strict sense. It could not be spelled as one, because the camelCase
+ * split above runs first and turns "BrowserStack" into `browser` + `stack`, two words that
+ * ARE vocabulary: `browser` is a devicecontrol entity and an alias on a tm configuration.
+ *
+ * So the company's name claimed a product's noun. "Which Android apps have I uploaded to
+ * BrowserStack?" clashed over `browser` across four products, and the question put to the
+ * user — devicecontrol or mobiledevicecontrol or tm or tra — was unanswerable, because no
+ * word in the request was really about browsers at all. It reached further than queries
+ * that name us: the tm and tra summaries say "BrowserStack", so those two became claimants
+ * of `browser` permanently, and "what browsers can I use" clashed four ways on a word only
+ * devicecontrol models.
+ *
+ * Matched after the split and the fold, so one pattern covers "BrowserStack", "browserstack"
+ * and "browser stack". `bstack` is the same name in the shorthand the logs and repos use.
+ */
+const BRAND = /\bbrowser\s*stack\b|\bbstack\b/g;
+
+/**
+ * A pasted address names `url` without saying it.
+ *
+ * "open https://example.com on a phone" carries the one word that would settle it, and
+ * the tokenizer throws it away: the scheme is punctuation and `example com` is nobody's
+ * vocabulary. So an address in the request counts as the term `url`, which a product
+ * that drives pages claims and a product that drives installed apps does not.
+ *
+ * AN APP'S NAME IS NOT AN ADDRESS. `Calculator.app`, `com.acme.dev` and every other
+ * reverse-DNS bundle id look like domains and are exactly what a mobile request carries,
+ * so a bare name ending in `.app`, `.dev` or `.ai` does not count, and neither does one
+ * that starts with a top-level domain. A scheme or `www.` always counts.
+ */
+const ADDRESS =
+  /https?:\/\/\S+|\bwww\.\S+|\b(?!(?:com|org|net|io|co|dev|app|ai)\.)[a-z0-9-]+(?:\.[a-z0-9-]+)*\.(?:com|org|net|io|co|in|uk|de|jp|edu|gov|me|xyz)\b/i;
+
+export function impliedTerms(text: string | undefined): string[] {
+  return text && ADDRESS.test(text) ? ["url"] : [];
+}
+
+/**
+ * Whether the text carries letters the tokenizer cannot read.
+ *
+ * `terms` keeps ASCII letters and digits and nothing else, which is the index's own
+ * alphabet. A sentence in Japanese, or a German word with an umlaut in it, has words the
+ * index could never have matched — so an empty anchor from such a text is not evidence
+ * that nothing was named, only that it was named in a language this file does not speak.
+ */
+export function unreadable(text: string | undefined): boolean {
+  return [...(text ?? "")].some(
+    (ch) => ch.charCodeAt(0) > 127 && /\p{L}/u.test(ch),
+  );
+}
+
 export function terms(text: string | undefined): string[] {
   return [
     ...(text || "")
       .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
       .toLowerCase()
+      .replace(BRAND, " ")
       .matchAll(WORD),
   ]
     .map((match) => match[0])
@@ -407,7 +469,7 @@ function score(
     // `test_cases_count`); gating it on an identity match instead made a field reachable
     // only through returns unreachable, which is worse.
     [(capability.returns || []).join(" "), 1],
-    [(capability.guidance || []).join(" "), 1],
+    [guidanceLines(capability.guidance).join(" "), 1],
     // Parameter names, their descriptions, and their enum values — 330 descriptions and 34
     // value lists that the artifact already carries and nothing was reading. The vocabulary
     // a caller uses is often the value they mean to send: `pass` and `fail` appear nowhere
@@ -581,7 +643,22 @@ const IDENTITY_WEIGHT = 6;
 
 /** Which products a query could plausibly be about, when more than one could. */
 /** Words too common in this domain to settle a product on their own. */
-const GENERIC_ANCHORS = new Set(["test", "tests", "testing"]);
+// `check`, `filter` and `os` joined `test` for the same reason: each
+// is an entity alias somewhere (TRA's check_config, TM's filter, TM's configuration) and
+// each is also an everyday word — or, for `os`, the Portuguese article — so on its own it
+// put a product question to users whose request was about something else entirely. A
+// product that wants them to route can still claim the longer phrase (`quality gate`,
+// `saved filter`, `os version`).
+const GENERIC_ANCHORS = new Set([
+  "test",
+  "tests",
+  "testing",
+  "check",
+  "checks",
+  "filter",
+  "filters",
+  "os",
+]);
 
 export interface ProductAmbiguity {
   /** The products that claim the query's words. Empty when the query settles itself. */
@@ -614,6 +691,25 @@ export interface ProductAmbiguity {
  * answered the question and there is nothing to ask. Only queries whose every recognised
  * word is shared are genuinely undecided.
  */
+/**
+ * The words that do disclaiming work in a product summary.
+ *
+ * Deliberately a list of markers rather than anything resembling negation parsing: the
+ * sentences this has to catch are written to one pattern ("X is not here", "neither is Y",
+ * "unlike Test Management", "rather than a browser"), and a looser rule would start
+ * discarding prose that claims.
+ */
+const DISCLAIMS =
+  /\b(?:not|never|neither|nor|unlike|rather than|instead of|except|separate product|another product|different product)\b/i;
+
+/** A summary with its disclaiming sentences removed, for the claimant pass only. */
+function claimingSentences(summary: string | undefined): string {
+  return (summary ?? "")
+    .split(/(?<=[.!?])\s+/)
+    .filter((sentence) => !DISCLAIMS.test(sentence))
+    .join(" ");
+}
+
 export function ambiguousProducts(
   products: Record<string, ProductIndex>,
   query: string | undefined,
@@ -632,7 +728,7 @@ export function ambiguousProducts(
    */
   const fold = (text: string): string => terms(text).map(singular).join(" ");
 
-  const asked_ = ` ${fold(query || "")} `;
+  const asked_ = ` ${[fold(query || ""), ...impliedTerms(query)].join(" ")} `;
 
   const owners = new Map<string, Set<string>>();
   for (const [product, entries] of Object.entries(vocabularyOf(products))) {
@@ -667,10 +763,21 @@ export function ambiguousProducts(
   // product already models catches that, and refusing to mine NEW terms out of it is what
   // keeps the prose from taking over: a summary is a paragraph of verbs and nouns written
   // to sell the product, and every word in it would otherwise become routing vocabulary.
+  //
+  // AND ONLY FROM A SENTENCE THAT CLAIMS. These summaries route deliberately — each one
+  // carries a sentence saying what is NOT in it and where to go instead, which is the most
+  // useful sentence in the paragraph and was being read as the opposite of what it says.
+  // "Browsers are not here — those are device control" made mobiledevicecontrol a claimant
+  // of `browser`, and "Mobile APPS are not here" made devicecontrol a claimant of `app`.
+  // Both products were then offered to the user for a word their own summary disowns.
+  //
+  // Dropping a sentence can only ever narrow a clash, never misdirect one: prose cannot
+  // introduce a term, so the worst case is a clash that goes unreported — and a product
+  // that genuinely handles something does not say so in a negated sentence.
   const summaries = Object.fromEntries(
     Object.entries(products).map(([product, index]) => [
       product,
-      ` ${fold(index.summary ?? "")} `,
+      ` ${fold(claimingSentences(index.summary))} `,
     ]),
   );
   for (const [key, claimants] of owners) {
@@ -737,9 +844,30 @@ export function ambiguousProducts(
       because: (decidedBy.get([...decided][0]) ?? []).sort(),
     };
 
-  const claimed = new Set<string>();
+  // EVERY SHARED WORD, CLAIMED BY ONE PRODUCT, IS THAT PRODUCT'S REQUEST. "test my
+  // website on a tablet" has `website` shared with the accessibility products and
+  // `tablet` shared with mobile device control; no single word settles it, and reporting
+  // the union put four products to the user for a request exactly one of them answers.
+  // The product that claims ALL the shared words is the one the sentence is about — and
+  // when several do, the question is between those, not between everyone who claimed any
+  // one word: a product that answers `screenshot` but not `iphone` is not a candidate.
+  // With one shared word this is what it always was: the word's claimants.
+  let common: Set<string> | undefined;
   for (const claimants of shared.values())
-    for (const product of claimants) claimed.add(product);
+    common = common
+      ? new Set([...common].filter((product) => claimants.has(product)))
+      : new Set(claimants);
+  if (common?.size === 1)
+    return {
+      ...none,
+      settled: [...common][0],
+      because: [...shared.keys()].sort(),
+    };
+  const claimed = new Set<string>();
+  if (common?.size) for (const product of common) claimed.add(product);
+  else
+    for (const claimants of shared.values())
+      for (const product of claimants) claimed.add(product);
   return { products: [...claimed].sort(), terms: [...shared.keys()].sort() };
 }
 
@@ -976,7 +1104,7 @@ export function productAnchors(
   if (terms(text).length === 0) return none;
 
   const fold = (s: string): string => terms(s).map(singular).join(" ");
-  const said = ` ${fold(text || "")} `;
+  const said = ` ${[fold(text || ""), ...impliedTerms(text)].join(" ")} `;
   const found = new Map<string, Set<string>>();
 
   const claim = (product: string, term: string) => {

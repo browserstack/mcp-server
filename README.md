@@ -1,7 +1,10 @@
 # BrowserStack MCP Server
 
 <div align="center">
-<img src="assets/browserstack-logo.png" alt="BrowserStack Logo" height="100"> <img src="assets/mcp-logo.png" alt="MCP Server Logo" width="100">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/browserstack-logo-dark.png">
+  <img src="assets/browserstack-logo.png" alt="BrowserStack Logo" height="70">
+</picture> <img src="assets/mcp-logo.png" alt="MCP Server Logo" width="100">
 </div>
 
 
@@ -42,6 +45,8 @@ Click on the buttons below to install MCP in your respective IDE or assistant:
 <a href="http://mcp.browserstack.com/one-click-setup?client=vscode"><img src="assets/one-click-vs-code.png" alt="Install in VS Code" height="38"></a>&nbsp;&nbsp;<a href="https://github.com/mcp?search=browserstack"><img src="assets/one-click-copilot.png" alt="Add to Copilot" height="38"></a>&nbsp;&nbsp;<a href="https://cursor.com/marketplace/browserstack"><img src="assets/one-click-cursor.png" alt="Add to Cursor" height="38"></a>&nbsp;&nbsp;<a href="https://claude.com/marketplace/connectors/mcp-browserstack-com"><img src="assets/one-click-claude.png" alt="Add to Claude" height="38"></a>&nbsp;&nbsp;<a href="https://chatgpt.com/plugins/plugin_asdk_app_6a8bf7703f1881918317add0244840a8"><img src="assets/one-click-chatgpt.png" alt="Add to ChatGPT" height="38"></a>
 
 > **Note:** The hosted Remote MCP server (`mcp.browserstack.com`) is now fully stateless over Streamable HTTP — any Streamable-HTTP client (Claude, Cursor, VS Code, ChatGPT) connects with no configuration change.
+
+> **Kiro:** a Kiro power for this server lives in [`integrations/kiro-power`](integrations/kiro-power). In the Kiro IDE, open the Powers panel → Add Custom Power → Import power from GitHub and enter `https://github.com/browserstack/mcp-server/tree/main/integrations/kiro-power`, or clone this repository and use Import power from a folder with that directory.
 
 #### Prerequisites
 - A BrowserStack account. [Sign up](https://www.browserstack.com/users/sign_up) if you don't have one; open-source projects can get a [free plan](https://www.browserstack.com/open-source).
@@ -255,6 +260,8 @@ For support, please:
 
 - Open an issue in our [GitHub repository](https://github.com/browserstack/mcp-server) if you face any issues related to the MCP Server.
 - Contact our [support team](https://www.browserstack.com/contact) for any other queries.
+- Email [support@browserstack.com](mailto:support@browserstack.com).
+- Privacy policy: [browserstack.com/privacy](https://www.browserstack.com/privacy).
 
 ## 🚀 More Features Coming Soon
 

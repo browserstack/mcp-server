@@ -5,6 +5,98 @@
   "tm": {
     "routing_terms": ["team", "setting", "workspace", "suite"],
     "summary": "BrowserStack Test Management: author and organise test cases, plan and track their execution, and report on the results. Everything is scoped to a project, which owns the folders, cases, runs, plans and reports beneath it. Search and filter cases; create and update cases, runs and plans; record results; bulk edit, move, copy, archive and delete; restructure folders; manage tags and custom-field definitions; assign, clone and close runs; review AI duplicate recommendations; read the activity feed and a case's version history; and create, schedule and download reports. Cases are authored and their outcomes recorded here, but tests are not RUN here: execution happens in your own runner or another BrowserStack product. Renaming and deleting a project are not exposed. A run is executed against a named configuration and environment, and records the app version and build its results came from. Destructive capabilities exist and always need explicit human approval.",
+    "agents": [
+      {
+        "name": "tm-generate-test-cases",
+        "title": "Test case generation",
+        "description": "Drafts a full set of new test cases from a requirement (a PRD, BRD, spec, ticket, acceptance criteria, Figma design or pasted text), applying coverage and priority rules, and returns them for review before anything is saved.",
+        "signals": [
+          "generate",
+          "draft",
+          "prd",
+          "brd",
+          "spec",
+          "specification",
+          "requirement",
+          "figma",
+          "document",
+          "acceptance criteria"
+        ],
+        "intents": [
+          "generate new test cases for this requirement",
+          "write test cases from this document",
+          "create test cases in this empty folder from the PRD",
+          "review the attached BRD and create a complete set of QA test cases",
+          "create test cases for this feature from the attached requirement document",
+          "create test cases from the attached spec",
+          "draft QA test cases for the documented requirements",
+          "generate test cases from this Figma design",
+          "add more test cases to the ones you just generated"
+        ]
+      },
+      {
+        "name": "tm-maintain-test-cases",
+        "title": "Test case maintenance",
+        "description": "Checks a project's existing test cases against a new or changed requirement, drafts edits to the ones it affects and lists what no case covers, for review before saving. The uncovered gaps go on to test case generation.",
+        "signals": [
+          "requirement",
+          "prd",
+          "spec",
+          "specification",
+          "reconcile",
+          "outdated",
+          "coverage"
+        ],
+        "intents": [
+          "generate test cases for this requirement",
+          "generate and update test cases from this PRD",
+          "update these test cases for the new requirement",
+          "the spec changed, update the test cases in this folder",
+          "check these test cases against the updated PRD and fix what's wrong",
+          "reconcile this folder's test cases with the latest requirement"
+        ]
+      },
+      {
+        "name": "tm-generate-test-data",
+        "title": "Test data generation",
+        "description": "Drafts datasets (named columns and rows) for data-driven testing from a requirement, random or derived from a stated rule, limit or boundary.",
+        "signals": [
+          "dataset",
+          "test data",
+          "boundary",
+          "data driven"
+        ],
+        "intents": [
+          "generate test data for this requirement",
+          "generate test cases and test data for this requirement",
+          "create a dataset with valid and invalid values for this field",
+          "I need random test data for these columns",
+          "generate boundary values for this input",
+          "build a dataset for data-driven testing of this form",
+          "add more rows to that dataset"
+        ]
+      },
+      {
+        "name": "tm-dedupe",
+        "title": "Test deduplication",
+        "description": "Finds exact and near-exact duplicate test cases in a folder, a list of cases or a small project (up to 100 cases) and saves them as suggestions to merge on the Review duplicates screen. Merges nothing itself.",
+        "signals": [
+          "duplicate",
+          "duplicates",
+          "duplicated",
+          "dedupe",
+          "deduplicate",
+          "deduplication"
+        ],
+        "intents": [
+          "find duplicate test cases in this folder",
+          "dedupe the test cases in this project",
+          "are there duplicate test cases in this folder",
+          "check these test cases for duplicates",
+          "remove duplicate test cases from this folder"
+        ]
+      }
+    ],
     "capabilities": [
       {
         "name": "assign_test_run_owner",
@@ -5206,6 +5298,7 @@
           }
         },
         "guidance": [
+          "Get `step_id` from list_test_run_test_cases with fetch_steps=true: each row's `steps[].id` is the numeric step id, scoped to this run. Do not read it from get_test_case_detail, whose response embeds the full template field layout and can run to megabytes.",
           "Send the fields flat. The `test_run_step_result` wrapper is added for you from each field's json_path, and sending your own is rejected before the call as an unknown body key. That object is forwarded to the backing service essentially verbatim, so only the keys below are acted on locally and unrecognised keys are passed through rather than rejected.",
           "The step's status travels as a NAME inside the wrapper (`status`), not as the numeric status id the case-level result endpoints take. The supported names are untested, passed, failed, retest, blocked, skipped, in_progress.",
           "There is a decoy: a TOP-LEVEL `status` key is validated against that same list and 400s {error:'Validation error'} when it is not in it — but it is not the value that gets written. Sending only a top-level status passes validation and logs nothing.",
@@ -12839,6 +12932,7 @@
           }
         },
         "guidance": [
+          "HEAVY: `data.test_case.testcase_template` carries every custom-field definition in the workspace, so one case can come back as megabytes, and `exclude` does not remove it. For a case's fields use get_test_case; for step ids inside a run use list_test_run_test_cases with fetch_steps=true. Read this only when nothing lighter has what you need.",
           "The case is at `data.test_case`, and `success` is INSIDE `data` alongside it, not at the top level. `data.is_archived` tells you the case is archived rather than live.",
           "By default this returns counts, not the run results themselves. Pass `exclude` to switch into the lighter mode, and read the paginated runs-results / runs-issues endpoints when you need the actual rows.",
           "`include=folder_path` adds `data.test_case.folder_path` — the human-readable folder path. It is the only supported value.",
@@ -21456,6 +21550,9 @@
         "path": "/api/v1/projects/{project_id}/generic/attachments",
         "mode": "write",
         "entity": "attachment",
+        "encoding": "multipart",
+        "local_only": true,
+        "timeout_seconds": 120,
         "path_params": [
           {
             "name": "project_id",
@@ -21463,7 +21560,19 @@
             "required": true
           }
         ],
-        "intent": "Upload a file to a project and get back its blob id plus pre-signed view/download URLs — the first half of the attach flow, needed before a file can be linked to a test case, result or rich-text field",
+        "body": [
+          {
+            "name": "file",
+            "type": "file",
+            "required": true,
+            "form_name": "attachments[]",
+            "accept": [".png", ".jpg", ".jpeg", ".gif", ".webp", ".log", ".pdf", ".txt", ".md", ".doc", ".docx", ".csv", ".xls", ".xlsx", ".json", ".html", ".zip"],
+            "max_bytes": 52428800,
+            "description": "Path to the file on this machine, inside MCP_UPLOAD_BASE_DIR. One file per call.",
+            "example": "/Users/me/screenshots/login-step-3.png"
+          }
+        ],
+        "intent": "Upload a file from this machine — a screenshot, log or document — to a project and get back its blob id, the first half of the attach flow: pass the id to create_step_result to put the file on one step of a test run",
         "returns": [
           "id",
           "name",
@@ -21486,15 +21595,23 @@
             "$response": "Forbidden"
           }
         },
-        "guidance": [
-          "NOT INVOCABLE through this interface. The handler reads `attachments` as an array of uploaded FILES from a multipart form and streams their bytes to storage; a file cannot be expressed as a JSON argument, which is why this record carries no body parameter at all.",
-          "Worse than an error: with no files the handler takes the empty path and answers 200 with `generic_attachment: []`. A call from here looks like it succeeded and uploads nothing — do not report a successful upload on that response.",
-          "If you need a blob id, the file has to be uploaded out of band (the product UI, or a direct multipart request built by the caller). Once it exists, the blob id is what the test-case, test-result and step attach capabilities take.",
-          "On a real multipart upload the status is 200, not the 201 the spec claims, and the body is {generic_attachment: [...]}: `id` is the blob id to carry forward, `url` and `download_url` are pre-signed and expire after 30 minutes, and `size` is a HUMAN-READABLE string ('300 KB') rather than a byte count.",
-          "No type allowlist is enforced on this generic path; the only limit is 50 MB per file. SVG/HTML/XML uploads are served with a forced-download disposition rather than inline.",
-          "A single invalid file fails the whole request: every blob already written is deleted, and the 400 body reports only the LAST failing file's errors, under errors.message."
-        ],
-        "disabled": true
+        "guidance": {
+          "shared": [
+            "Answers 200 with {generic_attachment: [...]}. The entry's `id` is the blob id to carry forward — to attach a screenshot to one step of a test run, pass it as `attachments: [<id>]` to create_step_result. `url` and `download_url` are pre-signed and expire after 30 minutes, and `size` is a HUMAN-READABLE string ('300 KB') rather than a byte count.",
+            "ONE BLOB, ONE ATTACHMENT. A blob already attached somewhere is refused with 422 ('referenced elsewhere'), so upload a fresh copy for every step or result, even when it is the same screenshot.",
+            "A 200 whose generic_attachment list is EMPTY stored nothing — never report that as a successful upload.",
+            "Accepted: images (.png, .jpg, .jpeg, .gif, .webp), documents and logs (.log, .pdf, .txt, .md, .doc, .docx, .csv, .xls, .xlsx, .json, .html, .zip), up to 50 MB. HTML is served as a forced download rather than inline.",
+            "A file that fails validation deletes every blob written by that request, and the 400 reports the error under errors.message."
+          ],
+          "local": [
+            "The file must sit inside the directory MCP_UPLOAD_BASE_DIR names. When that is not set the upload is refused and nothing is sent: tell the user to set it to the folder holding their screenshots and restart the server.",
+            "When it is set but the file is somewhere else, the refusal names the directory the file has to be inside. Tell the user to move it there rather than trying another path. No part of the path may be a hidden folder.",
+            "The path is checked before anything is uploaded and before the user is asked to approve, so a refusal costs nothing and means the file was never read."
+          ],
+          "remote": [
+            "Not available on the hosted server, which cannot read files on the user's machine. Ask the user to attach the file in the Test Management UI, or to run the BrowserStack MCP server locally, where this upload works."
+          ]
+        }
       },
       {
         "name": "link_attachments_to_test_case",
@@ -49176,11 +49293,11 @@
           "Each blob/attachment row carries an integer id and a url (the file's location) — read the file from that url; there is no dedicated download endpoint.",
           "A file is attached in TWO steps: upload it to the project to get a numeric blob id, then link that id to the test case, result or step. The link calls take ids, never file content or filenames.",
           "A blob can be linked ONCE. Attaching one that is already referenced elsewhere fails the whole request; upload a separate copy for each place the file should appear.",
-          "Putting a NEW file into the product cannot be done through this interface at all — an agent can link an already-uploaded file, remove one, and read attachment metadata, but the upload itself has to happen in the product UI.",
+          "Uploading a NEW file works only on a local server: upload_generic_attachments reads it from MCP_UPLOAD_BASE_DIR and returns its blob id. The hosted server cannot read files on the caller's machine, so there the upload has to happen in the product UI.",
           "Removing an attachment purges the stored file, not just the link. There is no recycle bin for attachments and no undo.",
           "The view and download URLs handed back on upload are pre-signed and expire after about 30 minutes — fetch the file promptly or re-read the attachment to get a fresh one.",
           "The older per-test-case attachment reads return metadata only (id, filename, type, size) with no URL; the newer entity-attachment listing is the one that hands back a readable URL per file.",
-          "A file cannot be attached to a test case through this surface at all. The call that does it works, but it takes the file itself as a form upload, which this transport cannot send — the same reason the upload capabilities here accept no file and quietly do nothing. Attaching is done in the product, not here.",
+          "A file cannot be attached directly to a test case through this surface. The call that does it takes the file itself as a form upload and is not published; attach to a test case in the product. A file uploaded with upload_generic_attachments can go on a test run step via create_step_result.",
           "An empty attachment list is not evidence that nothing is attached; it is the expected result whenever the attaching was done elsewhere."
         ]
       },

@@ -1,9 +1,18 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fileURLToPath } from "node:url";
-import { productAnchors, ambiguousProducts } from "../../src/tools/capability-registry/search.js";
+import {
+  productAnchors,
+  ambiguousProducts,
+  terms,
+} from "../../src/tools/capability-registry/search.js";
 import { readFileSync } from "node:fs";
 
-const load = (p: string) => { const j = JSON.parse(readFileSync(`capability/${p}.capability-index.json`, "utf8")); return j[p]; };
+const load = (p: string) => {
+  const j = JSON.parse(
+    readFileSync(`capability/${p}.capability-index.json`, "utf8"),
+  );
+  return j[p];
+};
 const products = { tm: load("tm"), tra: load("tra") } as any;
 
 describe("productAnchors", () => {
@@ -26,8 +35,14 @@ describe("productAnchors", () => {
 });
 
 describe("ambiguity still fires on the shared nouns", () => {
-  for (const q of ["What did the last report say?", "Show me the runs", "which project"])
-    it(q, () => expect(ambiguousProducts(products, q).products.length).toBeGreaterThan(1));
+  for (const q of [
+    "What did the last report say?",
+    "Show me the runs",
+    "which project",
+  ])
+    it(q, () =>
+      expect(ambiguousProducts(products, q).products.length).toBeGreaterThan(1),
+    );
 });
 
 describe("searchCapability withholds the product names", () => {
@@ -41,7 +56,9 @@ describe("searchCapability withholds the product names", () => {
       "src/tools/capability-registry/register.ts",
       "utf8",
     );
-    const search = src.slice(src.indexOf("tools.searchCapability = server.tool"));
+    const search = src.slice(
+      src.indexOf("tools.searchCapability = server.tool"),
+    );
     const arg = search.slice(0, search.indexOf("routing_token:"));
     expect(arg).toMatch(/product: z\s*\.string\(\)/);
     expect(arg).not.toMatch(/product: productArg\(\)/);
@@ -79,17 +96,20 @@ describe("the user_words gate", () => {
   });
 
   it("judges the user's words, not the agent's rewrite of them", async () => {
-    const { ambiguousProducts } = await import(
-      "../../src/tools/capability-registry/search.js"
-    );
+    const { ambiguousProducts } =
+      await import("../../src/tools/capability-registry/search.js");
     const { readFileSync } = await import("node:fs");
     const src = readFileSync(
       "src/tools/capability-registry/register.ts",
       "utf8",
     );
     // The paraphrase is what used to be judged, and it is the caller's to choose.
-    expect(src).toMatch(/const subject = user_words\?\.trim\(\) \? user_words : query;/);
-    expect(src).toMatch(/ambiguousProducts\(registry\.index\.products, subject\)/);
+    expect(src).toMatch(
+      /const subject = user_words\?\.trim\(\) \? user_words : query;/,
+    );
+    expect(src).toMatch(
+      /ambiguousProducts\(registry\.index\.products, subject\)/,
+    );
     expect(ambiguousProducts).toBeTypeOf("function");
   });
 
@@ -104,7 +124,9 @@ describe("the user_words gate", () => {
     // nothing to leak between sessions.
     expect(src).toMatch(/const token = signRouting\(/);
     expect(src).toMatch(/const routed = readRouting\(routing_token\)/);
-    expect(src).toMatch(/routed\?\.verdict === "clash" \|\| routed\?\.verdict === "blank"/);
+    expect(src).toMatch(
+      /routed\?\.verdict === "clash" \|\| routed\?\.verdict === "blank"/,
+    );
     // AND NOTHING IS REMEMBERED. A set of live tokens and a last-verdict variable are
     // both per-connection state; under one process serving several sessions the second
     // lets one client's listing satisfy another client's gate.
@@ -122,15 +144,20 @@ describe("a lone decisive word settles, and says so", () => {
   // caller used to learn only that nothing needed asking — and then searched the other
   // product, which is the same wrong turn arrived at quietly.
   it("names the product its words point at, and the words", () => {
-    const verdict = ambiguousProducts(products, "Show me all datasets in the project");
+    const verdict = ambiguousProducts(
+      products,
+      "Show me all datasets in the project",
+    );
     expect(verdict.products).toEqual([]);
     expect(verdict.settled).toBe("tm");
     expect(verdict.because).toContain("dataset");
   });
 
   it("leaves `settled` unset when the words genuinely clash", () => {
-    expect(ambiguousProducts(products, "Delete the failed results from this run.").settled)
-      .toBeUndefined();
+    expect(
+      ambiguousProducts(products, "Delete the failed results from this run.")
+        .settled,
+    ).toBeUndefined();
   });
 });
 
@@ -148,8 +175,10 @@ describe("a summary claims the words its product really uses", () => {
     });
 
   it("still lets a word only one product uses decide", () =>
-    expect(ambiguousProducts(products, "Show me all datasets in the project").products)
-      .toEqual([]));
+    expect(
+      ambiguousProducts(products, "Show me all datasets in the project")
+        .products,
+    ).toEqual([]));
 });
 
 describe("a request with no product vocabulary at all", () => {
@@ -169,20 +198,28 @@ describe("a request with no product vocabulary at all", () => {
     });
 
   it("is not claimed for a request whose words DO name something", () =>
-    expect(ambiguousProducts(products, "What did the last report say?").unknown)
-      .toBeUndefined());
+    expect(
+      ambiguousProducts(products, "What did the last report say?").unknown,
+    ).toBeUndefined());
 });
 
 describe("routing_terms let a product claim its own words", () => {
   it("gives tra the flakiness vocabulary no index models as an entity", () => {
-    expect(ambiguousProducts(products, "Which tests are flaky?").unknown).toBeUndefined();
-    expect(productAnchors(products, "Which tests are flaky?").products).toEqual(["tra"]);
+    expect(
+      ambiguousProducts(products, "Which tests are flaky?").unknown,
+    ).toBeUndefined();
+    expect(productAnchors(products, "Which tests are flaky?").products).toEqual(
+      ["tra"],
+    );
   });
 
   it("stops an organisational word both products use from settling it", () => {
     // `workspace` was tm's alone and decided three prompts on its own; both products
     // have one, so it decides nothing now.
-    const verdict = ambiguousProducts(products, "Show me all the projects in our workspace.");
+    const verdict = ambiguousProducts(
+      products,
+      "Show me all the projects in our workspace.",
+    );
     expect(verdict.settled).toBeUndefined();
     expect(verdict.products).toEqual(["tm", "tra"]);
   });
@@ -196,7 +233,10 @@ describe("a clash announced by listProducts binds the next search", () => {
   // words that caused the clash.
   it("mints a token on the clash and on a blank request", async () => {
     const { readFileSync } = await import("node:fs");
-    const src = readFileSync("src/tools/capability-registry/register.ts", "utf8");
+    const src = readFileSync(
+      "src/tools/capability-registry/register.ts",
+      "utf8",
+    );
     const listing = src.slice(
       src.indexOf("tools.listProducts = server.tool("),
       src.indexOf("tools.searchCapability = server.tool("),
@@ -222,7 +262,10 @@ describe("words that point at another product are evidence, not noise", () => {
 
   it("guards the mismatch on the product, not merely on settling at all", async () => {
     const { readFileSync } = await import("node:fs");
-    const src = readFileSync("src/tools/capability-registry/register.ts", "utf8");
+    const src = readFileSync(
+      "src/tools/capability-registry/register.ts",
+      "utf8",
+    );
     expect(src).toMatch(
       /const mismatch =\s*\n?\s*routable && !!ambiguity\.settled && ambiguity\.settled !== product/,
     );
@@ -235,5 +278,106 @@ describe("words that point at another product are evidence, not noise", () => {
     );
     expect(reopened).toMatch(/ambiguity\.settled !== product &&/);
     expect(reopened).not.toMatch(/!ambiguity\.settled &&/);
+  });
+});
+
+// ---------------------------------------------------------------------------------------
+// Two ways a product came to claim a word it does not own. Both were found by a cold agent
+// run against the published surface, and both produced the same symptom: a clash put to the
+// user over a word nothing in the request was about.
+
+const four = {
+  devicecontrol: load("devicecontrol"),
+  mobiledevicecontrol: load("mobiledevicecontrol"),
+  tm: load("tm"),
+  tra: load("tra"),
+} as any;
+
+describe("our own name is not routing vocabulary", () => {
+  // The camelCase split runs before stopword filtering, so "BrowserStack" arrived as
+  // `browser` + `stack` — and `browser` is a devicecontrol entity and a tm configuration
+  // alias. The company's name was claiming a product's noun.
+  for (const spelling of [
+    "BrowserStack",
+    "browserstack",
+    "browser stack",
+    "bstack",
+  ])
+    it(`${JSON.stringify(spelling)} yields no routing terms`, () =>
+      expect(terms(`upload a build to ${spelling}`)).toEqual([
+        "upload",
+        "build",
+      ]));
+
+  it("still reads `browser` when the caller names one alongside us", () =>
+    expect(terms("which browsers can I use on BrowserStack")).toEqual([
+      "browsers",
+      "use",
+    ]));
+
+  it("leaves a real mention of browsers intact", () =>
+    expect(terms("open a browser")).toContain("browser"));
+
+  it("the reported request no longer clashes over `browser`", () => {
+    const a = ambiguousProducts(
+      four,
+      "Which Android apps have I uploaded to BrowserStack?",
+    );
+    // It may still be ambiguous — `app` is genuinely shared — but not over this.
+    expect(a.terms).not.toContain("browser");
+    expect(a.terms).not.toContain("stack");
+  });
+
+  it("stops a summary that names the company claiming `browser` by doing so", () => {
+    // The reach of it. tm and tra say "BrowserStack" in their summaries and nothing else
+    // in either is about browsers, so both became permanent claimants of the word — and
+    // "what browsers can I use", which names us nowhere, clashed four ways over a noun
+    // only devicecontrol models. Synthetic, so the two causes stay apart: this product
+    // set has no disclaiming sentence in it.
+    const synthetic = {
+      owner: {
+        summary: "Drives a browser.",
+        base_url: "https://a.example",
+        capabilities: [],
+        entities: { browser: { description: "A browser", capabilities: [] } },
+      },
+      bystander: {
+        summary: "A BrowserStack product about something else entirely.",
+        base_url: "https://b.example",
+        capabilities: [],
+        entities: { widget: { description: "A widget", capabilities: [] } },
+      },
+    } as any;
+    const a = ambiguousProducts(synthetic, "what browsers can I use");
+    expect(a.products).not.toContain("bystander");
+    expect(a.settled).toBe("owner");
+  });
+});
+
+describe("a summary sentence that disowns a word does not claim it", () => {
+  // "Browsers are not here — those are device control" and "Mobile APPS are not here:
+  // those are mobile device control" are the most useful sentences in either summary, and
+  // the claimant pass was reading each as its own opposite.
+  it("mobiledevicecontrol does not claim `browser`", () => {
+    expect(
+      ambiguousProducts(four, "what browsers can I use").products,
+    ).not.toContain("mobiledevicecontrol");
+  });
+
+  it("devicecontrol does not claim `app`", () => {
+    const a = ambiguousProducts(four, "which apps have I uploaded");
+    expect(a.terms).toContain("app");
+    expect(a.products).not.toContain("devicecontrol");
+  });
+
+  it("leaves the claim that the sentence actually makes", () => {
+    // Same two summaries, the positive sentences: devicecontrol does drive browsers and
+    // mobiledevicecontrol does hold app builds.
+    expect(
+      ambiguousProducts(four, "what browsers can I use").products,
+    ).toContain("devicecontrol");
+    expect(
+      ambiguousProducts(four, "which apps have I uploaded").products,
+    ).toContain("mobiledevicecontrol");
   });
 });

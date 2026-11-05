@@ -4,6 +4,7 @@ import { z } from "zod";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { BrowserStackConfig } from "../../lib/types.js";
 import { getTMBaseURL } from "../../lib/tm-base-url.js";
+import { wrapUntrusted } from "../../lib/untrusted-content.js";
 
 /**
  * Schema for adding a test result to a test run.
@@ -64,7 +65,7 @@ export async function addTestResult(
     const data = response.data;
     if (!data.success) {
       throw new Error(
-        `API returned unsuccessful response: ${JSON.stringify(data)}`,
+        `API returned unsuccessful response: ${wrapUntrusted("API response", JSON.stringify(data))}`,
       );
     }
 
@@ -74,7 +75,13 @@ export async function addTestResult(
           type: "text",
           text: `Successfully added test result with ID=${data["test-result"].id}`,
         },
-        { type: "text", text: JSON.stringify(data["test-result"], null, 2) },
+        {
+          type: "text",
+          text: wrapUntrusted(
+            "test result (structured data)",
+            JSON.stringify(data["test-result"], null, 2),
+          ),
+        },
       ],
     };
   } catch (err: any) {

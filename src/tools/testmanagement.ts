@@ -755,8 +755,7 @@ export default function addTestManagementTools(
 
   tools.createTestCase = server.tool(
     "createTestCase",
-    "Use this tool to create a test case in BrowserStack Test Management." +
-      NEEDS_PROJECT_ID,
+    "Create a test case in BrowserStack Test Management." + NEEDS_PROJECT_ID,
     CreateTestCaseSchema.shape,
     {
       title: "Create Test Case",
@@ -770,7 +769,7 @@ export default function addTestManagementTools(
 
   tools.updateTestCase = server.tool(
     "updateTestCase",
-    "Update an existing test case in BrowserStack Test Management. Any subset of the following fields may be changed: name, description, preconditions, test_case_steps, owner, priority, case_type, automation_status, status, tags, issues, custom_fields. Only the supplied fields are modified." +
+    "Update an existing test case; only the supplied fields change." +
       NEEDS_PROJECT_ID,
     UpdateTestCaseSchema.shape,
     {
@@ -785,7 +784,7 @@ export default function addTestManagementTools(
 
   tools.listTestCases = server.tool(
     "listTestCases",
-    "List test cases in a project, optionally scoped to a specific folder. Omit folder_id to list all test cases in the project; provide folder_id (discoverable via listFolders) to list only that folder's cases. Supports filters: case_type, priority, pagination." +
+    "List test cases in a project, optionally one folder (see listFolders). Filters: case_type, priority, paging." +
       NEEDS_PROJECT_ID,
     ListTestCasesSchema.shape,
     {
@@ -800,7 +799,7 @@ export default function addTestManagementTools(
 
   tools.listFolders = server.tool(
     "listFolders",
-    "List folders in a BrowserStack Test Management project, returning each folder's id and name (plus case counts and sub-folder counts). Pass parent_id to list sub-folders under a specific folder instead of top-level folders." +
+    "List folders (id, name, counts) in a project; parent_id lists sub-folders." +
       NEEDS_PROJECT_ID,
     ListFoldersSchema.shape,
     {
@@ -843,8 +842,7 @@ export default function addTestManagementTools(
 
   tools.listTestRuns = server.tool(
     "listTestRuns",
-    "List test runs in a project with optional filters (date ranges, assignee, state, etc.)" +
-      NEEDS_PROJECT_ID,
+    "List test runs with filters (dates, assignee, state)." + NEEDS_PROJECT_ID,
     ListTestRunsSchema.shape,
     {
       title: "List Test Runs",
@@ -858,8 +856,7 @@ export default function addTestManagementTools(
 
   tools.updateTestRun = server.tool(
     "updateTestRun",
-    "Update a test run's metadata and/or add test cases to it." +
-      NEEDS_PROJECT_ID,
+    "Update a test run or add test cases to it." + NEEDS_PROJECT_ID,
     UpdateTestRunSchema.shape,
     {
       title: "Update Test Run",
@@ -873,8 +870,7 @@ export default function addTestManagementTools(
 
   tools.addTestResult = server.tool(
     "addTestResult",
-    "Add a test result to a specific test run via BrowserStack Test Management API." +
-      NEEDS_PROJECT_ID,
+    "Add a test result to a test run." + NEEDS_PROJECT_ID,
     AddTestResultSchema.shape,
     {
       title: "Add Test Result",
@@ -918,7 +914,7 @@ export default function addTestManagementTools(
 
   tools.createLCASteps = server.tool(
     "createLCASteps",
-    "Generate Low Code Automation (LCA) steps for a test case in BrowserStack Test Management using the Low Code Automation Agent." +
+    "Generate Low Code Automation (LCA) steps for a test case." +
       NEEDS_PROJECT_ID,
     CreateLCAStepsSchema.shape,
     {
@@ -933,7 +929,7 @@ export default function addTestManagementTools(
 
   tools.listTestPlans = server.tool(
     "listTestPlans",
-    "List test plans in a BrowserStack Test Management project. Returns each plan's identifier (TP-*), name, status, description, dates, and active/closed test-run counts. Supports pagination." +
+    "List test plans (TP-*) with status, dates and run counts; paginated." +
       NEEDS_PROJECT_ID +
       PLAN_WRITES_VIA_CAPABILITIES,
     ListTestPlansSchema.shape,
@@ -949,7 +945,7 @@ export default function addTestManagementTools(
 
   tools.getTestPlan = server.tool(
     "getTestPlan",
-    "Fetch a test plan by identifier (TP-*) from BrowserStack Test Management. Returns plan metadata, the full list of linked test runs, total test-case count across runs, and a status summary — suitable for generating test documentation or QA status reports." +
+    "Get a test plan (TP-*): metadata, linked runs, case count and status summary." +
       NEEDS_PROJECT_ID +
       NEEDS_TEST_PLAN_ID +
       PLAN_WRITES_VIA_CAPABILITIES,
@@ -966,7 +962,7 @@ export default function addTestManagementTools(
 
   tools.listSubTestPlans = server.tool(
     "listSubTestPlans",
-    "List sub-test-plans under a parent test plan (TP-*) in a Test Management project. Supports pagination." +
+    "List sub-plans under a test plan (TP-*); paginated." +
       NEEDS_PROJECT_ID +
       NEEDS_TEST_PLAN_ID +
       PLAN_WRITES_VIA_CAPABILITIES,
@@ -983,7 +979,7 @@ export default function addTestManagementTools(
 
   tools.getSubTestPlan = server.tool(
     "getSubTestPlan",
-    "Fetch a sub-test-plan (STP-*) under a parent plan (TP-*). Returns metadata and linked test runs." +
+    "Get a sub-plan (STP-*): metadata and linked runs." +
       NEEDS_PROJECT_ID +
       NEEDS_TEST_PLAN_ID +
       PLAN_WRITES_VIA_CAPABILITIES,

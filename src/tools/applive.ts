@@ -6,6 +6,8 @@ import { startSession } from "./applive-utils/start-session.js";
 import logger from "../logger.js";
 import { trackMCP } from "../lib/instrumentation.js";
 import { BrowserStackConfig } from "../lib/types.js";
+import { isEnabled as capabilityRegistryEnabled } from "./capability-registry/config.js";
+import { versionString } from "../lib/version-keyword.js";
 
 /**
  * Launches an App Live Session on BrowserStack.
@@ -81,20 +83,28 @@ export default function addAppLiveTools(
 ) {
   const tools: Record<string, any> = {};
 
+  // A Live session is for a PERSON. The agent cannot tap, type, read the screen or take a
+  // screenshot in it, and every eval where an agent was asked to operate an app and chose
+  // this tool ended with "my tools can start it but can't tap anything in it". The
+  // description says so, and names the surface that can — only when that surface is on.
+  const description =
+    "Open a manual App Live session for the user to operate by hand; the agent cannot drive it." +
+    (capabilityRegistryEnabled()
+      ? " To tap, type or read the app yourself, use a mobiledevicecontrol session via invokeCapability."
+      : "");
+
   tools.runAppLiveSession = server.tool(
     "runAppLiveSession",
-    "Use this tool when user wants to manually check their app on a particular mobile device using BrowserStack's cloud infrastructure. Can be used to debug crashes, slow performance, etc.",
+    description,
     {
       desiredPhone: z
         .string()
         .describe(
-          "The full name of the device to run the app on. Example: 'iPhone 12 Pro' or 'Samsung Galaxy S20' or 'Google Pixel 6'. Always ask the user for the device they want to use, do not assume it. ",
+          "Exact device name, e.g. 'iPhone 15 Pro Max'. Ask the user; never assume.",
         ),
-      desiredPlatformVersion: z
-        .string()
-        .describe(
-          "Specifies the platform version to run the app on. For example, use '12.0' for Android or '16.0' for iOS. If the user says 'latest', 'newest', or similar, normalize it to 'latest'. Likewise, convert terms like 'earliest' or 'oldest' to 'oldest'.",
-        ),
+      desiredPlatformVersion: versionString().describe(
+        "Version number, or 'latest' / 'oldest'.",
+      ),
       desiredPlatform: z
         .enum(["android", "ios"])
         .describe(
@@ -103,7 +113,7 @@ export default function addAppLiveTools(
       appPath: z
         .string()
         .describe(
-          "The path to the .ipa or .apk file to install on the device. Always ask the user for the app path, do not assume it. Must be located inside the directory set in MCP_UPLOAD_BASE_DIR.",
+          "Local .apk/.ipa path inside MCP_UPLOAD_BASE_DIR. Ask the user; never assume.",
         ),
     },
     {

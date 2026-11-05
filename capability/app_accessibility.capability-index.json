@@ -3,7 +3,7 @@
   "version": "1.0",
   "build_id": "app_accessibility-v1.0-lists",
   "app_accessibility": {
-    "summary": "BrowserStack App Accessibility: WCAG accessibility results for mobile apps (Android and iOS), from automated App Automate tests run with accessibility checks on, and from manual App Live sessions scanned with Workflow Analyzer. Find the account's App Accessibility projects, a project's builds, and its manual reports, each with the id, status, app and issue counts needed to pick one. These capabilities list results; they do not read a build's or report's individual issues, compare builds, start tests or scans, or change or delete anything. Website accessibility (Website Scanner, Automate web tests) is not here.",
+    "summary": "BrowserStack App Accessibility: WCAG accessibility results for mobile apps (Android and iOS), from automated App Automate tests run with accessibility checks on, and from manual App Live sessions scanned with Workflow Analyzer. Find the account's App Accessibility projects, a project's builds, and its manual reports, each with the id, status, app and issue counts needed to pick one. These capabilities list results; they do not read a build's or report's individual issues, compare builds, start tests or scans, or change or delete anything. Websites are covered by a separate product.",
     "routing_terms": [
       "app accessibility",
       "app a11y",

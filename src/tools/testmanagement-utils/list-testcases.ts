@@ -5,6 +5,7 @@ import { formatAxiosError } from "../../lib/error.js";
 import { getBrowserStackAuth } from "../../lib/get-auth.js";
 import { BrowserStackConfig } from "../../lib/types.js";
 import { getTMBaseURL } from "../../lib/tm-base-url.js";
+import { wrapUntrusted } from "../../lib/untrusted-content.js";
 
 /**
  * Schema for listing test cases with optional filters.
@@ -18,9 +19,7 @@ export const ListTestCasesSchema = z.object({
   folder_id: z
     .string()
     .optional()
-    .describe(
-      "Optional. If provided, only return test cases in this folder. If omitted, returns all test cases in the project. Folder ids can be discovered via listFolders.",
-    ),
+    .describe("Only this folder's cases (ids from listFolders). Omit for all."),
   case_type: z
     .string()
     .optional()
@@ -73,7 +72,7 @@ export async function listTestCases(
         content: [
           {
             type: "text",
-            text: `Failed to list test cases: ${JSON.stringify(resp_data)}`,
+            text: `Failed to list test cases: ${wrapUntrusted("API response", JSON.stringify(resp_data))}`,
           },
         ],
         isError: true,
@@ -100,11 +99,14 @@ export async function listTestCases(
       content: [
         {
           type: "text",
-          text: `Found ${count} test case(s):\n\n${summary}`,
+          text: `Found ${count} test case(s):\n\n${wrapUntrusted("test case list", summary)}`,
         },
         {
           type: "text",
-          text: JSON.stringify(test_cases, null, 2),
+          text: wrapUntrusted(
+            "test cases (structured data)",
+            JSON.stringify(test_cases, null, 2),
+          ),
         },
       ],
     };

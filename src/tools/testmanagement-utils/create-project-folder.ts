@@ -6,6 +6,7 @@ import { projectIdentifierToId } from "../testmanagement-utils/TCG-utils/api.js"
 import { getBrowserStackAuth } from "../../lib/get-auth.js";
 import { BrowserStackConfig } from "../../lib/types.js";
 import { getTMBaseURL } from "../../lib/tm-base-url.js";
+import { wrapUntrusted } from "../../lib/untrusted-content.js";
 
 // Schema for combined project/folder creation
 export const CreateProjFoldSchema = z.object({
@@ -81,9 +82,15 @@ export async function createProjectOrFolder(
       });
 
       if (!res.data.success) {
-        throw new Error(
-          `Failed to create project: ${JSON.stringify(res.data)}`,
-        );
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Failed to create project: ${wrapUntrusted("API response", JSON.stringify(res.data))}`,
+            },
+          ],
+          isError: true,
+        };
       }
       // Project created successfully
 
@@ -118,7 +125,15 @@ export async function createProjectOrFolder(
       });
 
       if (!res.data.success) {
-        throw new Error(`Failed to create folder: ${JSON.stringify(res.data)}`);
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Failed to create folder: ${wrapUntrusted("API response", JSON.stringify(res.data))}`,
+            },
+          ],
+          isError: true,
+        };
       }
       // Folder created successfully
 

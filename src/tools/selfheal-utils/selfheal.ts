@@ -44,11 +44,9 @@ export interface SelfHealingReport {
 import { getBrowserStackAuth } from "../../lib/get-auth.js";
 import { BrowserStackConfig } from "../../lib/types.js";
 import { apiClient } from "../../lib/apiClient.js";
+import { getRegionalHost, sessionApiHost } from "../../lib/regional-host.js";
 
 type SessionType = "automate" | "app-automate";
-
-const SELF_HEAL_REPORT_BASE =
-  "https://api-automation.browserstack.com/ext/v1/builds";
 
 /**
  * Fetches the self-healing report for a build via the build-scoped API.
@@ -72,7 +70,7 @@ export async function fetchSelfHealingReportByBuild(
   const auth = Buffer.from(authString).toString("base64");
 
   const presignedResp = await apiClient.get<Record<string, unknown>>({
-    url: `${SELF_HEAL_REPORT_BASE}/${encodeURIComponent(buildUuid)}/selfHealingReport`,
+    url: `${getRegionalHost("automationApi")}/ext/v1/builds/${encodeURIComponent(buildUuid)}/selfHealingReport`,
     headers: {
       "Content-Type": "application/json",
       Authorization: `Basic ${auth}`,
@@ -135,7 +133,8 @@ export async function getSelfHealSelectors(
   const auth = Buffer.from(authString).toString("base64");
   const productPath =
     sessionType === "app-automate" ? "app-automate" : "automate";
-  const url = `https://api.browserstack.com/${productPath}/sessions/${sessionId}/logs`;
+  const host = sessionApiHost(sessionType);
+  const url = `${host}/${productPath}/sessions/${sessionId}/logs`;
 
   const response = await apiClient.get({
     url,

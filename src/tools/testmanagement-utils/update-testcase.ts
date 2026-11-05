@@ -9,6 +9,7 @@ import {
 } from "./TCG-utils/api.js";
 import { BrowserStackConfig } from "../../lib/types.js";
 import { getTMBaseURL } from "../../lib/tm-base-url.js";
+import { wrapUntrusted } from "../../lib/untrusted-content.js";
 import { getBrowserStackAuth } from "../../lib/get-auth.js";
 import { wrapRichText, wrapTestCaseSteps } from "./rich-text.js";
 import logger from "../../logger.js";
@@ -37,73 +38,48 @@ export interface TestCaseUpdateRequest {
 }
 
 export const UpdateTestCaseSchema = z.object({
-  project_identifier: z
-    .string()
-    .describe(
-      "The ID of the BrowserStack project containing the test case to update.",
-    ),
+  project_identifier: z.string().describe("Project ID of the test case."),
   test_case_identifier: z
     .string()
-    .describe(
-      "The ID of the test case to update. This can be found using the listTestCases tool.",
-    ),
+    .describe("Test case ID (from listTestCases)."),
   name: z.string().optional().describe("Updated name of the test case."),
-  description: z
-    .string()
-    .optional()
-    .describe("Updated brief description of the test case."),
-  preconditions: z
-    .string()
-    .optional()
-    .describe("Updated preconditions for the test case."),
+  description: z.string().optional().describe("Updated description."),
+  preconditions: z.string().optional().describe("Updated preconditions."),
   test_case_steps: z
     .array(
       z.object({
-        step: z.string().describe("The action to perform in this step."),
-        result: z.string().describe("The expected result of this step."),
+        step: z.string().describe("Step action."),
+        result: z.string().describe("Expected result."),
       }),
     )
     .optional()
-    .describe("Updated list of test case steps with expected results."),
-  owner: z
-    .string()
-    .email()
-    .optional()
-    .describe("Email of the test case owner."),
+    .describe("Updated steps and expected results."),
+  owner: z.string().email().optional().describe("Owner email."),
   priority: z
     .string()
     .optional()
-    .describe(
-      "Updated priority. Accepts either display name (e.g. 'Medium', 'Critical', 'High', 'Low') or internal name (e.g. 'medium'). Valid values are per-project and discoverable via the form-fields endpoint.",
-    ),
+    .describe("Priority, e.g. 'High' or 'medium'; values vary per project."),
   case_type: z
     .string()
     .optional()
     .describe(
-      "Updated test case type. Accepts either display name (e.g. 'Functional', 'Regression', 'Smoke & Sanity') or internal name (e.g. 'functional', 'smoke_sanity'). Valid values are per-project.",
+      "Type, e.g. 'Functional' or 'smoke_sanity'; values vary per project.",
     ),
   automation_status: z
     .string()
     .optional()
     .describe(
-      "Updated automation status. Use internal name such as 'not_automated', 'automated', 'automation_not_required', 'cannot_be_automated', or 'obsolete'.",
+      "e.g. not_automated, automated, automation_not_required, cannot_be_automated, obsolete.",
     ),
   status: z
     .string()
     .optional()
-    .describe(
-      "Updated review status of the test case (e.g. 'active', 'draft', 'in_review', 'outdated', 'rejected').",
-    ),
-  tags: z
-    .array(z.string())
-    .optional()
-    .describe("Replacement list of tags for the test case."),
+    .describe("e.g. 'active', 'draft', 'in_review', 'outdated', 'rejected'."),
+  tags: z.array(z.string()).optional().describe("Replacement tags."),
   issues: z
     .array(z.string())
     .optional()
-    .describe(
-      "Replacement list of linked Jira/Asana/Azure issue IDs for the test case.",
-    ),
+    .describe("Replacement Jira/Asana/Azure issue IDs."),
   custom_fields: z
     .record(
       z.string(),
@@ -115,9 +91,7 @@ export const UpdateTestCaseSchema = z.object({
       ]),
     )
     .optional()
-    .describe(
-      "Map of custom field NAME to value; use an array for multi-select fields.",
-    ),
+    .describe("Custom field NAME to value; array for multi-select."),
 });
 
 /**
@@ -234,8 +208,9 @@ export async function updateTestCase(
         content: [
           {
             type: "text",
-            text: `Failed to update test case: ${JSON.stringify(
-              response.data,
+            text: `Failed to update test case: ${wrapUntrusted(
+              "API response",
+              JSON.stringify(response.data),
             )}`,
           },
         ],
@@ -259,15 +234,15 @@ export async function updateTestCase(
 
 **Test Case Details:**
 - **ID**: ${tc.identifier}
-- **Name**: ${tc.title}
-- **Description**: ${tc.description || "N/A"}
+- **Name**: ${wrapUntrusted("test case name", tc.title)}
+- **Description**: ${tc.description ? wrapUntrusted("test case description", tc.description) : "N/A"}
 - **Case Type**: ${tc.case_type}
 - **Priority**: ${tc.priority}
 - **Status**: ${tc.status}
 - **Automation Status**: ${tc.automation_status ?? "N/A"}
 
 **View on BrowserStack Dashboard:**
-https://test-management.browserstack.com/projects/${projectId}/folders/${tc.folder_id}/test-cases/${tc.identifier}
+${tmBaseUrl}/projects/${projectId}/folders/${tc.folder_id}/test-cases/${tc.identifier}
 
 The test case has been updated successfully and is now available in your BrowserStack Test Management project.`,
         },
@@ -287,7 +262,7 @@ The test case has been updated successfully and is now available in your Browser
             type: "text",
             text: `Test case not found. Please verify the project_identifier ("${params.project_identifier}") and test_case_identifier ("${params.test_case_identifier}") are correct. Make sure to use actual values, not placeholders like "your_project_id".
 
-Error details: ${JSON.stringify(err.response?.data || err.message)}`,
+Error details: ${wrapUntrusted("API response", JSON.stringify(err.response?.data || err.message))}`,
           },
         ],
         isError: true,

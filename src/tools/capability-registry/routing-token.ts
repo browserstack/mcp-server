@@ -32,6 +32,8 @@ export interface RoutingVerdict {
   product?: string;
   /** The shared words, for `clash` — what the user has to be asked about. */
   terms?: string[];
+  /** The products the clash was between, for `clash` — the choices the user was given. */
+  products?: string[];
   /** Issued-at, epoch seconds. */
   iat: number;
 }

@@ -40,7 +40,33 @@ export type Transport = (
   headers: Record<string, string>,
   query: Record<string, unknown>,
   body?: unknown,
+  options?: { timeoutMs?: number },
 ) => Promise<HttpResponse>;
+
+/**
+ * What a cut-off read is told, as opposed to a refused connection.
+ *
+ * Both used to be "the product could not be reached", and for a request that was SENT
+ * that is the wrong advice: a build upload or a device allocation cut off after the last
+ * byte may well have taken effect, and a caller told it was unreachable retries — and
+ * uploads twice, or holds two devices.
+ */
+export function timedOutMessage(timeoutMs: number): string {
+  return (
+    `no answer within ${Math.round(timeoutMs / 1000)}s. The request was sent, so it may ` +
+    "have taken effect — check (list_app_builds, get_session, or the dashboard) before " +
+    "retrying."
+  );
+}
+
+/** The reply had started arriving and then failed: the request was certainly sent. */
+export function replyCutOffMessage(detail: string): string {
+  return (
+    `the reply was cut off while being read (${detail}). The request was sent, so it ` +
+    "may have taken effect — check (list_app_builds, get_session, or the dashboard) " +
+    "before retrying."
+  );
+}
 
 /** What this server can put into a credential template. Nothing else is fillable. */
 const PLACEHOLDERS = ["username", "access_key"] as const;
@@ -199,7 +225,20 @@ async function readBody(response: Response): Promise<unknown> {
     return `<non-text response: ${contentType}${size ? `, ${size} bytes` : ""}>`;
   }
 
-  const raw = await response.text().catch(() => "");
+  // A FAILED READ IS NOT AN EMPTY BODY. `fetch` resolves as soon as the headers arrive, so
+  // the abort timer can fire while the body is still streaming. Swallowing that here
+  // returned the status line with no payload — a slow session create came back as a 200
+  // carrying null, which reads as a successful start that forgot to mention the session id.
+  // The device was really allocated, so the caller then had a session it could not name and
+  // could not release. Re-throwing lets the transport report the call as failed.
+  let raw: string;
+  try {
+    raw = await response.text();
+  } catch (error) {
+    throw new Error(
+      `the response body could not be read: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
   if (!raw.trim()) return null;
 
   if (contentType.includes("json")) {
@@ -220,8 +259,9 @@ function truncate(text: string): string {
 }
 
 /** A fetch-based transport. Redirects are NOT followed. */
-export function fetchTransport(timeoutMs = 45_000): Transport {
-  return async (method, url, headers, query, body) => {
+export function fetchTransport(defaultTimeoutMs = 45_000): Transport {
+  return async (method, url, headers, query, body, options) => {
+    const timeoutMs = options?.timeoutMs ?? defaultTimeoutMs;
     const target = new URL(url);
     for (const [key, value] of Object.entries(query || {})) {
       if (value !== undefined && value !== null)
@@ -229,29 +269,53 @@ export function fetchTransport(timeoutMs = 45_000): Transport {
     }
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
+    // Set once `fetch` resolves, i.e. the status line has arrived: from then on any failure
+    // — the abort timer firing mid-body, a dropped connection — is a reply that was cut off,
+    // not a product that could not be reached, and the advice differs.
+    let replied = false;
     try {
       const response = await fetch(target.toString(), {
         method,
         headers,
         // Only send a body when there IS one: a literal `null` payload with a JSON
-        // content-type is rejected by several endpoints.
-        body: body === undefined ? undefined : JSON.stringify(body),
+        // content-type is rejected by several endpoints. A FormData goes through as it is —
+        // stringifying it yields "[object FormData]", which uploads nothing and reads as a
+        // product error rather than ours.
+        body:
+          body === undefined
+            ? undefined
+            : body instanceof FormData
+              ? body
+              : JSON.stringify(body),
         // A redirect from an authenticated API is usually a login bounce, and following it
         // turns a clear 401/302 into a 200 carrying an HTML sign-in page — which the
         // resolver would then read as an empty result set rather than a failure.
         redirect: "manual",
         signal: controller.signal,
       });
+      replied = true;
       return {
         status: response.status,
         body: await readBody(response),
       };
-    } catch {
-      // Upstream detail stays out of the reply; the resolver treats status 0 as a failed call.
+    } catch (error) {
+      // Upstream detail stays out of the reply; the resolver treats status 0 as a failed
+      // call. A cut-off is told apart from a refused connection, because the advice
+      // differs — and a failure after the reply started is a cut-off whatever its class,
+      // since `readBody` wraps the abort in a plain Error.
+      const timedOut = error instanceof Error && error.name === "AbortError";
       return {
         status: 0,
         body: null,
-        error: "the product could not be reached",
+        error: replied
+          ? replyCutOffMessage(
+              timedOut
+                ? `no answer within ${Math.round(timeoutMs / 1000)}s`
+                : "connection lost",
+            )
+          : timedOut
+            ? timedOutMessage(timeoutMs)
+            : "the product could not be reached",
       };
     } finally {
       clearTimeout(timer);

@@ -194,7 +194,7 @@ export default function addRCATools(
 
   tools.fetchRCA = server.tool(
     "fetchRCA",
-    "Fetch AI Root Cause Analysis for the current user's failed BrowserStack Automate/App-Automate tests. Suggests fixes only; never auto-apply, require explicit user approval." +
+    "AI root cause for failed Automate/App Automate tests. Suggests fixes only; never auto-apply, require explicit user approval." +
       NEEDS_TEST_IDS,
     FETCH_RCA_PARAMS,
     {

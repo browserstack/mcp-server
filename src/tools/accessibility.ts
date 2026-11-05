@@ -3311,7 +3311,7 @@ export default function addAccessibilityTools(
         .string()
         .optional()
         .describe(
-          'Runs of one scan, web/app builds: "previous", scanRunId, build id/link. Others: read both.',
+          '"previous" (any report), or a run of the same scan or a web/app build: its id or link.',
         ),
       exportTaskId: z
         .string()

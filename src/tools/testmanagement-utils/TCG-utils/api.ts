@@ -124,6 +124,7 @@ export async function triggerTestCaseGeneration(
   projectId: string,
   source: string,
   config: BrowserStackConfig,
+  mimeType?: string,
 ): Promise<string> {
   const tmBaseUrl = await getTMBaseURL(config);
   const res = await apiClient.post({
@@ -136,6 +137,7 @@ export async function triggerTestCaseGeneration(
     body: {
       document,
       documentId,
+      mimeType,
       folderId,
       projectId,
       source,

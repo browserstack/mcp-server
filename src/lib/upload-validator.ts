@@ -125,6 +125,16 @@ export const TEST_MANAGEMENT_ATTACHMENT_EXTENSIONS = [
   ".zip",
 ] as const;
 
+/** File types test case generation can read, mapped to the mimeType it expects. */
+export const TEST_CASE_GENERATION_MIME_TYPES: Readonly<Record<string, string>> =
+  {
+    ".pdf": "application/pdf",
+    ".txt": "text/plain",
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+  };
+
 export const ONE_MB = 1024 * 1024;
 export const MAX_APP_UPLOAD_BYTES = 4 * 1024 * ONE_MB; // 4 GB — matches BrowserStack app upload limit
 export const MAX_ATTACHMENT_UPLOAD_BYTES = 100 * ONE_MB; // 100 MB

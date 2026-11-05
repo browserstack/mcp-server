@@ -279,14 +279,6 @@ describe("fetchAccessibilityIssues comparing scan runs", () => {
     expect(text(result).trim()).toBe(`Workflow Analyzer reports have no built-in compare.${READ_BOTH}`);
   });
 
-  it("says Automated Tests builds can't be compared here yet, and to read both instead", async () => {
-    const result = await fetchIssues()({ buildId: "q7m2k9x4c1v8b3n6z0w5r2t9y4p1s8d3f6g0h2ja", compareWith: "previous" });
-
-    expect(result.isError).toBeFalsy();
-    expect(text(result).trim()).toBe(`Automated Tests builds can't be compared here yet.${READ_BOTH}`);
-    expect(m.getReportLink).not.toHaveBeenCalled();
-  });
-
   it("says to match a manual app report's issues by element, as its screens are not stable", async () => {
     const result = await fetchIssues()({
       appReportId: "6d1f0a2b-3c4d-4e5f-8a9b-0c1d2e3f4a5b",

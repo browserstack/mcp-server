@@ -497,21 +497,6 @@ describe("fetchAccessibilityIssues comparing app builds", () => {
     expect(text(result)).toMatch(/itself/);
   });
 
-  it("says to read both web builds and compare them, as there is no built-in compare for them yet", async () => {
-    m.resolveBuild.mockImplementation(async (source: unknown) => source);
-    m.reportStatus.mockResolvedValue("completed");
-
-    const result = await fetchIssues()({
-      buildId: "q7m2k9x4c1v8b3n6z0w5r2t9y4p1s8d3f6g0h2ja",
-      compareWith: "previous",
-    });
-
-    expect(result.isError).toBeFalsy();
-    expect(text(result)).toMatch(
-      /^Automated Tests builds can't be compared here yet\. Read both reports with fetchAccessibilityIssues/,
-    );
-  });
-
   it("says to read both when compareWith names a report that is not an app build", async () => {
     m.sourceFromReportUrl.mockResolvedValue({
       kind: "appReport",

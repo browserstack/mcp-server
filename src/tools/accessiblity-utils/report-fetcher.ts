@@ -8,6 +8,8 @@ import {
   type AppBuildReport,
   type AppManualReport,
 } from "./app-report-fetcher.js";
+import { onErrorPage, type RunIssue } from "./report-parser.js";
+import { sortBySeverity } from "./paginate.js";
 import { SessionType } from "../../lib/constants.js";
 import { sessionsListUrl } from "../automate-utils/list-session-ids.js";
 import { getAutomationBaseUrl } from "../rca-agent-utils/constants.js";
@@ -136,6 +138,77 @@ export interface RunChanges {
   resolvedIssues: number;
 }
 
+/** An Automated Tests (web) build, as its overview names it. */
+export interface WebBuild {
+  buildId: string;
+  name: string;
+  projectName?: string;
+  buildNumber?: number;
+  /** When the build started, as the API writes it (ISO 8601). */
+  startedAt?: string;
+}
+
+/** The compare API's three lists, in its own words (`retained` is still open). */
+export type CompareStatus = "new" | "resolved" | "retained";
+const COMPARE_STATUSES: CompareStatus[] = ["new", "retained", "resolved"];
+
+/** Two Automated Tests builds as the compare API compares them. */
+export interface WebBuildComparison {
+  /** The older build; `autoResolved` when the API chose it (no baseReport was passed). */
+  base: WebBuild & { autoResolved: boolean };
+  after: WebBuild;
+  counts: Record<CompareStatus, number>;
+  /** The first issues of each list, up to the list limit, most severe first. */
+  issues: Record<CompareStatus, RunIssue[]>;
+}
+
+/** Why the compare API gave no comparison, in its words. */
+export interface WebCompareRefusal {
+  refused: string;
+  /** The build has no earlier completed run with its name in its project. */
+  noPrevious?: true;
+}
+
+/**
+ * How long a call to the compare API is waited on. The API stops itself at 30 s and answers
+ * 504 "Request timed out"; this covers a gateway that never answers.
+ */
+export const WEB_COMPARE_TIMEOUT_MS = 40_000;
+/** The most issues the compare API hands out in one call. */
+const WEB_COMPARE_PAGE = 100;
+
+/**
+ * A compare API row as a comparison lists it. Its key is the API's own (signatureKey), which
+ * tells apart more than rule, element and page: a changed element's markup, for one.
+ */
+function comparedIssue(row: any): RunIssue {
+  const selector = [row?.target ?? []].flat().filter(Boolean).join(" ");
+  const issue_type = row?.ruleData?.id ?? "";
+  const affected_page = row?.url ?? "";
+  return {
+    key:
+      row?.signatureKey ||
+      [issue_type, selector || row?.componentId || "", affected_page].join("|"),
+    issue_type,
+    severity: (row?.impact || "unknown").trim(),
+    component: row?.componentId ?? "",
+    ...(selector ? { selector } : {}),
+    affected_page,
+    ...(onErrorPage(row?.html) ? { on_error_page: true as const } : {}),
+  };
+}
+
+/** A build as the compare API's summary names it. */
+function comparedBuild(report: any): WebBuild {
+  return {
+    buildId: report?.id,
+    name: report?.buildName,
+    projectName: report?.projectName,
+    buildNumber: report?.buildNumber,
+    startedAt: report?.createdOn,
+  };
+}
+
 /** The thBuildId a dashboard report link carries, if any. */
 function thBuildIdOf(link: string | undefined): string | null {
   try {
@@ -214,7 +287,7 @@ export class AccessibilityReportFetcher {
   private auth: { username: string; password: string } | undefined;
   private readonly app = new AppAccessibilityApi(() => this.authHeaders());
   /** Web builds whose overview was read, by id, so a status check need not read it again. */
-  private readonly webBuildProjects = new Map<string, string>();
+  private readonly webBuilds = new Map<string, WebBuild>();
 
   public setAuth(auth: { username: string; password: string }): void {
     this.auth = auth;
@@ -303,9 +376,7 @@ export class AccessibilityReportFetcher {
     }
     const web = resp.ok ? resp.data?.data : undefined;
     if (web) {
-      if (web.projectName) {
-        this.webBuildProjects.set(source.buildId, web.projectName);
-      }
+      this.rememberWebBuild(source.buildId, web);
       return source;
     }
     const meta = await this.app.buildMeta(source.buildId);
@@ -612,13 +683,7 @@ export class AccessibilityReportFetcher {
 
   private async buildStatus(buildId: string): Promise<string | undefined> {
     const q = encodeURIComponent;
-    const project =
-      this.webBuildProjects.get(buildId) ??
-      (
-        await this.getData(
-          `${API_BASE}/automated-tests/v1/builds/${q(buildId)}`,
-        )
-      )?.projectName;
+    const project = (await this.webBuild(buildId))?.projectName;
     if (!project) return undefined;
     let nextPage: string | undefined;
     for (let page = 0; page < MAX_BUILD_LIST_PAGES; page++) {
@@ -633,6 +698,178 @@ export class AccessibilityReportFetcher {
       nextPage = data.pagination.next_page;
     }
     return undefined;
+  }
+
+  private rememberWebBuild(buildId: string, overview: any): WebBuild {
+    const build: WebBuild = {
+      buildId,
+      name: overview.name,
+      projectName: overview.projectName,
+      buildNumber: overview.buildNumber,
+      startedAt: overview.time,
+    };
+    this.webBuilds.set(buildId, build);
+    return build;
+  }
+
+  /** An Automated Tests build's name, project, number and start, from its overview. */
+  async webBuild(buildId: string): Promise<WebBuild | undefined> {
+    const known = this.webBuilds.get(buildId);
+    if (known) return known;
+    const overview = await this.getData(
+      `${API_BASE}/automated-tests/v1/builds/${encodeURIComponent(buildId)}`,
+    );
+    return overview ? this.rememberWebBuild(buildId, overview) : undefined;
+  }
+
+  /**
+   * The run before a build that the compare API would pick: the newest earlier build with
+   * the same name in its project whose accessibility run completed (`failed` in the build
+   * list is one that completed with no test cases). Found in the project's newest builds.
+   */
+  async previousWebBuild(
+    build: WebBuild,
+  ): Promise<(WebBuild & { status: string }) | undefined> {
+    if (!build.projectName) return undefined;
+    const q = encodeURIComponent;
+    let passed = false;
+    let nextPage: string | undefined;
+    for (let page = 0; page < MAX_BUILD_LIST_PAGES; page++) {
+      const data = await this.getData(
+        `${API_BASE}/automated-tests/v1/builds?project_name=${q(build.projectName)}&limit=100${
+          nextPage ? `&next_page=${q(nextPage)}` : ""
+        }`,
+      );
+      for (const row of data?.builds ?? []) {
+        if (row.id === build.buildId) passed = true;
+        else if (
+          passed &&
+          row.name === build.name &&
+          (row.status === "completed" || row.status === "failed")
+        ) {
+          return {
+            buildId: row.id,
+            name: row.name,
+            projectName: build.projectName,
+            buildNumber: row.buildNumber,
+            startedAt: row.time,
+            status: row.status,
+          };
+        }
+      }
+      if (!data?.pagination?.has_next || !data.pagination.next_page) break;
+      nextPage = data.pagination.next_page;
+    }
+    return undefined;
+  }
+
+  /**
+   * Two builds of one build name and project, compared by the Automated Tests compare API
+   * as the dashboard compares them: `newReport` against `baseReport`, or against the run
+   * before it when no base is given. The API takes them in that order and does not check it.
+   * The counts are the API's; each list holds up to `listLimit` issues, read from the first
+   * page and, for a list that page does not cover, a page of that list alone. The API refuses
+   * builds of different names or projects, builds over its issue-count threshold and calls
+   * that outlast its 30 s budget; any refusal is handed back in its words.
+   */
+  async compareWebBuilds(
+    newReport: string,
+    baseReport: string | undefined,
+    listLimit: number,
+  ): Promise<WebBuildComparison | WebCompareRefusal> {
+    const call = async (
+      params: Record<string, string>,
+    ): Promise<any | WebCompareRefusal> => {
+      const url = `${API_BASE}/automated-tests/v1/builds/compare/issues?${new URLSearchParams(params)}`;
+      let resp;
+      try {
+        resp = await apiClient.get({
+          url,
+          headers: this.authHeaders(),
+          raise_error: false,
+          timeout: WEB_COMPARE_TIMEOUT_MS,
+        });
+      } catch (error) {
+        const timedOut = /timeout|ECONNABORTED/i.test(
+          error instanceof Error
+            ? `${error.message} ${(error as any).code}`
+            : "",
+        );
+        return {
+          refused: timedOut
+            ? `no answer within ${WEB_COMPARE_TIMEOUT_MS / 1000} s`
+            : error instanceof Error
+              ? error.message
+              : "the request failed",
+        };
+      }
+      const body = resp.data;
+      if (resp.ok && body?.data?.summary) return body.data;
+      const reason =
+        (typeof body?.message === "string" && body.message) ||
+        [body?.error].flat().filter(Boolean).join("; ") ||
+        `HTTP ${resp.status}`;
+      return {
+        refused: reason,
+        ...(resp.status === 404 && /no previous completed run/i.test(reason)
+          ? { noPrevious: true as const }
+          : {}),
+      };
+    };
+
+    const first = await call({
+      newReport,
+      ...(baseReport ? { baseReport } : {}),
+      limit: String(WEB_COMPARE_PAGE),
+    });
+    if ("refused" in first) return first;
+    const summary = first.summary;
+    const counts: Record<CompareStatus, number> = {
+      new: Number(summary.newIssues) || 0,
+      retained: Number(summary.retainedIssues) || 0,
+      resolved: Number(summary.resolvedIssues) || 0,
+    };
+    const base = comparedBuild(summary.baseReport);
+    const rowsOf = (data: any, status: CompareStatus) =>
+      (data?.issues ?? [])
+        .filter((row: any) => row?.status === status)
+        .map(comparedIssue);
+    const issues = {} as Record<CompareStatus, RunIssue[]>;
+    for (const status of COMPARE_STATUSES) {
+      issues[status] = rowsOf(first, status);
+    }
+    // The first page runs new, then still open, then resolved: a list it cuts short is read
+    // on its own, against the base the first call settled on.
+    const short = COMPARE_STATUSES.filter(
+      (status) => issues[status].length < Math.min(counts[status], listLimit),
+    );
+    const pages = await Promise.all(
+      short.map((status) =>
+        call({
+          newReport,
+          baseReport: base.buildId ?? baseReport ?? "",
+          status,
+          limit: String(Math.max(10, Math.min(listLimit, WEB_COMPARE_PAGE))),
+        }),
+      ),
+    );
+    for (const [i, status] of short.entries()) {
+      const page = pages[i];
+      if ("refused" in page) return page;
+      issues[status] = rowsOf(page, status);
+    }
+    for (const status of COMPARE_STATUSES) {
+      issues[status] = sortBySeverity(issues[status].slice(0, listLimit));
+    }
+    return {
+      base: {
+        ...base,
+        autoResolved: Boolean(summary.baseReport?.autoResolved),
+      },
+      after: comparedBuild(summary.newReport),
+      counts,
+      issues,
+    };
   }
 
   /** The `data` of a successful API response, or undefined. */

@@ -180,6 +180,9 @@ describe("compareIssues", () => {
     expect(diff.added.map((r) => r.issue_type)).toEqual(["region"]);
     expect(diff.resolved.map((r) => r.issue_type)).toEqual(["image-alt"]);
     expect(diff.retained).toBe(2);
+    // The still-open issues as the newer run has them, one for each counted.
+    expect(diff.still_open).toHaveLength(2);
+    expect(diff.still_open.every((r) => before.some((b) => b.key === r.key))).toBe(true);
   });
 });
 

@@ -435,6 +435,8 @@ export type RunIssue = {
   issue_type: string;
   severity: string;
   component: string;
+  /** The element's CSS selector, where the key is not made from it. */
+  selector?: string;
   affected_page: string;
   /** Found on an error page scanned in the page's place: the page did not load. */
   on_error_page?: true;
@@ -449,6 +451,11 @@ export type RunIssue = {
 const ERROR_PAGE_SNIPPET =
   /dashboard-privoxy-page|id="main-frame-error"|chrome-error:\/\/|class="neterror[" ]/i;
 
+/** Whether an issue's HTML snippet is from an error page scanned in place of a page that did not load. */
+export function onErrorPage(snippet: string | undefined): boolean {
+  return ERROR_PAGE_SNIPPET.test(snippet ?? "");
+}
+
 /**
  * The report's rows without those of pages that did not load, and those pages. A page is one
  * when any row under its address shows an error page (as compareIssues decides it), and all
@@ -461,7 +468,7 @@ function setApartErrorPages(
 ): { rows: Record<string, string>[]; error_pages: ErrorPage[] } {
   const failed = new Map<string, ErrorPage>();
   for (const row of rows) {
-    if (!ERROR_PAGE_SNIPPET.test(row["HTML snippet"] ?? "")) continue;
+    if (!onErrorPage(row["HTML snippet"])) continue;
     const url = row["Affected page"] ?? "";
     const key = samePage(url);
     if (!failed.has(key)) failed.set(key, { url, issues: 0 });
@@ -479,12 +486,21 @@ function setApartErrorPages(
 /** A page whose earlier issues are all gone and new ones appeared: worth a second look. */
 const CHANGED_PAGE_MIN_ISSUES = 2;
 
-/** A report's main issues that the dashboard counts (not hidden), keyed for comparing runs. */
+/**
+ * A report's main issues that the dashboard counts (not hidden), keyed for comparing runs.
+ * In a grouped report an error page's issues on a second page are duplicates of those on the
+ * first, so those duplicates are kept too, marked: they show that page did not load either,
+ * and as their page is set apart they are never counted.
+ */
 export async function loadMainIssues(reportLink: string): Promise<RunIssue[]> {
   const { parsed, columns } = await loadReport(reportLink);
   const grouped = columns.includes(DUPLICATE_COLUMN);
   return parsed
-    .filter((row) => (!grouped || isMainIssue(row)) && !isHidden(row))
+    .filter(
+      (row) =>
+        (!grouped || isMainIssue(row) || onErrorPage(row["HTML snippet"])) &&
+        !isHidden(row),
+    )
     .map((row) => {
       const element = (row["CSS selector"] || row["Component"] || "").trim();
       return {
@@ -497,7 +513,7 @@ export async function loadMainIssues(reportLink: string): Promise<RunIssue[]> {
         severity: (row["Severity"] || "unknown").trim(),
         component: row["Component"],
         affected_page: row["Affected page"],
-        ...(ERROR_PAGE_SNIPPET.test(row["HTML snippet"] ?? "")
+        ...(onErrorPage(row["HTML snippet"])
           ? { on_error_page: true as const }
           : {}),
       };
@@ -526,8 +542,8 @@ function issuesByPage(
 }
 
 /**
- * Which issues of `current` are new since `base`, which of `base` are gone, and how many
- * remain, decided page by page. A page that did not load in one of the runs (an error page
+ * Which issues of `current` are new since `base`, which of `base` are gone, and which remain
+ * (`still_open`, as `current` has them; `retained` counts them), decided page by page. A page that did not load in one of the runs (an error page
  * was scanned under its address) is set apart. Not loaded in `current`: its earlier issues
  * were not checked again, so they are `not_checked` rather than resolved, and the error
  * page's issues are not new. Not loaded in `base`: the error page's issues are not resolved,
@@ -542,6 +558,7 @@ export function compareIssues(
   added: RunIssue[];
   resolved: RunIssue[];
   retained: number;
+  still_open: RunIssue[];
   not_checked: RunIssue[];
   failed_pages: string[];
   not_checked_earlier: RunIssue[];
@@ -552,12 +569,12 @@ export function compareIssues(
   const after = issuesByPage(current);
   const added: RunIssue[] = [];
   const resolved: RunIssue[] = [];
+  const stillOpen: RunIssue[] = [];
   const notChecked: RunIssue[] = [];
   const notCheckedEarlier: RunIssue[] = [];
   const failedPages: string[] = [];
   const failedPagesEarlier: string[] = [];
   const changedPages: string[] = [];
-  let retained = 0;
   for (const key of new Set([...before.keys(), ...after.keys()])) {
     const earlier = before.get(key);
     const later = after.get(key);
@@ -579,7 +596,9 @@ export function compareIssues(
     );
     added.push(...pageAdded);
     resolved.push(...pageResolved);
-    retained += (later?.issues.length ?? 0) - pageAdded.length;
+    stillOpen.push(
+      ...(later?.issues ?? []).filter((issue) => earlierKeys.has(issue.key)),
+    );
     if (
       earlier &&
       earlier.issues.length >= CHANGED_PAGE_MIN_ISSUES &&
@@ -592,7 +611,8 @@ export function compareIssues(
   return {
     added: sortBySeverity(added),
     resolved: sortBySeverity(resolved),
-    retained,
+    retained: stillOpen.length,
+    still_open: sortBySeverity(stillOpen),
     not_checked: sortBySeverity(notChecked),
     failed_pages: failedPages,
     not_checked_earlier: sortBySeverity(notCheckedEarlier),

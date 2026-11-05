@@ -36,6 +36,10 @@ import { BrowserStackConfig } from "../lib/types.js";
 import { elicitCredentialsIfSupported } from "../lib/elicit-credentials.js";
 import logger from "../logger.js";
 import { NEEDS_A11Y_CONFIG_ID, NEEDS_A11Y_SCAN_ID } from "./tool-handoff.js";
+import {
+  memoryForReport,
+  memoryMessages,
+} from "./accessiblity-utils/fp-memory.js";
 
 interface AuthCredentials {
   username: string;
@@ -1048,6 +1052,12 @@ async function fetchAccessibilityIssues(
     nextPage: cursor,
     pageUrl,
   });
+  // The memory for this page's rules comes with the issues, so it is applied whether or
+  // not the agent thinks to ask for it.
+  const memory = await memoryForReport(
+    setupAuth(config),
+    Object.keys(rules ?? {}),
+  );
 
   return createSuccessResponse([
     ...preface,
@@ -1059,6 +1069,7 @@ async function fetchAccessibilityIssues(
     ...excludedIssuesNote(duplicate_issues, unlinked_duplicates, hidden_issues),
     fullReportLine(reportLink),
     WEB_ISSUES_NOTE,
+    ...memoryMessages(memory),
     `Issues: ${wrapUntrusted("accessibility scan results", JSON.stringify({ issues: records, rules }))}`,
     closingMessage(next_page, remaining, source, stillProcessing, pageArg),
   ]);

@@ -47,7 +47,7 @@ const API_BASE = "https://api-accessibility.browserstack.com/api";
  * link someone just opened will be. It runs at the list's default page size (~1.2 s a page):
  * at limit=50 or 100 the cursor skips scans, so a larger page cannot be used to go faster.
  */
-export const MAX_SCAN_LIST_PAGES = 15;
+export const MAX_SCAN_LIST_PAGES = 25;
 /** How many pages of a scan's runs are read to find the run before a given one. */
 const MAX_SCAN_RUN_PAGES = 10;
 

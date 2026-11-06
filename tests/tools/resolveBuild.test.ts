@@ -256,7 +256,7 @@ describe("resolveBuild", () => {
         config,
       ),
     ).rejects.toThrow(
-      /No TRA project named "Checking". Similar projects: "Checking Project Name"/,
+      /No TRA project named "Checking" found. Similar projects: "Checking Project Name"/,
     );
   });
 
@@ -459,7 +459,7 @@ describe("resolveBuild: Automate builds TRA never saw", () => {
         config,
       ),
     ).rejects.toThrow(
-      /Close matches[\s\S]*No Automate or App Automate build is named "patc204" either/,
+      /Close matches[\s\S]*None of the latest Automate or App Automate builds is named "patc204" either/,
     );
   });
 
@@ -481,5 +481,62 @@ describe("resolveBuild: Automate builds TRA never saw", () => {
         req.url.endsWith("/builds.json"),
       ),
     ).toBe(false);
+  });
+});
+
+describe("resolveBuild: request budget", () => {
+  beforeEach(() => vi.resetAllMocks());
+
+  it("stops the project lookup after 5 pages and builds after 1", async () => {
+    (apiClient.get as Mock).mockImplementation(async ({ url, params }) => {
+      if (url.endsWith("/ext/v1/builds/latest")) return notFound;
+      if (url.endsWith("/builds.json")) return ok([]);
+      if (url.endsWith("/ext/v1/projects")) {
+        // Always another page: the cap, not the data, must end the walk.
+        return ok({
+          projects: [{ id: Number(params?.next_page ?? 0), name: "Unrelated" }],
+          pagination: {
+            has_next: true,
+            next_page: String(Number(params?.next_page ?? 0) + 1),
+          },
+        });
+      }
+      throw new Error(`unexpected url ${url}`);
+    });
+
+    await expect(
+      resolveBuild(
+        {
+          browserStackProjectName: "Missing",
+          browserStackBuildName: "nightly",
+        },
+        config,
+      ),
+    ).rejects.toThrow(/No TRA project named "Missing" found/);
+    const urls = (apiClient.get as Mock).mock.calls.map(
+      ([req]) => req.url as string,
+    );
+    expect(urls.filter((u) => u.endsWith("/ext/v1/projects"))).toHaveLength(5);
+    expect(urls.filter((u) => u.endsWith("/builds.json"))).toHaveLength(2);
+    expect(urls.length).toBeLessThanOrEqual(8);
+  });
+
+  it("reads one page of builds when a build number is not among the latest runs", async () => {
+    routeTra({ projects: [PROJECT], builds: JUNIT_ROWS });
+
+    await expect(
+      resolveBuild(
+        {
+          browserStackProjectName: PROJECT.name,
+          browserStackBuildName: "junit",
+          buildNumber: 9,
+        },
+        config,
+      ),
+    ).rejects.toThrow(/no build #9 among its latest runs/);
+    const buildPages = (apiClient.get as Mock).mock.calls.filter(([req]) =>
+      /\/projects\/\d+\/builds$/.test(req.url),
+    );
+    expect(buildPages).toHaveLength(1);
   });
 });

@@ -33,8 +33,9 @@ export interface TraProject {
 // Builds older than this are not searched by the fallback lookups.
 export const BUILD_LOOKUP_WINDOW_DAYS = 365;
 
-// Project pages hold at most 10 rows; this bounds the walk at ~500 projects.
-const MAX_PROJECT_PAGES = 50;
+// Project pages hold at most 10 rows and the list has no name filter; capped
+// low because clients retry failed lookups.
+const MAX_PROJECT_PAGES = 5;
 
 function authHeaders(config: BrowserStackConfig): Record<string, string> {
   const auth = Buffer.from(getBrowserStackAuth(config)).toString("base64");

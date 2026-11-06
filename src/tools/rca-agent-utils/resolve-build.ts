@@ -41,9 +41,9 @@ export class BuildLookupError extends Error {
 }
 
 const MAX_CANDIDATES = 5;
-// Pages are 10 builds each, newest page first.
-const NAME_PAGES = 20;
-const SCAN_PAGES = 10;
+// One page (the newest 10 builds) per search: clients retry failed lookups, so
+// a deeper walk would multiply requests on every wrong name.
+const BUILD_PAGES = 1;
 
 export interface ParsedBuildUrl {
   projectName?: string;
@@ -199,7 +199,7 @@ async function resolveInProject(
           .join(", ")}.`
       : "";
     throw new BuildLookupError(
-      `No TRA project named "${projectName}".${hint} Use the project name shown on the dashboard.`,
+      `No TRA project named "${projectName}" found.${hint} Use the project name shown on the dashboard, or pass the TRA build id.`,
     );
   }
 
@@ -213,7 +213,7 @@ async function resolveInProject(
     const byLabel = (
       await listProjectBuilds(project.id, config, {
         dashboardName: buildName,
-        maxPages: buildNumber === undefined ? 1 : NAME_PAGES,
+        maxPages: BUILD_PAGES,
         stop: (rows) =>
           buildNumber === undefined || rows.some((r) => numberMatches(r)),
       })
@@ -235,14 +235,14 @@ async function resolveInProject(
         };
       }
       throw new BuildLookupError(
-        `"${buildName}" in "${project.name}" has no build #${buildNumber} in ${window}. Recent runs:\n` +
+        `"${buildName}" in "${project.name}" has no build #${buildNumber} among its latest runs. Pass the TRA build id for older runs. Latest runs:\n` +
           candidateList(byLabel),
       );
     }
 
     // Neither name matched exactly: scan recent builds for a near match.
     const recent = await listProjectBuilds(project.id, config, {
-      maxPages: SCAN_PAGES,
+      maxPages: BUILD_PAGES,
     });
     const exact = recent.filter(
       (row) =>
@@ -265,15 +265,15 @@ async function resolveInProject(
     );
     const list = near.length ? near : recent;
     throw new BuildLookupError(
-      `No build named "${buildName}" in "${project.name}" in ${window}. ` +
+      `No build named "${buildName}" among the latest builds of "${project.name}". ` +
         (list.length
           ? `${near.length ? "Close matches" : "Recent builds"} (pass a TRA build id below, or its name and number):\n${candidateList(list)}`
-          : "The project has no builds in that window."),
+          : `The project has no builds in ${window}.`),
     );
   }
 
   const recent = await listProjectBuilds(project.id, config, {
-    maxPages: buildNumber === undefined ? 1 : SCAN_PAGES,
+    maxPages: BUILD_PAGES,
     stop: (rows) => buildNumber !== undefined && rows.some(numberMatches),
   });
   if (!recent.length) {
@@ -302,7 +302,7 @@ async function resolveInProject(
   throw new BuildLookupError(
     hits.length
       ? `Several builds in "${project.name}" are #${buildNumber}; pass browserStackBuildName too:\n${candidateList(hits)}`
-      : `No recent build #${buildNumber} in "${project.name}". Recent builds:\n${candidateList(recent)}`,
+      : `No build #${buildNumber} among the latest builds of "${project.name}". Latest builds:\n${candidateList(recent)}`,
   );
 }
 
@@ -403,7 +403,7 @@ async function searchAutomateBuilds(
   );
   if (!matches.length) {
     throw new BuildLookupError(
-      `${traError.message}\nNo Automate or App Automate build is named "${buildName}" either.`,
+      `${traError.message}\nNone of the latest Automate or App Automate builds is named "${buildName}" either.`,
     );
   }
 

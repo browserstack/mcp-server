@@ -11,9 +11,10 @@ export interface AutomateBuildMatch {
   createdAt?: string;
 }
 
-// The builds route returns at most 100 per page, newest first.
+// The builds route returns at most 100 per page, newest first. One page per
+// product: clients retry failed lookups.
 const PAGE_SIZE = 100;
-const MAX_PAGES = 3;
+const MAX_PAGES = 1;
 
 function buildsUrl(sessionType: SessionType): string {
   return sessionType === SessionType.Automate

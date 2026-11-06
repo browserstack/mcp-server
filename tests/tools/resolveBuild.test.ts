@@ -11,6 +11,10 @@ import {
   resolveTraBuildIdFromHashed,
   TraBuildNotFoundError,
 } from "../../src/tools/automate-utils/resolve-tra-build-id";
+import {
+  callCapability,
+  CapabilityUnavailableError,
+} from "../../src/tools/capability-registry/call";
 
 vi.mock("../../src/lib/apiClient", () => ({ apiClient: { get: vi.fn() } }));
 vi.mock("../../src/lib/get-auth", () => ({
@@ -21,6 +25,10 @@ vi.mock("../../src/logger", () => ({
 }));
 vi.mock("../../src/tools/rca-agent-utils/constants", () => ({
   getAutomationBaseUrl: () => "https://api-automation.browserstack.com",
+}));
+vi.mock("../../src/tools/capability-registry/call", async (importOriginal) => ({
+  ...(await importOriginal<any>()),
+  callCapability: vi.fn(),
 }));
 vi.mock(
   "../../src/tools/automate-utils/resolve-tra-build-id",
@@ -128,7 +136,19 @@ describe("resolveBuild", () => {
     expect(apiClient.get).toHaveBeenCalledTimes(1);
   });
 
-  it("hands a build number to the capability without calling any API", async () => {
+  const capabilityAnswer = (status: number, body: unknown) => ({
+    ok: status >= 200 && status < 300,
+    completed: true,
+    http_response: { status, body },
+  });
+
+  it("resolves a build number through the capability in one call", async () => {
+    (callCapability as Mock).mockResolvedValue(
+      capabilityAnswer(200, {
+        buildId: "e9tdlmcerew3j7bbob4ghuvfuu6aztjrm7pm0rkl",
+      }),
+    );
+
     const result = await resolveBuild(
       {
         browserStackProjectName: PROJECT,
@@ -138,45 +158,98 @@ describe("resolveBuild", () => {
       config,
     );
 
-    expect(result).toMatchObject({
-      capability: {
-        name: "get_build_id_from_build_coordinates",
-        product: "tra",
+    expect(result.buildId).toBe("e9tdlmcerew3j7bbob4ghuvfuu6aztjrm7pm0rkl");
+    expect(callCapability).toHaveBeenCalledWith(
+      "tra",
+      "get_build_id_from_build_coordinates",
+      {
         query: {
           projectNormalisedName: PROJECT,
           buildNormalisedName: "junit",
           buildSerialId: 2,
         },
       },
-    });
-    expect("note" in result && result.note).toContain("call invokeCapability");
+      config,
+    );
     expect(apiClient.get).not.toHaveBeenCalled();
   });
 
-  it("hands TRA and Automate dashboard project links to the capability", async () => {
-    for (const link of [
-      "https://observability.browserstack.com/projects/Checking+Project+Name/builds/junit/2",
-      "https://automate.browserstack.com/projects/Default+Project+4/builds/TC-LCA+agentic+run++default/1022",
-    ]) {
-      const result = await resolveBuild({ buildUrl: link }, config);
-      expect(result).toHaveProperty(
-        "capability.name",
-        "get_build_id_from_build_coordinates",
-      );
-    }
-    const automate = await resolveBuild(
+  it("reads project, name and number from TRA and Automate project links", async () => {
+    (callCapability as Mock).mockResolvedValue(
+      capabilityAnswer(200, {
+        buildId: "08d60aead8cfe40baa85c508c0d9a713717a6abf",
+      }),
+    );
+
+    const result = await resolveBuild(
       {
         buildUrl:
           "https://automate.browserstack.com/projects/Default+Project+4/builds/TC-LCA+agentic+run++default/1022",
       },
       config,
     );
-    expect(automate).toHaveProperty("capability.query", {
-      projectNormalisedName: "Default Project 4",
-      buildNormalisedName: "TC-LCA agentic run  default",
-      buildSerialId: 1022,
+
+    expect(result.buildId).toBe("08d60aead8cfe40baa85c508c0d9a713717a6abf");
+    expect((callCapability as Mock).mock.calls[0][2]).toEqual({
+      query: {
+        projectNormalisedName: "Default Project 4",
+        buildNormalisedName: "TC-LCA agentic run  default",
+        buildSerialId: 1022,
+      },
     });
-    expect(apiClient.get).not.toHaveBeenCalled();
+  });
+
+  it("explains which name to use when no build has that name and number", async () => {
+    (callCapability as Mock).mockResolvedValue(capabilityAnswer(404, null));
+
+    await expect(
+      resolveBuild(
+        {
+          browserStackProjectName: PROJECT,
+          browserStackBuildName: "patc204-junit-105mb",
+          buildNumber: 3,
+        },
+        config,
+      ),
+    ).rejects.toThrow(
+      /No build #3 named[\s\S]*build name shown on the dashboard/,
+    );
+  });
+
+  it("returns a clear error when the capability registry is off", async () => {
+    (callCapability as Mock).mockRejectedValue(
+      new CapabilityUnavailableError(
+        "the capability registry is disabled on this server",
+      ),
+    );
+
+    await expect(
+      resolveBuild(
+        {
+          browserStackProjectName: PROJECT,
+          browserStackBuildName: "junit",
+          buildNumber: 2,
+        },
+        config,
+      ),
+    ).rejects.toThrow(/not available here[\s\S]*TRA build id/);
+  });
+
+  it("surfaces a server error from the capability", async () => {
+    (callCapability as Mock).mockResolvedValue(
+      capabilityAnswer(503, { message: "down" }),
+    );
+
+    await expect(
+      resolveBuild(
+        {
+          browserStackProjectName: PROJECT,
+          browserStackBuildName: "junit",
+          buildNumber: 2,
+        },
+        config,
+      ),
+    ).rejects.toThrow(/503/);
   });
 
   it("looks up the latest run for a project link without a number", async () => {

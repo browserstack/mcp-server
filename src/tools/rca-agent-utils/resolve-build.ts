@@ -9,6 +9,12 @@ import {
   TraBuildNotFoundError,
 } from "../automate-utils/resolve-tra-build-id.js";
 import { fetchLatestBuildId } from "./tra-builds.js";
+import { HttpError } from "../../lib/error.js";
+import {
+  callCapability,
+  CapabilityUnavailableError,
+} from "../capability-registry/call.js";
+import { InvocationError } from "../capability-registry/index-loader.js";
 
 export interface BuildLookupInput {
   browserStackProjectName?: string;
@@ -17,16 +23,10 @@ export interface BuildLookupInput {
   buildUrl?: string;
 }
 
-/** A capability call the client makes to finish the lookup. */
-export interface CapabilityCall {
-  name: string;
-  product: string;
-  query: Record<string, string | number>;
+export interface BuildLookupResult {
+  buildId: string;
+  note?: string;
 }
-
-export type BuildLookupResult =
-  | { buildId: string; note?: string }
-  | { capability: CapabilityCall; note: string };
 
 export class BuildLookupError extends Error {
   constructor(message: string) {
@@ -99,32 +99,63 @@ export function parseBuildUrl(input: string): ParsedBuildUrl | undefined {
   return undefined;
 }
 
-// The build-number lookup lives in the TRA capability index, so its endpoint is
-// defined once there; the tool hands the client a ready call.
+// The build-number lookup is defined in the TRA capability index and called through
+// the registry, so its endpoint is maintained in one place.
 export const BUILD_BY_NUMBER_CAPABILITY = "get_build_id_from_build_coordinates";
 
-function buildByNumber(
+async function buildByNumber(
   projectName: string,
   buildName: string,
   buildNumber: number,
-): BuildLookupResult {
-  const capability: CapabilityCall = {
-    name: BUILD_BY_NUMBER_CAPABILITY,
-    product: "tra",
-    query: {
-      projectNormalisedName: projectName,
-      buildNormalisedName: buildName,
-      buildSerialId: buildNumber,
-    },
-  };
-  return {
-    capability,
-    note:
-      `To get build #${buildNumber} of "${buildName}", call invokeCapability with ` +
-      `${JSON.stringify(capability)}. Its buildId is the TRA build id. The build name ` +
-      "must be the one in the TRA dashboard link; a 404 means no build has that " +
-      "name and number.",
-  };
+  config: BrowserStackConfig,
+): Promise<BuildLookupResult> {
+  let result;
+  try {
+    result = await callCapability(
+      "tra",
+      BUILD_BY_NUMBER_CAPABILITY,
+      {
+        query: {
+          projectNormalisedName: projectName,
+          buildNormalisedName: buildName,
+          buildSerialId: buildNumber,
+        },
+      },
+      config,
+    );
+  } catch (error) {
+    if (
+      error instanceof CapabilityUnavailableError ||
+      error instanceof InvocationError
+    ) {
+      throw new BuildLookupError(
+        `Looking up a build by number is not available here (${error.message}). ` +
+          "Pass the TRA build id, or project + the build name from browserstack.yml " +
+          "for its latest run.",
+      );
+    }
+    throw error;
+  }
+
+  const { status, body } = result.http_response;
+  const buildId = (body as { buildId?: unknown } | null)?.buildId;
+  if (result.ok && typeof buildId === "string" && buildId) {
+    return {
+      buildId,
+      note: `Build #${buildNumber} of "${buildName}" in "${projectName}".`,
+    };
+  }
+  if (status === 404 || result.ok) {
+    throw new BuildLookupError(
+      `No build #${buildNumber} named "${buildName}" in "${projectName}". With a build ` +
+        "number, use the build name shown on the dashboard (as in the TRA build link), " +
+        "which can be shorter than the name in browserstack.yml.",
+    );
+  }
+  throw new HttpError(
+    `Failed to look up build #${buildNumber}: ${status} ${result.http_response.error ?? ""}`.trim(),
+    status,
+  );
 }
 
 async function resolveFromHashed(
@@ -158,9 +189,9 @@ async function resolveFromHashed(
 }
 
 /**
- * One request at most: a TRA id is returned as is, an Automate id is mapped, a
- * name without a number is the latest run, and a name with a number is handed
- * to the build-number capability.
+ * No paging: a TRA id is returned as is, an Automate id is mapped, a name
+ * without a number is the latest run, and a name with a number is one call to
+ * the build-number capability.
  */
 export async function resolveBuild(
   input: BuildLookupInput,
@@ -202,7 +233,7 @@ export async function resolveBuild(
   }
 
   if (buildNumber !== undefined) {
-    return buildByNumber(projectName, buildName, buildNumber);
+    return buildByNumber(projectName, buildName, buildNumber, config);
   }
 
   if (options.userName) {

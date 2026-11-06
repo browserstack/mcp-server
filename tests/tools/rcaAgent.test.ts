@@ -209,30 +209,6 @@ describe("RCA Agent Tools", () => {
       expect((resolveBuild as Mock).mock.calls[0][2]).toBeUndefined();
     });
 
-    it("SUCCESS: returns the capability call for a build number", async () => {
-      (resolveBuild as Mock).mockResolvedValue({
-        capability: {
-          name: "get_build_id_from_build_coordinates",
-          product: "tra",
-          query: {},
-        },
-        note: 'To get build #2 of "junit", call invokeCapability with {...}.',
-      });
-
-      const result = await listBuildIdTool(
-        {
-          browserStackProjectName: "MyProject",
-          browserStackBuildName: "junit",
-          buildNumber: 2,
-        },
-        mockConfig,
-      );
-
-      expect(result.isError).toBeFalsy();
-      expect(result.content).toHaveLength(1);
-      expect(result.content[0].text).toContain("call invokeCapability");
-    });
-
     it("FAIL: returns isError on API failure", async () => {
       (resolveBuild as Mock).mockRejectedValue(new Error("Not found"));
 

@@ -27,7 +27,7 @@ export const GET_BUILD_ID_PARAMS = {
     .int()
     .positive()
     .optional()
-    .describe("Build #N; then use the dashboard build name."),
+    .describe("Build #N; then give the dashboard build name."),
   buildUrl: z
     .string()
     .optional()

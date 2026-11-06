@@ -11,7 +11,6 @@ import {
 import {
   isTraBuildId,
   NoSessionsError,
-  SessionNotOnFirstPageError,
   otherSessionType,
   resolveHashedBuildId,
 } from "./automate-utils/resolve-hashed-build-id.js";
@@ -142,12 +141,7 @@ export async function listSessionIdsTool(
         try {
           sessions = await fromTraBuild();
         } catch (resolveError) {
-          if (
-            resolveError instanceof NoSessionsError ||
-            resolveError instanceof SessionNotOnFirstPageError
-          ) {
-            throw resolveError;
-          }
+          if (resolveError instanceof NoSessionsError) throw resolveError;
           if (
             resolveError instanceof HttpError &&
             !isNotFoundError(resolveError)

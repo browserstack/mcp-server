@@ -152,15 +152,17 @@ describe("findSessionIdForObservabilityBuild", () => {
     );
   });
 
-  it("reads one page only and says so when its tests have no session", async () => {
-    (apiClient.get as Mock).mockResolvedValueOnce(
-      testRunsPage([{ id: 1, session_id: null }], "p2"),
-    );
+  it("follows pagination until a session id appears", async () => {
+    (apiClient.get as Mock)
+      .mockResolvedValueOnce(testRunsPage([{ id: 1, session_id: null }], "p2"))
+      .mockResolvedValueOnce(testRunsPage([{ id: 2, session_id: SESSION_ID }]));
 
     await expect(
       findSessionIdForObservabilityBuild(OBS_UUID, config),
-    ).rejects.toThrow(/first page of TRA build[\s\S]*Automate build link/);
-    expect(apiClient.get).toHaveBeenCalledTimes(1);
+    ).resolves.toBe(SESSION_ID);
+    expect((apiClient.get as Mock).mock.calls[1][0].params).toEqual({
+      next_page: "p2",
+    });
   });
 
   it("returns undefined when no test carries a session id", async () => {
@@ -171,6 +173,17 @@ describe("findSessionIdForObservabilityBuild", () => {
     await expect(
       findSessionIdForObservabilityBuild(OBS_UUID, config),
     ).resolves.toBeUndefined();
+  });
+
+  it("stops after the page cap even if more pages exist", async () => {
+    (apiClient.get as Mock).mockResolvedValue(
+      testRunsPage([{ id: 1, session_id: null }], "more"),
+    );
+
+    await expect(
+      findSessionIdForObservabilityBuild(OBS_UUID, config),
+    ).resolves.toBeUndefined();
+    expect(apiClient.get).toHaveBeenCalledTimes(5);
   });
 
   it("throws when the test runs API fails", async () => {

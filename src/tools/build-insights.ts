@@ -10,7 +10,6 @@ import { trackMCP } from "../lib/instrumentation.js";
 import {
   isHashedBuildId,
   NoSessionsError,
-  SessionNotOnFirstPageError,
   resolveHashedBuildId,
 } from "./automate-utils/resolve-hashed-build-id.js";
 import { mapHashedToTra } from "./automate-utils/resolve-tra-build-id.js";
@@ -139,12 +138,6 @@ async function resolveInsightsHashedId(
       return {
         sessions:
           "none: results were uploaded (e.g. JUnit), so there are no Automate sessions, logs or video",
-      };
-    }
-    if (error instanceof SessionNotOnFirstPageError) {
-      return {
-        sessions:
-          "not found on the first page of tests; use the Automate build link for sessions",
       };
     }
     logger.warn("Could not resolve hashed build id for build insights", error);

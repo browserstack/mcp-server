@@ -328,6 +328,26 @@ describe("listSessionIdsTool", () => {
     expect(apiClient.get).toHaveBeenCalledTimes(2);
   });
 
+  it("surfaces a TRA server error instead of calling the id unknown", async () => {
+    const { HttpError } = await import("../../src/lib/error");
+    (apiClient.get as Mock).mockResolvedValue({
+      ok: false,
+      status: 404,
+      statusText: "Not Found",
+      data: {},
+    });
+    (resolveHashedBuildId as Mock).mockRejectedValue(
+      new HttpError("Failed to fetch test runs: 503 Service Unavailable", 503),
+    );
+
+    await expect(
+      listSessionIdsTool(
+        { sessionType: SessionType.Automate, buildId: "deadbeef".repeat(5) },
+        mockConfig,
+      ),
+    ).rejects.toThrow(/503 Service Unavailable/);
+  });
+
   it("switches product when the hashed build ran on the other one", async () => {
     (apiClient.get as Mock)
       .mockResolvedValueOnce({ ok: false, status: 404, statusText: "Not Found", data: {} })

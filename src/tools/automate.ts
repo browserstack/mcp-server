@@ -1,3 +1,4 @@
+import { HttpError, isNotFoundError } from "../lib/error.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
@@ -141,6 +142,12 @@ export async function listSessionIdsTool(
           sessions = await fromTraBuild();
         } catch (resolveError) {
           if (resolveError instanceof NoSessionsError) throw resolveError;
+          if (
+            resolveError instanceof HttpError &&
+            !isNotFoundError(resolveError)
+          ) {
+            throw resolveError;
+          }
           logger.debug(
             "listSessions: id is not a TRA build either",
             resolveError,

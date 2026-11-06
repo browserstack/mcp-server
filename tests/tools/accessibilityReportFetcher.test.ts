@@ -131,6 +131,11 @@ describe("AccessibilityReportFetcher.sourceFromReportUrl", () => {
     expect(get).not.toHaveBeenCalled();
   });
 
+  // A Website Scanner link is read by its run's build id; the scan list is searched only for
+  // what needs the scan's ids (comparing runs), or when the API does not know the build id.
+  const linkRun = (scanName: string, thBuildId: string) =>
+    ({ kind: "scanBuild", thBuildId, scanName }) as const;
+
   it("finds a Website Scanner link's scan and latest run by paging the scan list", async () => {
     get
       .mockResolvedValueOnce(scansPage([scan(1, "other", "aaa", 11)], "tok2"))
@@ -139,7 +144,7 @@ describe("AccessibilityReportFetcher.sourceFromReportUrl", () => {
       );
 
     await expect(
-      fetcher().sourceFromReportUrl(scannerLink("checkout fix", "bbb")),
+      fetcher().findScanRun(linkRun("checkout fix", "bbb")),
     ).resolves.toEqual({ kind: "scan", scanId: "1234", scanRunId: "5678" });
     // No limit: larger pages make the list skip scans, so it is walked at its default size.
     expect(get.mock.calls.map(([options]) => options.url)).toEqual([
@@ -154,7 +159,7 @@ describe("AccessibilityReportFetcher.sourceFromReportUrl", () => {
     );
 
     await expect(
-      fetcher().sourceFromReportUrl(scannerLink("checkout fix", "older")),
+      fetcher().findScanRun(linkRun("checkout fix", "older")),
     ).rejects.toThrow(/earlier run of scan "checkout fix" \(scanId 1234\)/);
   });
 
@@ -162,7 +167,7 @@ describe("AccessibilityReportFetcher.sourceFromReportUrl", () => {
     get.mockResolvedValue(scansPage([scan(1, "other", "aaa", 11)], "more"));
 
     await expect(
-      fetcher().sourceFromReportUrl(scannerLink("checkout fix", "bbb")),
+      fetcher().findScanRun(linkRun("checkout fix", "bbb")),
     ).rejects.toThrow(/most recent scans.*scanId and scanRunId/s);
     expect(get).toHaveBeenCalledTimes(MAX_SCAN_LIST_PAGES);
   });
@@ -188,9 +193,9 @@ describe("AccessibilityReportFetcher.sourceFromReportUrl and a scan without a ru
       }),
     );
 
-    await expect(fetcher().sourceFromReportUrl(link)).rejects.toThrow(
-      /scan 1234 has no completed run/,
-    );
+    await expect(
+      fetcher().findScanRun({ kind: "scanBuild", thBuildId: "bbb", scanName: "checkout" }),
+    ).rejects.toThrow(/scan 1234 has no completed run/);
   });
 });
 
@@ -362,18 +367,13 @@ describe("AccessibilityReportFetcher.sourceFromReportUrl and a shared report lin
   it("reads the dashboard link a scanner share link carries", async () => {
     const inner = `https://accessibility.browserstack.com/site-scanner/projects/checkout/builds?thBuildId=bbb&recurring=false`;
     const share = `https://scanner.browserstack.com/site-scanner/checkout/a11y-report?reportUrl=${encodeURIComponent(inner)}&minimal=true&report_source=private_share`;
-    get.mockResolvedValueOnce(
-      ok({
-        scans: [{ id: 1234, name: "checkout", scanUrl: inner, lastScanDetails: { scanRunId: 5678 } }],
-        pagination: { hasNext: false },
-      }),
-    );
 
     await expect(fetcher().sourceFromReportUrl(share)).resolves.toEqual({
-      kind: "scan",
-      scanId: "1234",
-      scanRunId: "5678",
+      kind: "scanBuild",
+      thBuildId: "bbb",
+      scanName: "checkout",
     });
+    expect(get).not.toHaveBeenCalled();
   });
 });
 

@@ -28,7 +28,7 @@ Change these and the tests will tell you, but the reasoning is worth keeping:
   as the query side. Every other entity and alias — widget, gadget, sprocket, blueprint,
   pipeline, channel, quota, token — is deliberately absent from tm's 196-term vocabulary,
   so the routing assertions measure routing rather than an accident of overlap.
-- **It authors no entity `description`s.** One test asserts they are *absent* rather than
+- **It authors no entity `description`s.** One test asserts they are _absent_ rather than
   empty, which is the case of a product onboarded before its vocabulary is written.
 - **`catalogue` appears in most of its intents.** A term common inside a small product but
   rare across both is what makes the same query score differently per scope, which is the

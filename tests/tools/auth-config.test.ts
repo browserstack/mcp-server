@@ -92,9 +92,9 @@ describe("AccessibilityAuthConfig.getAuthConfig", () => {
   });
 
   it("throws when BrowserStack credentials are not set", async () => {
-    await expect(new AccessibilityAuthConfig().getAuthConfig(9364)).rejects.toThrow(
-      /credentials are not set/,
-    );
+    await expect(
+      new AccessibilityAuthConfig().getAuthConfig(9364),
+    ).rejects.toThrow(/credentials are not set/);
     expect(apiClient.get).not.toHaveBeenCalled();
   });
 });

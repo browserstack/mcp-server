@@ -19,7 +19,8 @@ const config: any = {
 
 // Long enough that a 500-character cap would cut off the closing marker.
 const LONG = "x".repeat(800);
-const CLOSED = /«UNTRUSTED API response ([0-9a-f]{12})»\n[\s\S]*\n«END UNTRUSTED \1»$/;
+const CLOSED =
+  /«UNTRUSTED API response ([0-9a-f]{12})»\n[\s\S]*\n«END UNTRUSTED \1»$/;
 
 function expectWholeBodyWrapped(res: any, prefix: RegExp) {
   expect(res.isError).toBe(true);

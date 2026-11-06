@@ -79,3 +79,19 @@ export function formatAxiosError(
     isError: true,
   };
 }
+
+/** A failed HTTP request, keeping the status for callers to branch on. */
+export class HttpError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+    this.name = "HttpError";
+  }
+}
+
+export function isNotFoundError(error: unknown): boolean {
+  if (error instanceof HttpError) return error.status === 404;
+  return error instanceof AxiosError && error.response?.status === 404;
+}

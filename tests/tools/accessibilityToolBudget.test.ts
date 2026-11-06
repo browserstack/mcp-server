@@ -8,7 +8,10 @@ vi.mock("../../src/lib/instrumentation.js", () => ({ trackMCP: vi.fn() }));
 vi.mock("../../src/logger.js", () => ({
   default: { error: vi.fn(), info: vi.fn(), debug: vi.fn(), warn: vi.fn() },
 }));
-vi.mock("../../src/index.js", () => ({ trackMCP: vi.fn(), PackageJsonVersion: "0.0.0" }));
+vi.mock("../../src/index.js", () => ({
+  trackMCP: vi.fn(),
+  PackageJsonVersion: "0.0.0",
+}));
 
 import addAccessibilityTools from "../../src/tools/accessibility.js";
 
@@ -16,7 +19,8 @@ const PROMPT_CEILING = 200;
 const DESCRIBE_CEILING = 120;
 
 function registered() {
-  const tools: { name: string; prompt: string; schema: Record<string, any> }[] = [];
+  const tools: { name: string; prompt: string; schema: Record<string, any> }[] =
+    [];
   const server: any = {
     tool: vi.fn((name: string, prompt: string, schema: Record<string, any>) => {
       tools.push({ name, prompt, schema });
@@ -45,22 +49,31 @@ describe("accessibility tool descriptions", () => {
     for (const t of tools) {
       for (const [field, def] of Object.entries(t.schema)) {
         const text: string = (def as any).description ?? "";
-        if (text.length > DESCRIBE_CEILING) over.push(`${t.name}.${field}: ${text.length}`);
+        if (text.length > DESCRIBE_CEILING)
+          over.push(`${t.name}.${field}: ${text.length}`);
       }
     }
     expect(over).toEqual([]);
   });
 
   it("takes buildId only in the shape the API uses: 40 lowercase letters and digits", () => {
-    const schema = tools.find((t) => t.name === "fetchAccessibilityIssues")!.schema.buildId;
-    expect(schema.safeParse("q7m2k9x4c1v8b3n6z0w5r2t9y4p1s8d3f6g0h2ja").success).toBe(true);
+    const schema = tools.find((t) => t.name === "fetchAccessibilityIssues")!
+      .schema.buildId;
+    expect(
+      schema.safeParse("q7m2k9x4c1v8b3n6z0w5r2t9y4p1s8d3f6g0h2ja").success,
+    ).toBe(true);
     expect(schema.safeParse("checkout-build").success).toBe(false);
-    expect(schema.safeParse("3f9a1c7e2b5d4e8f9a0b1c2d3e4f5a6b").success).toBe(false);
+    expect(schema.safeParse("3f9a1c7e2b5d4e8f9a0b1c2d3e4f5a6b").success).toBe(
+      false,
+    );
   });
 
   it("takes appReportId only as a UUID, so it cannot reach another API path", () => {
-    const schema = tools.find((t) => t.name === "fetchAccessibilityIssues")!.schema.appReportId;
-    expect(schema.safeParse("6d1f0a2b-3c4d-4e5f-8a9b-0c1d2e3f4a5b").success).toBe(true);
+    const schema = tools.find((t) => t.name === "fetchAccessibilityIssues")!
+      .schema.appReportId;
+    expect(
+      schema.safeParse("6d1f0a2b-3c4d-4e5f-8a9b-0c1d2e3f4a5b").success,
+    ).toBe(true);
     expect(schema.safeParse("..").success).toBe(false);
     expect(schema.safeParse("../reports").success).toBe(false);
   });

@@ -26,9 +26,15 @@ const FIXTURE_DIR = fileURLToPath(
  */
 const SHIPPED_DIR = mkdtempSync(join(tmpdir(), "cap-registry-multi-"));
 for (const [from, name] of [
-  [new URL("../../capability/tm.capability-index.json", import.meta.url), "tm.capability-index.json"],
   [
-    new URL("../fixtures/capability-multi/secondproduct.capability-index.json", import.meta.url),
+    new URL("../../capability/tm.capability-index.json", import.meta.url),
+    "tm.capability-index.json",
+  ],
+  [
+    new URL(
+      "../fixtures/capability-multi/secondproduct.capability-index.json",
+      import.meta.url,
+    ),
     "secondproduct.capability-index.json",
   ],
 ] as const) {
@@ -140,18 +146,14 @@ describe("capability registry, end to end through the server factory", () => {
       }
     }
     // It reaches the caller where it belongs: in the response.
-    const listed = readAnswer(
-      (await tools.listProducts.handler({}, {} as any)),
-    );
+    const listed = readAnswer(await tools.listProducts.handler({}, {} as any));
     expect(listed.products[0].summary).toContain("Test Management");
   });
 
   it("carries each entity's one-line meaning on the routing call", async () => {
     const server = await buildServer();
     const listed = readAnswer(
-      (
-        await (server.getTools().listProducts as any).handler({}, {} as any)
-      ),
+      await (server.getTools().listProducts as any).handler({}, {} as any),
     );
     const byName = Object.fromEntries(
       listed.products[0].entities.map((e: any) => [e.entity, e]),
@@ -167,11 +169,9 @@ describe("capability registry, end to end through the server factory", () => {
     // describeEntity carries it too — same field, so an agent that went deep on one
     // entity is not reading a different vocabulary from the one that routed it there.
     const deep = readAnswer(
-      (
-        await (server.getTools().describeEntity as any).handler(
-          { product: "tm", entity: "version" },
-          {} as any,
-        )
+      await (server.getTools().describeEntity as any).handler(
+        { product: "tm", entity: "version" },
+        {} as any,
       ),
     );
     expect(deep.description).toBe(byName.version.description);
@@ -215,10 +215,7 @@ describe("capability registry, end to end through the server factory", () => {
     const server = await buildServer();
     const search = server.getTools().searchCapability as any;
     const run = async (args: Record<string, unknown>) => {
-      const r = await search.handler(
-        { product: "tm", ...args },
-        {} as any,
-      );
+      const r = await search.handler({ product: "tm", ...args }, {} as any);
       return { blocked: r.isError === true, body: readAnswer(r) };
     };
 
@@ -249,7 +246,8 @@ describe("capability registry, end to end through the server factory", () => {
     expect(crossed.body.error).toMatch(/points at secondproduct, not tm/);
     expect(crossed.body.error).toMatch(/only secondproduct claims \('quota'\)/);
     expect(
-      (await run({ query: "check my quota", product: "secondproduct" })).blocked,
+      (await run({ query: "check my quota", product: "secondproduct" }))
+        .blocked,
     ).toBe(false);
 
     // ONE WAY OUT, AND IT IS NOT A FLAG. `product_choice: 'user_confirmed'` used to open
@@ -257,15 +255,21 @@ describe("capability registry, end to end through the server factory", () => {
     // caller wrote it on every ambiguous prompt with nothing behind it. What opens it now
     // is the user's own words, checked against the index rather than taken on trust.
     expect(
-      (await run({
-        query: "list all projects",
-        user_words: "the test management one",
-      })).blocked,
+      (
+        await run({
+          query: "list all projects",
+          user_words: "the test management one",
+        })
+      ).blocked,
     ).toBe(false);
     // And a flag by that name buys nothing, because there is no longer such an argument.
     expect(
-      (await run({ query: "list all projects", product_choice: "user_confirmed" }))
-        .blocked,
+      (
+        await run({
+          query: "list all projects",
+          product_choice: "user_confirmed",
+        })
+      ).blocked,
     ).toBe(true);
 
     // `entity` IS NOT A WAY OUT, and used to be. It narrows within a product and says
@@ -287,7 +291,11 @@ describe("capability registry, end to end through the server factory", () => {
     process.env.CAPABILITY_REGISTRY_INDEX_DIR = SHIPPED_DIR;
     const server = await buildServer();
     const r: any = await (server.getTools().searchCapability as any).handler(
-      { query: "list all projects", product: "tm", product_choice: "not_asked" },
+      {
+        query: "list all projects",
+        product: "tm",
+        product_choice: "not_asked",
+      },
       {} as any,
     );
     const { clarify } = readAnswer(r);
@@ -303,7 +311,10 @@ describe("capability registry, end to end through the server factory", () => {
     // word — the two things a user needs to answer without being shown a schema.
     const tm = clarify.options.find((o: any) => o.product === "tm");
     expect(tm.summary).toMatch(/Test Management/);
-    expect(tm.shared_terms[0]).toMatchObject({ term: "project", entity: "project" });
+    expect(tm.shared_terms[0]).toMatchObject({
+      term: "project",
+      entity: "project",
+    });
     expect(tm.shared_terms[0].means).toMatch(/top-level container/);
 
     // The second product ships no entity descriptions, so its sense of `project` has no
@@ -407,11 +418,9 @@ describe("capability registry, end to end through the server factory", () => {
     const describe = server.getTools().describeCapability as any;
     const run = async (args: Record<string, unknown>) =>
       readAnswer(
-        (
-          await describe.handler(
-            { name: "create_root_folder", ...args },
-            {} as any,
-          )
+        await describe.handler(
+          { name: "create_root_folder", ...args },
+          {} as any,
         ),
       );
 
@@ -550,9 +559,7 @@ describe("capability registry, end to end through the server factory", () => {
       },
       {} as any,
     );
-    expect(readAnswer(noConsent).error).toMatch(
-      /ask the user to confirm/,
-    );
+    expect(readAnswer(noConsent).error).toMatch(/ask the user to confirm/);
 
     // A typo must surface as a parameter error, NOT as "go ask a human" about a call that
     // was never going to run.
@@ -565,9 +572,7 @@ describe("capability registry, end to end through the server factory", () => {
       },
       {} as any,
     );
-    expect(readAnswer(typo).error).toMatch(
-      /unknown body: nmae/,
-    );
+    expect(readAnswer(typo).error).toMatch(/unknown body: nmae/);
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 });

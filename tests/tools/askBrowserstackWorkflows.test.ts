@@ -67,7 +67,11 @@ describe("actions", () => {
     const approval = {
       instruction: "answer the approval",
       call: "askBrowserStackAI",
-      params: { run_id: "run-abc", perm_id: "perm-1", decision: "<allow|deny>" },
+      params: {
+        run_id: "run-abc",
+        perm_id: "perm-1",
+        decision: "<allow|deny>",
+      },
     };
     for (const status of ["needs_approval", "rate_limited"]) {
       const out = withConversation(

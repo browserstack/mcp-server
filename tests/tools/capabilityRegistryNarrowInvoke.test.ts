@@ -95,9 +95,7 @@ function tools(body: unknown, status = 200) {
 }
 
 const call = async (handlers: Record<string, any>, input: unknown) =>
-  readAnswer(
-    (await handlers.invokeCapability(input, {} as never)),
-  );
+  readAnswer(await handlers.invokeCapability(input, {} as never));
 
 describe("invokeCapability applies a selection", () => {
   it("narrows the body and says so", async () => {
@@ -219,11 +217,9 @@ describe("the contract advertises it", () => {
   it("describeCapability publishes `narrowable`, which is the caller's business", async () => {
     const handlers = tools(ROWS);
     const doc = readAnswer(
-      (
-        await handlers.describeCapability(
-          { name: "list_browsers", product: "p" },
-          {} as never,
-        )
+      await handlers.describeCapability(
+        { name: "list_browsers", product: "p" },
+        {} as never,
       ),
     );
     expect(doc.narrowable.fields).toContain("browser");
@@ -233,11 +229,9 @@ describe("the contract advertises it", () => {
   it("says nothing about it on a capability that has none", async () => {
     const handlers = tools(ROWS);
     const doc = readAnswer(
-      (
-        await handlers.describeCapability(
-          { name: "list_plain", product: "p" },
-          {} as never,
-        )
+      await handlers.describeCapability(
+        { name: "list_plain", product: "p" },
+        {} as never,
       ),
     );
     expect(doc.narrowable).toBeUndefined();

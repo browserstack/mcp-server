@@ -48,6 +48,8 @@ export interface ParsedBuildUrl {
   traBuildId?: string;
   hashedBuildId?: string;
   sessionType?: SessionType;
+  /** Set for Automate / App Automate dashboard links that name a project. */
+  automateProduct?: SessionType;
 }
 
 function decodeSegment(segment: string): string {
@@ -75,6 +77,7 @@ export function parseBuildUrl(input: string): ParsedBuildUrl | undefined {
   const sessionType = url.hostname.includes("app-automate")
     ? SessionType.AppAutomate
     : SessionType.Automate;
+  const isAutomateHost = /(^|\.)(app-)?automate\./.test(url.hostname);
 
   const projectsAt = segments.indexOf("projects");
   if (projectsAt >= 0 && segments[projectsAt + 2] === "builds") {
@@ -90,6 +93,7 @@ export function parseBuildUrl(input: string): ParsedBuildUrl | undefined {
         ...(Number.isInteger(number) && number > 0
           ? { buildNumber: number }
           : {}),
+        ...(isAutomateHost ? { automateProduct: sessionType } : {}),
       };
     }
   }
@@ -323,6 +327,14 @@ export async function resolveBuild(
         config,
       );
     }
+    if (parsed.automateProduct) {
+      return resolveAutomateLink(
+        parsed.buildName,
+        parsed.buildNumber,
+        parsed.automateProduct,
+        config,
+      );
+    }
     projectName = parsed.projectName ?? projectName;
     buildName = parsed.buildName ?? buildName;
     buildNumber = parsed.buildNumber ?? buildNumber;
@@ -391,21 +403,67 @@ async function searchAutomateBuilds(
     newest.sessionType,
     config,
   ).catch((): BuildLookupResult => ({ buildId: newest.hashedBuildId }));
-  const found =
-    `Found ${newest.sessionType} build "${newest.name}"` +
-    (newest.createdAt ? ` from ${newest.createdAt.slice(0, 10)}` : "") +
-    " by name, not through TRA.";
+  const found = `Found ${newest.sessionType} build "${newest.name}" by name, not through TRA.`;
   const rest = others.length
-    ? `\nOlder builds with this name:\n${others
+    ? `\nOther builds with this name:\n${others
         .slice(0, MAX_CANDIDATES)
-        .map(
-          (m) =>
-            `- ${m.sessionType}${m.createdAt ? `, ${m.createdAt.slice(0, 10)}` : ""}: ${m.hashedBuildId}`,
-        )
+        .map((m) => `- ${m.sessionType}: ${m.hashedBuildId}`)
         .join("\n")}`
     : "";
   return {
     buildId: resolved.buildId,
     note: [found, resolved.note].filter(Boolean).join(" ") + rest,
+  };
+}
+
+// Automate and TRA number builds separately, and the Automate builds API has no
+// build number, so an Automate project link is matched by name in that product.
+async function resolveAutomateLink(
+  buildName: string | undefined,
+  buildNumber: number | undefined,
+  product: SessionType,
+  config: BrowserStackConfig,
+): Promise<BuildLookupResult> {
+  if (!buildName) {
+    throw new BuildLookupError(
+      "That link names a project but no build. Pass the link to the build itself.",
+    );
+  }
+  const matches = await findAutomateBuildsByName(buildName, config, [
+    product,
+  ]).catch(() => []);
+  if (!matches.length) {
+    throw new BuildLookupError(
+      `None of the latest ${product} builds is named "${buildName}". ` +
+        "Pass the build id from the build's page instead.",
+    );
+  }
+  if (buildNumber !== undefined && matches.length > 1) {
+    throw new BuildLookupError(
+      `${matches.length} recent ${product} builds are named "${buildName}" and build ` +
+        `numbers are not available to match #${buildNumber}. Pass the build id from ` +
+        `the build's page, or pick one (newest first):\n` +
+        matches
+          .slice(0, MAX_CANDIDATES)
+          .map((m) => `- ${m.hashedBuildId}`)
+          .join("\n"),
+    );
+  }
+
+  const [newest] = matches;
+  const resolved = await resolveFromHashed(
+    newest.hashedBuildId,
+    product,
+    config,
+  ).catch((): BuildLookupResult => ({ buildId: newest.hashedBuildId }));
+  const which =
+    buildNumber !== undefined
+      ? `the only recent build with that name; check it is #${buildNumber}`
+      : "its latest run";
+  return {
+    buildId: resolved.buildId,
+    note: [`Found ${product} build "${newest.name}" (${which}).`, resolved.note]
+      .filter(Boolean)
+      .join(" "),
   };
 }

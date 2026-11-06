@@ -21,7 +21,11 @@ describe("extractFailedTestIds", () => {
     const result = extractFailedTestIds(hierarchy, TestStatus.FAILED);
 
     expect(result).toEqual([
-      { test_id: "111", test_name: "zero-run failure", status: TestStatus.FAILED },
+      {
+        test_id: "111",
+        test_name: "zero-run failure",
+        status: TestStatus.FAILED,
+      },
     ]);
   });
 
@@ -110,7 +114,11 @@ describe("extractFailedTestIds", () => {
     ];
 
     expect(extractFailedTestIds(hierarchy, TestStatus.FAILED)).toEqual([
-      { test_id: "333", test_name: "nested failure", status: TestStatus.FAILED },
+      {
+        test_id: "333",
+        test_name: "nested failure",
+        status: TestStatus.FAILED,
+      },
     ]);
   });
 

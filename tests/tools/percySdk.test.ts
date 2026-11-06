@@ -1,6 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { registerPercyTools } from "../../src/tools/percy-sdk";
-import { setUpPercyHandler, simulatePercyChangeHandler } from "../../src/tools/sdk-utils/handler";
+import {
+  setUpPercyHandler,
+  simulatePercyChangeHandler,
+} from "../../src/tools/sdk-utils/handler";
 import { updateTestsWithPercyCommands } from "../../src/tools/add-percy-snapshots";
 import { runPercyScan } from "../../src/tools/run-percy-scan";
 import { fetchPercyChanges } from "../../src/tools/review-agent";
@@ -51,7 +54,9 @@ describe("Percy SDK Tools", () => {
     serverMock = {
       tool: vi.fn((...toolArgs: any[]) => {
         const name = toolArgs[0] as string;
-        const handler = toolArgs[toolArgs.length - 1] as (...args: any[]) => any;
+        const handler = toolArgs[toolArgs.length - 1] as (
+          ...args: any[]
+        ) => any;
         handlers[name] = handler;
       }),
       prompt: vi.fn(),
@@ -76,7 +81,9 @@ describe("Percy SDK Tools", () => {
       content: [{ type: "text", text: "Percy integration guide" }],
     });
 
-    const result = await handlers["percyVisualTestIntegrationAgent"]({ framework: "playwright" });
+    const result = await handlers["percyVisualTestIntegrationAgent"]({
+      framework: "playwright",
+    });
     expect(result.content[0].text).toContain("Percy integration");
   });
 
@@ -97,7 +104,9 @@ describe("Percy SDK Tools", () => {
       content: [{ type: "text", text: "Percy setup complete" }],
     });
 
-    const result = await handlers["expandPercyVisualTesting"]({ language: "js" });
+    const result = await handlers["expandPercyVisualTesting"]({
+      language: "js",
+    });
     expect(result.content[0].text).toContain("Percy setup");
   });
 
@@ -134,7 +143,9 @@ describe("Percy SDK Tools", () => {
       content: [{ type: "text", text: "Visual changes found" }],
     });
 
-    const result = await handlers["fetchPercyChanges"]({ project_name: "test" });
+    const result = await handlers["fetchPercyChanges"]({
+      project_name: "test",
+    });
     expect(result.content[0].text).toContain("Visual changes");
   });
 
@@ -143,14 +154,19 @@ describe("Percy SDK Tools", () => {
       content: [{ type: "text", text: "Build approved" }],
     });
 
-    const result = await handlers["managePercyBuildApproval"]({ buildId: "123", action: "approve" });
+    const result = await handlers["managePercyBuildApproval"]({
+      buildId: "123",
+      action: "approve",
+    });
     expect(result.content[0].text).toContain("Build approved");
   });
 
   it("managePercyBuildApproval - FAIL", async () => {
     (approveOrDeclinePercyBuild as any).mockRejectedValue(new Error("fail"));
 
-    const result = await handlers["managePercyBuildApproval"]({ buildId: "bad" });
+    const result = await handlers["managePercyBuildApproval"]({
+      buildId: "bad",
+    });
     expect(result.isError).toBe(true);
   });
 });

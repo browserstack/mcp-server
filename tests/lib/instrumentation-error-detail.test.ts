@@ -35,7 +35,9 @@ describe("returned tool errors are diagnosable", () => {
   });
 
   it("records the message a returned failure showed the user", async () => {
-    await run(() => errorResult("Failed to list test cases: project not found"));
+    await run(() =>
+      errorResult("Failed to list test cases: project not found"),
+    );
 
     const [row] = await rows();
     expect(row.outcome).toBe("error_result");
@@ -48,7 +50,9 @@ describe("returned tool errors are diagnosable", () => {
   });
 
   it("leaves a successful call free of error fields", async () => {
-    await run(() => ({ content: [{ type: "text", text: "Found 3 test cases" }] }));
+    await run(() => ({
+      content: [{ type: "text", text: "Found 3 test cases" }],
+    }));
 
     const [row] = await rows();
     expect(row.outcome).toBe("ok");
@@ -80,7 +84,6 @@ describe("returned tool errors are diagnosable", () => {
     expect(row.error_message).toContain("[email]");
     expect(row.error_message).toContain("[ip]");
   });
-
 });
 
 describe("the recorded message is capped by the shared redactor", () => {
@@ -109,8 +112,11 @@ describe("an unusable config still writes the row", () => {
 
   it("sends unauthenticated rather than dropping the event", async () => {
     const { withToolCall } = await import("../../src/lib/instrumentation.js");
-    await withToolCall("myTool", () => ({ name: "vitest" }), {} as any, () =>
-      errorResult("Failed to list test cases"),
+    await withToolCall(
+      "myTool",
+      () => ({ name: "vitest" }),
+      {} as any,
+      () => errorResult("Failed to list test cases"),
     );
 
     const recorded = await rows();
@@ -162,7 +168,10 @@ describe("credential shapes this server actually handles", () => {
 
   it.each([
     ["escalate to +91 98765 43210", "escalate to [phone]"],
-    ["account 4532015112830366 needs a re-run", "account [number] needs a re-run"],
+    [
+      "account 4532015112830366 needs a re-run",
+      "account [number] needs a re-run",
+    ],
     ["session 21a8643f9c2b4e7d8a1f0c3b5d6e7f80", "session [token]"],
   ])("redacts %s", async (input, expected) => {
     await run(() => errorResult(input));

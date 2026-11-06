@@ -158,7 +158,10 @@ describe("fetchAutomationScreenshots", () => {
   const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a]);
 
   it("returns the last five screenshots with detected mime types", async () => {
-    const urls = Array.from({ length: 6 }, (_, i) => `${S3}/screenshot-${i}.jpeg`);
+    const urls = Array.from(
+      { length: 6 },
+      (_, i) => `${S3}/screenshot-${i}.jpeg`,
+    );
     const logs = urls
       .map((u, i) => `2026-10-13 9:00:0${i}:000 DEBUG ${u}`)
       .concat(requestedOnlyLogs.split("\n").slice(0, 2))

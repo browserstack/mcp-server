@@ -42,7 +42,9 @@ describe("getSDKPrefixCommand", () => {
     Object.defineProperty(process, "platform", { value: "darwin" });
     const out = getSDKPrefixCommand("java", "testng");
     expect(out).toContain(`-DBROWSERSTACK_USERNAME="${USERNAME_PLACEHOLDER}"`);
-    expect(out).toContain(`-DBROWSERSTACK_ACCESS_KEY="${ACCESS_KEY_PLACEHOLDER}"`);
+    expect(out).toContain(
+      `-DBROWSERSTACK_ACCESS_KEY="${ACCESS_KEY_PLACEHOLDER}"`,
+    );
     expect(out).not.toContain(DECOY_USER);
     expect(out).not.toContain(DECOY_KEY);
     expect(out).not.toContain("undefined");
@@ -52,7 +54,9 @@ describe("getSDKPrefixCommand", () => {
     Object.defineProperty(process, "platform", { value: "win32" });
     const out = getSDKPrefixCommand("java", "testng");
     expect(out).toContain(`-DBROWSERSTACK_USERNAME="${USERNAME_PLACEHOLDER}"`);
-    expect(out).toContain(`-DBROWSERSTACK_ACCESS_KEY="${ACCESS_KEY_PLACEHOLDER}"`);
+    expect(out).toContain(
+      `-DBROWSERSTACK_ACCESS_KEY="${ACCESS_KEY_PLACEHOLDER}"`,
+    );
     expect(out).not.toContain(DECOY_USER);
     expect(out).not.toContain(DECOY_KEY);
     expect(out).not.toContain("undefined");

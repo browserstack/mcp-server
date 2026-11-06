@@ -65,13 +65,61 @@ const DRY = "https://shop.example/collections/dry-skin";
  * collection page twice; the collection page has one issue of its own, repeated once.
  */
 const SITE = [
-  row({ "Issue type": "color-contrast", Component: "span.atc", "CSS selector": "span.atc", "Affected page": HOME, "Issue link": link("a") }),
-  row({ "Issue type": "color-contrast", Component: "span.atc", "CSS selector": "span.atc", "Affected page": DRY, "Issue link": link("a2"), "Duplicate Issue of": link("a") }),
-  row({ "Issue type": "color-contrast", Component: "span.atc", "CSS selector": "span.atc", "Affected page": DRY, "Issue link": link("a3"), "Duplicate Issue of": link("a") }),
-  row({ "Issue type": "image-alt", Severity: "critical", Component: "img.hero", "CSS selector": "img.hero", "Affected page": DRY, "Issue link": link("b") }),
-  row({ "Issue type": "image-alt", Severity: "critical", Component: "img.hero", "CSS selector": "img.hero", "Affected page": DRY, "Issue link": link("b2"), "Duplicate Issue of": link("b") }),
-  row({ "Issue type": "label", Component: "input", "CSS selector": "input#q", "Affected page": HOME, "Issue link": link("c") }),
-  row({ "Issue type": "link-name", Component: "a", "CSS selector": "a.x", "Affected page": DRY, "Issue link": link("h"), "Issue status": "hidden" }),
+  row({
+    "Issue type": "color-contrast",
+    Component: "span.atc",
+    "CSS selector": "span.atc",
+    "Affected page": HOME,
+    "Issue link": link("a"),
+  }),
+  row({
+    "Issue type": "color-contrast",
+    Component: "span.atc",
+    "CSS selector": "span.atc",
+    "Affected page": DRY,
+    "Issue link": link("a2"),
+    "Duplicate Issue of": link("a"),
+  }),
+  row({
+    "Issue type": "color-contrast",
+    Component: "span.atc",
+    "CSS selector": "span.atc",
+    "Affected page": DRY,
+    "Issue link": link("a3"),
+    "Duplicate Issue of": link("a"),
+  }),
+  row({
+    "Issue type": "image-alt",
+    Severity: "critical",
+    Component: "img.hero",
+    "CSS selector": "img.hero",
+    "Affected page": DRY,
+    "Issue link": link("b"),
+  }),
+  row({
+    "Issue type": "image-alt",
+    Severity: "critical",
+    Component: "img.hero",
+    "CSS selector": "img.hero",
+    "Affected page": DRY,
+    "Issue link": link("b2"),
+    "Duplicate Issue of": link("b"),
+  }),
+  row({
+    "Issue type": "label",
+    Component: "input",
+    "CSS selector": "input#q",
+    "Affected page": HOME,
+    "Issue link": link("c"),
+  }),
+  row({
+    "Issue type": "link-name",
+    Component: "a",
+    "CSS selector": "a.x",
+    "Affected page": DRY,
+    "Issue link": link("h"),
+    "Issue status": "hidden",
+  }),
 ];
 
 describe("parseAccessibilityReportFromCSV for one page", () => {
@@ -80,7 +128,9 @@ describe("parseAccessibilityReportFromCSV for one page", () => {
   it("counts every occurrence on the page, as the dashboard's page view does, and lists each issue once", async () => {
     serve(SITE);
 
-    const result = await parseAccessibilityReportFromCSV("https://csv", { pageUrl: DRY });
+    const result = await parseAccessibilityReportFromCSV("https://csv", {
+      pageUrl: DRY,
+    });
 
     expect(result.page).toEqual({
       url: DRY,
@@ -91,8 +141,17 @@ describe("parseAccessibilityReportFromCSV for one page", () => {
     });
     expect(result.total_issues).toBe(2);
     expect(result.records).toEqual([
-      expect.objectContaining({ issue_type: "image-alt", affected_page: DRY, occurrences_on_page: 2 }),
-      expect.objectContaining({ issue_type: "color-contrast", affected_page: DRY, occurrences_on_page: 2, first_found_on: HOME }),
+      expect.objectContaining({
+        issue_type: "image-alt",
+        affected_page: DRY,
+        occurrences_on_page: 2,
+      }),
+      expect.objectContaining({
+        issue_type: "color-contrast",
+        affected_page: DRY,
+        occurrences_on_page: 2,
+        first_found_on: HOME,
+      }),
     ]);
     expect(result.records[0]).not.toHaveProperty("first_found_on");
   });
@@ -119,7 +178,11 @@ describe("parseAccessibilityReportFromCSV for one page", () => {
   });
 
   it("still answers when a short row has no Affected page", async () => {
-    get.mockResolvedValue({ ok: true, statusText: "OK", data: `${toCsv(SITE)}\n"region","moderate"` });
+    get.mockResolvedValue({
+      ok: true,
+      statusText: "OK",
+      data: `${toCsv(SITE)}\n"region","moderate"`,
+    });
 
     const result = await parseAccessibilityReportFromCSV("https://csv", {
       pageUrl: "https://shop.example/collections/dry-skin-app",
@@ -135,7 +198,17 @@ describe("parseAccessibilityReportFromCSV paging", () => {
   // Rule text (here, each rule's fix) counts against the page the first time the page names
   // the rule; a long HTML snippet is cut short, so it cannot fill a page.
   it("hands out about 30,000 characters of issues per call by default", async () => {
-    serve([1, 2, 3, 4].map((n) => row({ "Issue type": `rule-${n}`, Component: "div", "Affected page": HOME, "Issue link": link(`p${n}`), "How to fix this issue": "x".repeat(9000) })));
+    serve(
+      [1, 2, 3, 4].map((n) =>
+        row({
+          "Issue type": `rule-${n}`,
+          Component: "div",
+          "Affected page": HOME,
+          "Issue link": link(`p${n}`),
+          "How to fix this issue": "x".repeat(9000),
+        }),
+      ),
+    );
 
     const page = await parseAccessibilityReportFromCSV("https://csv");
 
@@ -145,15 +218,33 @@ describe("parseAccessibilityReportFromCSV paging", () => {
 
   it("still returns an issue larger than a page, so paging never stalls", async () => {
     serve([
-      row({ "Issue type": "small", Component: "a", "Affected page": HOME, "Issue link": link("s") }),
-      row({ "Issue type": "huge", Component: "div", "Affected page": HOME, "Issue link": link("h"), "How to fix this issue": "x".repeat(40_000) }),
-      row({ "Issue type": "after", Component: "b", "Affected page": HOME, "Issue link": link("t") }),
+      row({
+        "Issue type": "small",
+        Component: "a",
+        "Affected page": HOME,
+        "Issue link": link("s"),
+      }),
+      row({
+        "Issue type": "huge",
+        Component: "div",
+        "Affected page": HOME,
+        "Issue link": link("h"),
+        "How to fix this issue": "x".repeat(40_000),
+      }),
+      row({
+        "Issue type": "after",
+        Component: "b",
+        "Affected page": HOME,
+        "Issue link": link("t"),
+      }),
     ]);
 
     const seen: string[] = [];
     let cursor: number | null = 0;
     for (let calls = 0; cursor !== null && calls < 10; calls++) {
-      const page = await parseAccessibilityReportFromCSV("https://csv", { nextPage: cursor });
+      const page = await parseAccessibilityReportFromCSV("https://csv", {
+        nextPage: cursor,
+      });
       expect(page.page_length).toBeGreaterThan(0);
       seen.push(...page.records.map((r) => r.issue_type));
       cursor = page.next_page;
@@ -170,8 +261,21 @@ describe("compareIssues", () => {
     const before = await loadMainIssues("https://csv-old");
     serve([
       SITE[0],
-      row({ "Issue type": "label", Component: "input", "CSS selector": "input#q", "Affected page": `${HOME}`, "Issue link": link("c9") }),
-      row({ "Issue type": "region", Severity: "moderate", Component: "div", "CSS selector": "div.main", "Affected page": DRY, "Issue link": link("n") }),
+      row({
+        "Issue type": "label",
+        Component: "input",
+        "CSS selector": "input#q",
+        "Affected page": `${HOME}`,
+        "Issue link": link("c9"),
+      }),
+      row({
+        "Issue type": "region",
+        Severity: "moderate",
+        Component: "div",
+        "CSS selector": "div.main",
+        "Affected page": DRY,
+        "Issue link": link("n"),
+      }),
     ]);
     const after = await loadMainIssues("https://csv-new");
 
@@ -191,8 +295,20 @@ describe("compareIssues and a page that did not load in the later run", () => {
 
   const PAGE_A = "http://bs-local.com:3100/page-a.html";
   const PAGE_B = "http://bs-local.com:3100/page-b.html";
-  const issueOn = (page: string, type: string, selector: string, snippet = "<x>") =>
-    row({ "Issue type": type, Component: selector, "CSS selector": selector, "Affected page": page, "HTML snippet": snippet, "Issue link": link(`${type}-${page}`) });
+  const issueOn = (
+    page: string,
+    type: string,
+    selector: string,
+    snippet = "<x>",
+  ) =>
+    row({
+      "Issue type": type,
+      Component: selector,
+      "CSS selector": selector,
+      "Affected page": page,
+      "HTML snippet": snippet,
+      "Issue link": link(`${type}-${page}`),
+    });
 
   async function runs(laterB: Record<string, string>[]) {
     serve([
@@ -209,20 +325,39 @@ describe("compareIssues and a page that did not load in the later run", () => {
 
   it("sets apart, rather than resolves, the issues of a page that showed BrowserStack's connection error page", async () => {
     const diff = await runs([
-      issueOn(PAGE_B, "keyboard-focus-visible", "a.docs", '<a href="https://www.browserstack.com/docs/local-testing/binary-params?ref=dashboard-privoxy-page" target="_blank">'),
-      issueOn(PAGE_B, "decorative-image", "img.logo", '<img src="https://cdn.example/logo.svg" alt="BrowserStack Logo">'),
+      issueOn(
+        PAGE_B,
+        "keyboard-focus-visible",
+        "a.docs",
+        '<a href="https://www.browserstack.com/docs/local-testing/binary-params?ref=dashboard-privoxy-page" target="_blank">',
+      ),
+      issueOn(
+        PAGE_B,
+        "decorative-image",
+        "img.logo",
+        '<img src="https://cdn.example/logo.svg" alt="BrowserStack Logo">',
+      ),
     ]);
 
     expect(diff.failed_pages).toEqual([PAGE_B]);
     expect(diff.resolved).toEqual([]);
-    expect(diff.not_checked.map((r) => r.issue_type).sort()).toEqual(["button-name", "label", "link-name"]);
+    expect(diff.not_checked.map((r) => r.issue_type).sort()).toEqual([
+      "button-name",
+      "label",
+      "link-name",
+    ]);
     expect(diff.added).toEqual([]);
     expect(diff.retained).toBe(1);
   });
 
   it("knows Chrome's network error page too, as a public page that fails to load shows it", async () => {
     const diff = await runs([
-      issueOn(PAGE_B, "landmark-one-main", "div#main-frame-error", '<div id="main-frame-error" class="interstitial-wrapper">'),
+      issueOn(
+        PAGE_B,
+        "landmark-one-main",
+        "div#main-frame-error",
+        '<div id="main-frame-error" class="interstitial-wrapper">',
+      ),
     ]);
 
     expect(diff.failed_pages).toEqual([PAGE_B]);
@@ -254,14 +389,39 @@ describe("compareIssues and a page that did not load in the earlier run", () => 
 
   const PAGE_A = "http://bs-local.com:3100/page-a.html";
   const PAGE_B = "http://bs-local.com:3100/page-b.html";
-  const issueOn = (page: string, type: string, selector: string, snippet = "<x>") =>
-    row({ "Issue type": type, Component: selector, "CSS selector": selector, "Affected page": page, "HTML snippet": snippet, "Issue link": link(`${type}-${page}`) });
+  const issueOn = (
+    page: string,
+    type: string,
+    selector: string,
+    snippet = "<x>",
+  ) =>
+    row({
+      "Issue type": type,
+      Component: selector,
+      "CSS selector": selector,
+      "Affected page": page,
+      "HTML snippet": snippet,
+      "Issue link": link(`${type}-${page}`),
+    });
   const errorPage = [
-    issueOn(PAGE_B, "keyboard-focus-visible", "a.docs", '<a href="https://www.browserstack.com/docs/local-testing/binary-params?ref=dashboard-privoxy-page" target="_blank">'),
-    issueOn(PAGE_B, "decorative-image", "img.logo", '<img src="https://cdn.example/logo.svg" alt="BrowserStack Logo">'),
+    issueOn(
+      PAGE_B,
+      "keyboard-focus-visible",
+      "a.docs",
+      '<a href="https://www.browserstack.com/docs/local-testing/binary-params?ref=dashboard-privoxy-page" target="_blank">',
+    ),
+    issueOn(
+      PAGE_B,
+      "decorative-image",
+      "img.logo",
+      '<img src="https://cdn.example/logo.svg" alt="BrowserStack Logo">',
+    ),
   ];
 
-  async function runs(earlierB: Record<string, string>[], laterB: Record<string, string>[]) {
+  async function runs(
+    earlierB: Record<string, string>[],
+    laterB: Record<string, string>[],
+  ) {
     serve([issueOn(PAGE_A, "css-orientation-lock", "html"), ...earlierB]);
     const before = await loadMainIssues("https://csv-old");
     serve([issueOn(PAGE_A, "css-orientation-lock", "html"), ...laterB]);
@@ -279,7 +439,10 @@ describe("compareIssues and a page that did not load in the earlier run", () => 
     expect(diff.failed_pages_earlier).toEqual([PAGE_B]);
     expect(diff.resolved).toEqual([]);
     expect(diff.added).toEqual([]);
-    expect(diff.not_checked_earlier.map((r) => r.issue_type).sort()).toEqual(["button-name", "label"]);
+    expect(diff.not_checked_earlier.map((r) => r.issue_type).sort()).toEqual([
+      "button-name",
+      "label",
+    ]);
     expect(diff.retained).toBe(1);
   });
 
@@ -299,8 +462,18 @@ describe("compareIssues and a page that did not load in the earlier run", () => 
     const diff = await runs(
       [issueOn(PAGE_B, "label", "input#no-label")],
       [
-        issueOn(PAGE_B, "link-name", "a.help", '<a class="help" href="https://www.browserstack.com/docs/local-testing/"></a>'),
-        issueOn(PAGE_B, "color-contrast", "div.neterror-banner", '<div class="neterror-banner">Offline?</div>'),
+        issueOn(
+          PAGE_B,
+          "link-name",
+          "a.help",
+          '<a class="help" href="https://www.browserstack.com/docs/local-testing/"></a>',
+        ),
+        issueOn(
+          PAGE_B,
+          "color-contrast",
+          "div.neterror-banner",
+          '<div class="neterror-banner">Offline?</div>',
+        ),
       ],
     );
 
@@ -316,7 +489,13 @@ describe("compareIssues on large runs", () => {
     const issues = (n: number, rule: string) =>
       Array.from({ length: n }, (_, i) => {
         const page = `https://shop.example/p${i % 300}`;
-        return { key: `${rule}|#e${i}|${page}`, issue_type: rule, severity: "serious", component: "input", affected_page: page };
+        return {
+          key: `${rule}|#e${i}|${page}`,
+          issue_type: rule,
+          severity: "serious",
+          component: "input",
+          affected_page: page,
+        };
       });
 
     const started = performance.now();

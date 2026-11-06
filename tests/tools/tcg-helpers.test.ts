@@ -35,12 +35,10 @@ describe("createTestCasePayload", () => {
   });
 
   it("sends the generated test case id as ai_prompt.uuid", () => {
-    expect(build({ name: "TC", id: "tc-1", steps }).aiPrompt.uuid).toBe(
-      "tc-1",
+    expect(build({ name: "TC", id: "tc-1", steps }).aiPrompt.uuid).toBe("tc-1");
+    expect(build({ name: "TC", test_case_id: 42, steps }).aiPrompt.uuid).toBe(
+      "42",
     );
-    expect(
-      build({ name: "TC", test_case_id: 42, steps }).aiPrompt.uuid,
-    ).toBe("42");
   });
 
   it("omits ai_prompt.uuid when the test case has no generated id", () => {

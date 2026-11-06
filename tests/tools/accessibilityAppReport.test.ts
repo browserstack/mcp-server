@@ -335,7 +335,9 @@ describe("AccessibilityReportFetcher and App Accessibility builds", () => {
   it("stops at the snapshot page limit and says how many screens it read", async () => {
     get.mockImplementation(async ({ url }: { url: string }) => {
       if (url.endsWith(BUILD_ID)) {
-        return ok({ meta_data: { ...META, issue_summary: { total: 9, scan_count: 1500 } } });
+        return ok({
+          meta_data: { ...META, issue_summary: { total: 9, scan_count: 1500 } },
+        });
       }
       if (url.includes("/snapshot")) {
         return ok({
@@ -351,7 +353,9 @@ describe("AccessibilityReportFetcher and App Accessibility builds", () => {
 
     const report = await fetcher().appBuildReport(BUILD_ID);
 
-    expect(urls().filter((u) => u.includes("/snapshot"))).toHaveLength(MAX_SNAPSHOT_PAGES);
+    expect(urls().filter((u) => u.includes("/snapshot"))).toHaveLength(
+      MAX_SNAPSHOT_PAGES,
+    );
     expect(report.screens_read).toBe(MAX_SNAPSHOT_PAGES);
   });
 
@@ -359,7 +363,13 @@ describe("AccessibilityReportFetcher and App Accessibility builds", () => {
     get
       .mockResolvedValueOnce(ok({ meta_data: META }))
       .mockResolvedValueOnce(
-        ok({ data: { details: SNAPSHOTS, info: { next: null }, issue_counts: { hidden_issues: 1 } } }),
+        ok({
+          data: {
+            details: SNAPSHOTS,
+            info: { next: null },
+            issue_counts: { hidden_issues: 1 },
+          },
+        }),
       )
       .mockResolvedValueOnce(ok({ projects: [] }));
 
@@ -540,7 +550,13 @@ describe("AccessibilityReportFetcher and App Accessibility builds", () => {
     get
       .mockResolvedValueOnce(ok({ meta_data: META }))
       .mockResolvedValueOnce(
-        ok({ data: { details: SNAPSHOTS, info: { next: 2 }, issue_counts: { hidden_issues: 0 } } }),
+        ok({
+          data: {
+            details: SNAPSHOTS,
+            info: { next: 2 },
+            issue_counts: { hidden_issues: 0 },
+          },
+        }),
       )
       .mockResolvedValueOnce(failed(500));
 
@@ -646,7 +662,8 @@ describe("AccessibilityReportFetcher and App Automate links", () => {
     // business, and these tests are about what the project search's answer means.
     const searchAnswers = (search: Record<string, unknown>) =>
       get.mockImplementation(async ({ url }: { url: string }) => {
-        if (url.includes("/sessions")) return { ok: true, status: 200, data: [] };
+        if (url.includes("/sessions"))
+          return { ok: true, status: 200, data: [] };
         if (url.includes("/espresso/v2/builds/")) {
           return {
             ok: true,
@@ -658,7 +675,11 @@ describe("AccessibilityReportFetcher and App Automate links", () => {
           return {
             ok: true,
             status: 200,
-            data: [{ automation_build: { hashed_id: APP_AUTOMATE_BUILD, name: NAME } }],
+            data: [
+              {
+                automation_build: { hashed_id: APP_AUTOMATE_BUILD, name: NAME },
+              },
+            ],
           };
         }
         if (url.includes("/project?name=")) return search;
@@ -666,7 +687,11 @@ describe("AccessibilityReportFetcher and App Automate links", () => {
       });
 
     it("reports a failed search as the failure, not as accessibility being off", async () => {
-      searchAnswers({ ok: false, status: 500, data: { message: "Internal error" } });
+      searchAnswers({
+        ok: false,
+        status: 500,
+        data: { message: "Internal error" },
+      });
 
       const mapping = fetcher().sourceFromReportUrl(link);
 
@@ -677,11 +702,17 @@ describe("AccessibilityReportFetcher and App Automate links", () => {
     it("fails on a 404 that is not a 'none found' answer, such as a wrong route", async () => {
       searchAnswers({ ok: false, status: 404, data: { message: "Not Found" } });
 
-      await expect(fetcher().sourceFromReportUrl(link)).rejects.toThrow(/HTTP 404/);
+      await expect(fetcher().sourceFromReportUrl(link)).rejects.toThrow(
+        /HTTP 404/,
+      );
     });
 
     it("reads 'No projects found' as no project, so no accessibility build", async () => {
-      searchAnswers({ ok: false, status: 404, data: { message: "No projects found" } });
+      searchAnswers({
+        ok: false,
+        status: 404,
+        data: { message: "No projects found" },
+      });
 
       await expect(fetcher().sourceFromReportUrl(link)).rejects.toThrow(
         /accessibility was not on for this run/,
@@ -823,7 +854,12 @@ describe("AccessibilityReportFetcher and App Accessibility manual reports", () =
     data: {
       issue_summary: {
         total: 2,
-        severity_count: { critical: 1, serious: 1, hidden_issues: 1, duplicate_issues: 1 },
+        severity_count: {
+          critical: 1,
+          serious: 1,
+          hidden_issues: 1,
+          duplicate_issues: 1,
+        },
         scan_count: 2,
       },
     },
@@ -847,7 +883,9 @@ describe("AccessibilityReportFetcher and App Accessibility manual reports", () =
   });
 
   it("reads a manual report's status from whether it has ended", async () => {
-    get.mockResolvedValueOnce(ok({ ...DETAIL, meta_data: { ...DETAIL.meta_data, ended_at: null } }));
+    get.mockResolvedValueOnce(
+      ok({ ...DETAIL, meta_data: { ...DETAIL.meta_data, ended_at: null } }),
+    );
     await expect(
       fetcher().reportStatus({ kind: "appReport", reportId: REPORT_ID }),
     ).resolves.toBe("in_progress");
@@ -921,7 +959,9 @@ describe("AccessibilityReportFetcher and App Accessibility manual reports", () =
         ok({ data: { details: [SNAPSHOTS[0]], info: { page: 1, next: 2 } } }),
       )
       .mockResolvedValueOnce(
-        ok({ data: { details: [SNAPSHOTS[1]], info: { page: 2, next: null } } }),
+        ok({
+          data: { details: [SNAPSHOTS[1]], info: { page: 2, next: null } },
+        }),
       );
 
     const report = await fetcher().appReportIssues(REPORT_ID);
@@ -933,7 +973,9 @@ describe("AccessibilityReportFetcher and App Accessibility manual reports", () =
     ]);
     expect(report.deduplicated).toBe(true);
     expect(report.total_issues).toBe(3);
-    const pay = report.records.find((r) => r.component === "com.example:id/btn_pay");
+    const pay = report.records.find(
+      (r) => r.component === "com.example:id/btn_pay",
+    );
     expect(pay?.element).toMatchObject({ className: "android.widget.Button" });
     expect(report.rules["interactable-element-content-label"].how_to_fix).toBe(
       "Ensure spokenDescription is defined.",
@@ -957,7 +999,9 @@ describe("AccessibilityReportFetcher and App Accessibility manual reports", () =
 
     const failure = fetcher().appReportIssues(REPORT_ID);
     await expect(failure).rejects.toThrow(/HTTP 401/);
-    await expect(failure).rejects.not.toThrow(/No App Accessibility manual report/);
+    await expect(failure).rejects.not.toThrow(
+      /No App Accessibility manual report/,
+    );
   });
 
   it("reads the whole report from the Manual Reports API when a later dashboard page fails, rather than a part as the whole", async () => {
@@ -976,7 +1020,9 @@ describe("AccessibilityReportFetcher and App Accessibility manual reports", () =
 
     const report = await fetcher().appReportIssues(REPORT_ID);
 
-    expect(urls()[3]).toBe(`${MANUAL}/reports/${REPORT_ID}/issues?page_size=50&page=1`);
+    expect(urls()[3]).toBe(
+      `${MANUAL}/reports/${REPORT_ID}/issues?page_size=50&page=1`,
+    );
     expect(report.deduplicated).toBe(false);
     expect(report.total_issues).toBe(3);
   });
@@ -986,7 +1032,10 @@ describe("AccessibilityReportFetcher and App Accessibility manual reports", () =
       .mockResolvedValueOnce(ok(DETAIL))
       .mockResolvedValueOnce(REDIRECT_TO_LOGIN)
       .mockResolvedValueOnce(
-        ok({ data: [manualSnapshot(SNAPSHOTS[0])], pagination: { page: 1, next: 2 } }),
+        ok({
+          data: [manualSnapshot(SNAPSHOTS[0])],
+          pagination: { page: 1, next: 2 },
+        }),
       )
       .mockResolvedValueOnce(failed(502));
 

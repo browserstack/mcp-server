@@ -60,7 +60,9 @@ describe("generateAppBrowserStackYMLInstructions", () => {
 
   it("keeps the Local tunnel default every setup has had", () => {
     expect(yml()).toContain("\nbrowserstackLocal: true\n");
-    expect(yml({ accessibility: true })).toContain("\nbrowserstackLocal: true\n");
+    expect(yml({ accessibility: true })).toContain(
+      "\nbrowserstackLocal: true\n",
+    );
   });
 
   it("writes YAML comments, not // lines that YAML reads as keys", () => {
@@ -71,7 +73,11 @@ describe("generateAppBrowserStackYMLInstructions", () => {
 
   it("falls back to the default devices unquoted too", () => {
     const text = generateAppBrowserStackYMLInstructions(
-      { platforms: ["android"], testingFramework: "pytest", accessibility: true },
+      {
+        platforms: ["android"],
+        testingFramework: "pytest",
+        accessibility: true,
+      },
       "./app.apk",
     );
     expect(text).toContain("osVersion: 12.0\n");

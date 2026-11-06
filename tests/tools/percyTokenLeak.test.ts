@@ -13,24 +13,29 @@ import {
 vi.mock("../../src/lib/inmemory-store", () => ({
   storedPercyResults: { get: vi.fn(), set: vi.fn() },
 }));
-vi.mock("../../src/tools/sdk-utils/percy-web/constants", async (importOriginal) => {
-  // Preserve real instruction strings (consumed by frameworks.ts at load
-  // time) and override only the two symbols runPercyScan reaches for.
-  const actual = await importOriginal<
-    typeof import("../../src/tools/sdk-utils/percy-web/constants")
-  >();
-  return {
-    ...actual,
-    getFrameworkTestCommand: vi.fn().mockReturnValue("npx percy exec -- jest"),
-    PERCY_FALLBACK_STEPS: ["Run percy scan with default settings"],
-  };
-});
+vi.mock(
+  "../../src/tools/sdk-utils/percy-web/constants",
+  async (importOriginal) => {
+    // Preserve real instruction strings (consumed by frameworks.ts at load
+    // time) and override only the two symbols runPercyScan reaches for.
+    const actual =
+      await importOriginal<
+        typeof import("../../src/tools/sdk-utils/percy-web/constants")
+      >();
+    return {
+      ...actual,
+      getFrameworkTestCommand: vi
+        .fn()
+        .mockReturnValue("npx percy exec -- jest"),
+      PERCY_FALLBACK_STEPS: ["Run percy scan with default settings"],
+    };
+  },
+);
 vi.mock("../../src/logger", () => ({
   default: { error: vi.fn(), info: vi.fn(), debug: vi.fn() },
 }));
 
-const LEAKED_PERCY_TOKEN_RE =
-  /PERCY_TOKEN\s*=\s*["']?[A-Za-z0-9_-]{16,}["']?/;
+const LEAKED_PERCY_TOKEN_RE = /PERCY_TOKEN\s*=\s*["']?[A-Za-z0-9_-]{16,}["']?/;
 const TOKEN_PLACEHOLDER = "<your Percy project token>";
 
 // Walk strings/arrays/objects and concatenate every string so the guard
@@ -94,9 +99,7 @@ describe("PERCY_TOKEN leak — no Percy setup handler echoes a real token", () =
     expect('export PERCY_TOKEN="abc123_xyz_secretvalue_456789"').toMatch(
       LEAKED_PERCY_TOKEN_RE,
     );
-    expect("PERCY_TOKEN=abcdef0123456789ABCDEF").toMatch(
-      LEAKED_PERCY_TOKEN_RE,
-    );
+    expect("PERCY_TOKEN=abcdef0123456789ABCDEF").toMatch(LEAKED_PERCY_TOKEN_RE);
     expect(`PERCY_TOKEN=${TOKEN_PLACEHOLDER}`).not.toMatch(
       LEAKED_PERCY_TOKEN_RE,
     );

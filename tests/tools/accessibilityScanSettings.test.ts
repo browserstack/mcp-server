@@ -14,7 +14,9 @@ const m = vi.hoisted(() => ({
   parse: vi.fn(),
 }));
 
-vi.mock("../../src/lib/apiClient.js", () => ({ apiClient: { post: m.post, get: m.get } }));
+vi.mock("../../src/lib/apiClient.js", () => ({
+  apiClient: { post: m.post, get: m.get },
+}));
 vi.mock("../../src/lib/local.js", () => ({
   isLocalURL: () => false,
   ensureLocalBinarySetup: vi.fn(),
@@ -24,13 +26,18 @@ vi.mock("../../src/logger.js", () => ({
   default: { info: vi.fn(), error: vi.fn(), warn: vi.fn(), debug: vi.fn() },
 }));
 vi.mock("../../src/lib/instrumentation.js", () => ({ trackMCP: vi.fn() }));
-vi.mock("../../src/index.js", () => ({ trackMCP: vi.fn(), PackageJsonVersion: "0.0.0" }));
+vi.mock("../../src/index.js", () => ({
+  trackMCP: vi.fn(),
+  PackageJsonVersion: "0.0.0",
+}));
 
 describe("AccessibilityScanner.startScan", () => {
   beforeEach(() => {
     vi.resetModules();
     m.post.mockReset();
-    m.post.mockResolvedValue({ data: { success: true, data: { id: "1", scanRunId: "2" } } });
+    m.post.mockResolvedValue({
+      data: { success: true, data: { id: "1", scanRunId: "2" } },
+    });
   });
 
   async function scanner() {
@@ -43,7 +50,9 @@ describe("AccessibilityScanner.startScan", () => {
   }
 
   it("sends the WCAG version, best practices, needs review and advanced rules it is given", async () => {
-    await (await scanner()).startScan("checkout", ["https://shop.example/"], undefined, {
+    await (
+      await scanner()
+    ).startScan("checkout", ["https://shop.example/"], undefined, {
       wcagVersion: "wcag22aaa",
       bestPractices: true,
       needsReview: false,
@@ -59,21 +68,35 @@ describe("AccessibilityScanner.startScan", () => {
   });
 
   it("sends only the settings it is given, so the rest take the API's defaults", async () => {
-    await (await scanner()).startScan("checkout", ["https://shop.example/"], undefined, {
+    await (
+      await scanner()
+    ).startScan("checkout", ["https://shop.example/"], undefined, {
       bestPractices: true,
     });
 
-    expect(m.post.mock.calls[0][0].body.scanSettings).toEqual({ bestPractices: true });
+    expect(m.post.mock.calls[0][0].body.scanSettings).toEqual({
+      bestPractices: true,
+    });
   });
 
   it("passes on the API's own reason for a 422, rather than assuming a duplicate name", async () => {
     m.post.mockRejectedValue({
-      response: { status: 422, data: { message: "wcagVersion field must be one of: wcag21aa, wcag22aa" } },
+      response: {
+        status: 422,
+        data: {
+          message: "wcagVersion field must be one of: wcag21aa, wcag22aa",
+        },
+      },
     });
 
-    const start = (await scanner()).startScan("checkout", ["https://shop.example/"], undefined, {
-      wcagVersion: "rgaa41",
-    });
+    const start = (await scanner()).startScan(
+      "checkout",
+      ["https://shop.example/"],
+      undefined,
+      {
+        wcagVersion: "rgaa41",
+      },
+    );
 
     await expect(start).rejects.toThrow(/wcagVersion field must be one of/);
     await expect(start).rejects.not.toThrow(/already exists/);
@@ -88,11 +111,15 @@ describe("AccessibilityScanner.startScan", () => {
   });
 
   it("sends experimental rules off when asked, as false is a setting rather than a missing one", async () => {
-    await (await scanner()).startScan("checkout", ["https://shop.example/"], undefined, {
+    await (
+      await scanner()
+    ).startScan("checkout", ["https://shop.example/"], undefined, {
       experimentalRules: false,
     });
 
-    expect(m.post.mock.calls[0][0].body.scanSettings).toEqual({ experimentalRules: false });
+    expect(m.post.mock.calls[0][0].body.scanSettings).toEqual({
+      experimentalRules: false,
+    });
   });
 
   it("sends no scanSettings when none are given", async () => {
@@ -106,8 +133,20 @@ describe("AccessibilityScanner.startScan", () => {
 // rules, but not experimental rules: those are read from the scan's own settings (its
 // overview), which a scan started here has for this run alone.
 describe("AccessibilityScanner.runSettings", () => {
-  const SCANS = "https://api-accessibility.browserstack.com/api/website-scanner/v1/scans";
-  const run = { ok: true, status: 200, data: { data: { wcagVersion: "wcag22aa", bestPractices: true, needsReview: true, advanced: true } } };
+  const SCANS =
+    "https://api-accessibility.browserstack.com/api/website-scanner/v1/scans";
+  const run = {
+    ok: true,
+    status: 200,
+    data: {
+      data: {
+        wcagVersion: "wcag22aa",
+        bestPractices: true,
+        needsReview: true,
+        advanced: true,
+      },
+    },
+  };
 
   beforeEach(() => {
     vi.resetModules();
@@ -126,11 +165,17 @@ describe("AccessibilityScanner.runSettings", () => {
   it("reads experimental rules from the scan's own settings, as the run summary has none", async () => {
     m.get.mockImplementation(async ({ url }: { url: string }) =>
       url === `${SCANS}/7310042/overview`
-        ? { ok: true, status: 200, data: { data: { scanConfigInfo: { experimental: false } } } }
+        ? {
+            ok: true,
+            status: 200,
+            data: { data: { scanConfigInfo: { experimental: false } } },
+          }
         : run,
     );
 
-    await expect((await scanner()).runSettings("7310042", "5520318")).resolves.toEqual({
+    await expect(
+      (await scanner()).runSettings("7310042", "5520318"),
+    ).resolves.toEqual({
       wcagVersion: "wcag22aa",
       bestPractices: true,
       needsReview: true,
@@ -150,7 +195,10 @@ describe("AccessibilityScanner.runSettings", () => {
 
     const settings = await (await scanner()).runSettings("7310042", "5520318");
 
-    expect(settings).toMatchObject({ wcagVersion: "wcag22aa", advancedRules: true });
+    expect(settings).toMatchObject({
+      wcagVersion: "wcag22aa",
+      advancedRules: true,
+    });
     expect(settings).not.toHaveProperty("experimentalRules");
   });
 });
@@ -177,7 +225,9 @@ describe("startAccessibilityScan scan settings", () => {
     vi.doMock("../../src/tools/accessiblity-utils/report-parser.js", () => ({
       parseAccessibilityReportFromCSV: m.parse,
     }));
-    m.startScan.mockResolvedValue({ data: { id: "7310042", scanRunId: "5520318" } });
+    m.startScan.mockResolvedValue({
+      data: { id: "7310042", scanRunId: "5520318" },
+    });
     m.waitUntilComplete.mockResolvedValue("completed");
     m.getReportLink.mockResolvedValue("https://csv");
     m.parse.mockResolvedValue({
@@ -192,7 +242,8 @@ describe("startAccessibilityScan scan settings", () => {
   });
 
   async function tool() {
-    const { default: addAccessibilityTools } = await import("../../src/tools/accessibility.js");
+    const { default: addAccessibilityTools } =
+      await import("../../src/tools/accessibility.js");
     let handler: (...args: any[]) => any = () => undefined;
     let schema: Record<string, any> = {};
     const server: any = {
@@ -204,11 +255,19 @@ describe("startAccessibilityScan scan settings", () => {
       }),
       server: { getClientVersion: vi.fn().mockReturnValue({ version: "1.0" }) },
     };
-    addAccessibilityTools(server, { "browserstack-username": "u", "browserstack-access-key": "k" } as any);
-    return { schema, run: (args: Record<string, unknown>) => handler(args, { sendNotification: vi.fn(), _meta: {} }) };
+    addAccessibilityTools(server, {
+      "browserstack-username": "u",
+      "browserstack-access-key": "k",
+    } as any);
+    return {
+      schema,
+      run: (args: Record<string, unknown>) =>
+        handler(args, { sendNotification: vi.fn(), _meta: {} }),
+    };
   }
 
-  const text = (result: any) => result.content.map((c: { text: string }) => c.text).join("\n");
+  const text = (result: any) =>
+    result.content.map((c: { text: string }) => c.text).join("\n");
 
   it("passes the requested settings to the scan and reports the settings it ran with", async () => {
     m.runSettings.mockResolvedValue({
@@ -226,10 +285,15 @@ describe("startAccessibilityScan scan settings", () => {
       bestPractices: true,
     });
 
-    expect(m.startScan).toHaveBeenCalledWith("checkout", ["https://shop.example/"], undefined, {
-      wcagVersion: "wcag22aaa",
-      bestPractices: true,
-    });
+    expect(m.startScan).toHaveBeenCalledWith(
+      "checkout",
+      ["https://shop.example/"],
+      undefined,
+      {
+        wcagVersion: "wcag22aaa",
+        bestPractices: true,
+      },
+    );
     expect(m.runSettings).toHaveBeenCalledWith("7310042", "5520318");
     // Advanced rules read back off, as a plan without them turns them off.
     expect(text(result)).toContain(
@@ -253,9 +317,14 @@ describe("startAccessibilityScan scan settings", () => {
       experimentalRules: false,
     });
 
-    expect(m.startScan).toHaveBeenCalledWith("checkout", ["https://shop.example/"], undefined, {
-      experimentalRules: false,
-    });
+    expect(m.startScan).toHaveBeenCalledWith(
+      "checkout",
+      ["https://shop.example/"],
+      undefined,
+      {
+        experimentalRules: false,
+      },
+    );
     expect(text(result)).toContain(
       "Scan settings, as the scan ran: WCAG 2.1 AA, best practices off, needs review on, advanced rules on, experimental rules off.",
     );
@@ -301,7 +370,8 @@ describe("startAccessibilityScan scan settings", () => {
 // A scan's dashboard page is named by its build, not its name: the scans list carries each
 // scan's own link (scanUrl). A link made from the name alone does not open the scan.
 describe("AccessibilityScanner.dashboardLink", () => {
-  const SCANS = "https://api-accessibility.browserstack.com/api/website-scanner/v1/scans";
+  const SCANS =
+    "https://api-accessibility.browserstack.com/api/website-scanner/v1/scans";
   const LINK =
     "https://accessibility.browserstack.com/site-scanner/projects/Home%20page/builds?thBuildId=k3v9q2m7x1c8b4n6z0w5r2t9y4p1s8d3f6g0h2ja&recurring=false&tunnel_vision=false";
 
@@ -323,21 +393,40 @@ describe("AccessibilityScanner.dashboardLink", () => {
     m.get.mockResolvedValue({
       ok: true,
       status: 200,
-      data: { data: { scans: [{ id: 7310043, scanUrl: "https://elsewhere" }, { id: 7310042, scanUrl: LINK }] } },
+      data: {
+        data: {
+          scans: [
+            { id: 7310043, scanUrl: "https://elsewhere" },
+            { id: 7310042, scanUrl: LINK },
+          ],
+        },
+      },
     });
 
-    await expect((await scanner()).dashboardLink("7310042")).resolves.toBe(LINK);
+    await expect((await scanner()).dashboardLink("7310042")).resolves.toBe(
+      LINK,
+    );
     expect(m.get.mock.calls[0][0].url).toBe(SCANS);
   });
 
   it("gives no link when the scan is not on the list, or the list cannot be read", async () => {
-    m.get.mockResolvedValueOnce({ ok: true, status: 200, data: { data: { scans: [{ id: 1, scanUrl: LINK }] } } });
-    await expect((await scanner()).dashboardLink("7310042")).resolves.toBeUndefined();
+    m.get.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      data: { data: { scans: [{ id: 1, scanUrl: LINK }] } },
+    });
+    await expect(
+      (await scanner()).dashboardLink("7310042"),
+    ).resolves.toBeUndefined();
 
     m.get.mockResolvedValueOnce({ ok: false, status: 500, data: {} });
-    await expect((await scanner()).dashboardLink("7310042")).resolves.toBeUndefined();
+    await expect(
+      (await scanner()).dashboardLink("7310042"),
+    ).resolves.toBeUndefined();
 
     m.get.mockRejectedValueOnce(new Error("socket hang up"));
-    await expect((await scanner()).dashboardLink("7310042")).resolves.toBeUndefined();
+    await expect(
+      (await scanner()).dashboardLink("7310042"),
+    ).resolves.toBeUndefined();
   });
 });

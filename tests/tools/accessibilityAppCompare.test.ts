@@ -160,8 +160,11 @@ describe("summarizeAppIssues", () => {
 // its screens, and its issues are not resolved, only not seen again. (Build #3 of an iOS
 // app scanned 3 of #2's 5 screens; 89 of the 111 "resolved" issues were on the 2 it skipped.)
 describe("compareAppIssues and screens one build did not reach", () => {
-  const on = (screen: string, ids: string[], rule = "interactable-element-content-label") =>
-    ids.map((id) => issue(rule, "critical", id, screen));
+  const on = (
+    screen: string,
+    ids: string[],
+    rule = "interactable-element-content-label",
+  ) => ids.map((id) => issue(rule, "critical", id, screen));
 
   it("sets apart, rather than resolves, the issues on an earlier screen no later screen resembles", () => {
     const before = [
@@ -204,7 +207,13 @@ describe("compareAppIssues and screens one build did not reach", () => {
   it("resolves the fixes on a screen of the same test that kept only some of its issues", () => {
     const before = [
       ...on("Screen 1 (test_scan)", ["home_a", "home_b"]),
-      ...on("Screen 2 (test_scan)", ["cart_a", "cart_b", "cart_c", "cart_d", "cart_e"]),
+      ...on("Screen 2 (test_scan)", [
+        "cart_a",
+        "cart_b",
+        "cart_c",
+        "cart_d",
+        "cart_e",
+      ]),
       ...on("Screen 3 (test_scan)", ["pay_a", "pay_b"]),
     ];
     const after = [
@@ -220,12 +229,21 @@ describe("compareAppIssues and screens one build did not reach", () => {
       "cart_c",
       "cart_d",
     ]);
-    expect(diff.unconfirmed.map((r) => r.component)).toEqual(["pay_a", "pay_b"]);
+    expect(diff.unconfirmed.map((r) => r.component)).toEqual([
+      "pay_a",
+      "pay_b",
+    ]);
   });
 
   it("does not take a screen of another test for it on one shared element", () => {
     const before = [
-      ...on("Screen 1 (test_cart)", ["back", "cart_a", "cart_b", "cart_c", "cart_d"]),
+      ...on("Screen 1 (test_cart)", [
+        "back",
+        "cart_a",
+        "cart_b",
+        "cart_c",
+        "cart_d",
+      ]),
       ...on("Screen 2 (test_home)", ["home_a"]),
     ];
     const after = [
@@ -246,7 +264,12 @@ describe("compareAppIssues and screens one build did not reach", () => {
   it("does not set apart a screen whose elements cannot be told apart", () => {
     // Known only by their rule, with no id, class or text, these elements match anything.
     const unnamed = (screen: string) => ({
-      ...issue("touch-target-size-and-spacing", "serious", "touch target size and spacing", screen),
+      ...issue(
+        "touch-target-size-and-spacing",
+        "serious",
+        "touch target size and spacing",
+        screen,
+      ),
     });
     const diff = compareAppIssues([unnamed("Screen 2 (test_scan)")], []);
 
@@ -538,7 +561,9 @@ describe("AccessibilityReportFetcher and the build before an app build", () => {
       )
       .mockResolvedValueOnce({ ok: false, status: 500, data: {} });
 
-    await expect(fetcher().previousAppBuild(BUILD_ID)).rejects.toThrow(/HTTP 500/);
+    await expect(fetcher().previousAppBuild(BUILD_ID)).rejects.toThrow(
+      /HTTP 500/,
+    );
   });
 
   it("reports a failed first page as the failure, not as 'first build'", async () => {
@@ -547,7 +572,9 @@ describe("AccessibilityReportFetcher and the build before an app build", () => {
       .mockResolvedValueOnce(project())
       .mockResolvedValueOnce({ ok: false, status: 503, data: {} });
 
-    await expect(fetcher().previousAppBuild(BUILD_ID)).rejects.toThrow(/HTTP 503/);
+    await expect(fetcher().previousAppBuild(BUILD_ID)).rejects.toThrow(
+      /HTTP 503/,
+    );
   });
 
   it("says it cannot find the build in its project's list, rather than 'first build'", async () => {
@@ -555,7 +582,10 @@ describe("AccessibilityReportFetcher and the build before an app build", () => {
       .mockResolvedValueOnce(ok({ meta_data: META }))
       .mockResolvedValueOnce(project())
       .mockResolvedValueOnce(
-        ok({ builds: [{ th_build_id: "other", name: "checkout-android" }], info: { next: null } }),
+        ok({
+          builds: [{ th_build_id: "other", name: "checkout-android" }],
+          info: { next: null },
+        }),
       );
 
     await expect(fetcher().previousAppBuild(BUILD_ID)).rejects.toThrow(
@@ -635,8 +665,16 @@ describe("AccessibilityReportFetcher and App Accessibility dashboard links", () 
     get.mockResolvedValueOnce(
       ok({
         builds: [
-          { build_number: 2, normalised_name: "checkout-android", th_build_id: "other" },
-          { build_number: 1, normalised_name: "checkout-android", th_build_id: BUILD_ID },
+          {
+            build_number: 2,
+            normalised_name: "checkout-android",
+            th_build_id: "other",
+          },
+          {
+            build_number: 1,
+            normalised_name: "checkout-android",
+            th_build_id: BUILD_ID,
+          },
         ],
         info: { next: null },
       }),
@@ -653,8 +691,16 @@ describe("AccessibilityReportFetcher and App Accessibility dashboard links", () 
     get.mockResolvedValueOnce(
       ok({
         builds: [
-          { build_number: 1, normalised_name: "smoke-android", th_build_id: "smoke" },
-          { build_number: 1, normalised_name: "checkout-android", th_build_id: BUILD_ID },
+          {
+            build_number: 1,
+            normalised_name: "smoke-android",
+            th_build_id: "smoke",
+          },
+          {
+            build_number: 1,
+            normalised_name: "checkout-android",
+            th_build_id: BUILD_ID,
+          },
         ],
         info: { next: null },
       }),
@@ -812,7 +858,10 @@ describe("AccessibilityReportFetcher and Espresso / XCUITest build links", () =>
               th_build_id: BUILD_ID,
               name: "Build #13: Checkout.apk v1.0",
               created_at: "2026-03-04T10:30:41.794Z",
-              session_data: { frameworkName: "Espresso-Junit4", language: "java" },
+              session_data: {
+                frameworkName: "Espresso-Junit4",
+                language: "java",
+              },
             },
           ],
           info: { next: null },

@@ -1,3 +1,5 @@
+import { SessionType } from "../lib/constants.js";
+import { isNotFoundError } from "../lib/error.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
@@ -21,12 +23,15 @@ export async function fetchBuildInsightsTool(
   try {
     const inputId = args.buildId.trim();
     let traBuildId = inputId;
+    let mappedSessionType: SessionType | undefined;
     let fetched;
     try {
       fetched = await fetchInsightsData(traBuildId, config);
     } catch (error) {
-      if (!isNotFound(error) || !isHashedBuildId(inputId)) throw error;
-      traBuildId = await mapHashedToTra(inputId, error, config);
+      if (!isNotFoundError(error) || !isHashedBuildId(inputId)) throw error;
+      const mapped = await mapHashedToTra(inputId, error, config);
+      traBuildId = mapped.traBuildId;
+      mappedSessionType = mapped.sessionType;
       fetched = await fetchInsightsData(traBuildId, config);
     }
     const { buildData, qualityData } = fetched;
@@ -34,7 +39,11 @@ export async function fetchBuildInsightsTool(
     const { hashed_id, session_type, sessions } =
       traBuildId === inputId
         ? await resolveInsightsHashedId(traBuildId, buildData, config)
-        : { hashed_id: inputId, session_type: undefined, sessions: undefined };
+        : {
+            hashed_id: inputId,
+            session_type: mappedSessionType,
+            sessions: undefined,
+          };
 
     // Select useful fields for users
     const insights = {
@@ -85,10 +94,6 @@ export async function fetchBuildInsightsTool(
     logger.error("Error fetching build insights", error);
     throw error;
   }
-}
-
-function isNotFound(error: unknown): boolean {
-  return error instanceof Error && /\b404\b/.test(error.message);
 }
 
 async function fetchInsightsData(buildId: string, config: BrowserStackConfig) {

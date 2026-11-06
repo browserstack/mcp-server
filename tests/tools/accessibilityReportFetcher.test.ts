@@ -364,7 +364,14 @@ describe("AccessibilityReportFetcher.sourceFromReportUrl and a shared report lin
     const share = `https://scanner.browserstack.com/site-scanner/checkout/a11y-report?reportUrl=${encodeURIComponent(inner)}&minimal=true&report_source=private_share`;
     get.mockResolvedValueOnce(
       ok({
-        scans: [{ id: 1234, name: "checkout", scanUrl: inner, lastScanDetails: { scanRunId: 5678 } }],
+        scans: [
+          {
+            id: 1234,
+            name: "checkout",
+            scanUrl: inner,
+            lastScanDetails: { scanRunId: 5678 },
+          },
+        ],
         pagination: { hasNext: false },
       }),
     );
@@ -378,8 +385,15 @@ describe("AccessibilityReportFetcher.sourceFromReportUrl and a shared report lin
 });
 
 describe("AccessibilityReportFetcher.getReportLink on a large report", () => {
-  const SOURCE: IssueSource = { kind: "scan", scanId: "1234", scanRunId: "5678" };
-  const pending = ok({ message: "CSV file link generation is in progress. Please try again in some time." });
+  const SOURCE: IssueSource = {
+    kind: "scan",
+    scanId: "1234",
+    scanRunId: "5678",
+  };
+  const pending = ok({
+    message:
+      "CSV file link generation is in progress. Please try again in some time.",
+  });
   const urls = () => get.mock.calls.map(([options]) => options.url);
 
   beforeEach(() => {
@@ -392,7 +406,9 @@ describe("AccessibilityReportFetcher.getReportLink on a large report", () => {
   it("keeps waiting on the same export until its link is ready", async () => {
     get.mockResolvedValueOnce(ok({ task_id: "t:1", message: "started" }));
     for (let i = 0; i < 6; i++) get.mockResolvedValueOnce(pending);
-    get.mockResolvedValueOnce(ok({ reportLink: "https://csv?Expires=9999999999" }));
+    get.mockResolvedValueOnce(
+      ok({ reportLink: "https://csv?Expires=9999999999" }),
+    );
 
     const link = fetcher().getReportLink(SOURCE);
     await vi.runAllTimersAsync();
@@ -428,7 +444,8 @@ describe("AccessibilityReportFetcher.getReportLink on a large report", () => {
     get.mockResolvedValueOnce(ok({ task_id: "t:1", message: "started" }));
     get.mockResolvedValue(pending);
     const first = fetcher().getReportLink(SOURCE);
-    const failedFirst = expect(first).rejects.toBeInstanceOf(ExportPendingError);
+    const failedFirst =
+      expect(first).rejects.toBeInstanceOf(ExportPendingError);
     await vi.advanceTimersByTimeAsync(EXPORT_WAIT_MS + 10_000);
     await failedFirst;
 
@@ -444,10 +461,14 @@ describe("AccessibilityReportFetcher.getReportLink on a large report", () => {
     const expires = Math.floor(Date.now() / 1000) + 12 * 3600;
     get
       .mockResolvedValueOnce(ok({ task_id: "t:1", message: "started" }))
-      .mockResolvedValueOnce(ok({ reportLink: `https://csv?Expires=${expires}` }));
+      .mockResolvedValueOnce(
+        ok({ reportLink: `https://csv?Expires=${expires}` }),
+      );
 
     await fetcher().getReportLink(SOURCE);
-    await expect(fetcher().getReportLink(SOURCE)).resolves.toBe(`https://csv?Expires=${expires}`);
+    await expect(fetcher().getReportLink(SOURCE)).resolves.toBe(
+      `https://csv?Expires=${expires}`,
+    );
     expect(get).toHaveBeenCalledTimes(2);
 
     vi.setSystemTime(Date.now() + 13 * 3600 * 1000);
@@ -460,9 +481,13 @@ describe("AccessibilityReportFetcher.getReportLink on a large report", () => {
   it("starts a fresh export for a report still processing, so a call after it finishes is not stale", async () => {
     get
       .mockResolvedValueOnce(ok({ task_id: "t:1", message: "started" }))
-      .mockResolvedValueOnce(ok({ reportLink: "https://csv?Expires=9999999999" }))
+      .mockResolvedValueOnce(
+        ok({ reportLink: "https://csv?Expires=9999999999" }),
+      )
       .mockResolvedValueOnce(ok({ task_id: "t:2", message: "started" }))
-      .mockResolvedValueOnce(ok({ reportLink: "https://csv2?Expires=9999999999" }));
+      .mockResolvedValueOnce(
+        ok({ reportLink: "https://csv2?Expires=9999999999" }),
+      );
 
     await fetcher().getReportLink(SOURCE, { stillProcessing: true });
     await expect(fetcher().getReportLink(SOURCE)).resolves.toBe(
@@ -487,7 +512,12 @@ describe("AccessibilityReportFetcher.getReportLink on a large report", () => {
   it("stops waiting when the API says the export failed", async () => {
     get
       .mockResolvedValueOnce(ok({ task_id: "t:1", message: "started" }))
-      .mockResolvedValueOnce(ok({ message: "CSV file generation failed. Please initiate a new request by sharing the scan_run_id parameter." }));
+      .mockResolvedValueOnce(
+        ok({
+          message:
+            "CSV file generation failed. Please initiate a new request by sharing the scan_run_id parameter.",
+        }),
+      );
 
     const link = fetcher().getReportLink(SOURCE);
     const outcome = expect(link).rejects.toThrow(/generation failed/);
@@ -511,11 +541,15 @@ describe("AccessibilityReportFetcher scan run history", () => {
       }),
     );
 
-    await expect(fetcher().previousScanRun("1234", "30")).resolves.toMatchObject({
+    await expect(
+      fetcher().previousScanRun("1234", "30"),
+    ).resolves.toMatchObject({
       id: 20,
       scanDate: "2026-10-21T11:31:00Z",
     });
-    expect(get.mock.calls[0][0].url).toBe(`${API}/website-scanner/v1/scans/1234/scan_runs`);
+    expect(get.mock.calls[0][0].url).toBe(
+      `${API}/website-scanner/v1/scans/1234/scan_runs`,
+    );
   });
 
   it("reads every page of the scan's runs before picking the one before", async () => {
@@ -536,7 +570,9 @@ describe("AccessibilityReportFetcher scan run history", () => {
         }),
       );
 
-    await expect(fetcher().previousScanRun("1234", "20")).resolves.toMatchObject({ id: 10 });
+    await expect(
+      fetcher().previousScanRun("1234", "20"),
+    ).resolves.toMatchObject({ id: 10 });
     expect(get.mock.calls.map(([o]) => o.url)).toEqual([
       `${API}/website-scanner/v1/scans/1234/scan_runs`,
       `${API}/website-scanner/v1/scans/1234/scan_runs?nextPage=p2`,
@@ -545,15 +581,28 @@ describe("AccessibilityReportFetcher scan run history", () => {
 
   it("has no previous run for a scan's first run", async () => {
     get.mockResolvedValueOnce(
-      ok({ scanRuns: [{ id: 10, scanDate: "2026-10-21T11:14:51Z", issues: 160 }], pagination: { hasNext: false } }),
+      ok({
+        scanRuns: [{ id: 10, scanDate: "2026-10-21T11:14:51Z", issues: 160 }],
+        pagination: { hasNext: false },
+      }),
     );
 
-    await expect(fetcher().previousScanRun("1234", "10")).resolves.toBeUndefined();
+    await expect(
+      fetcher().previousScanRun("1234", "10"),
+    ).resolves.toBeUndefined();
   });
 
   it("reads a run's changes since the previous run from its summary", async () => {
     get.mockResolvedValueOnce(
-      ok({ scanRunId: 30, time: "2026-10-22T05:54:23Z", changesSinceLastRun: { newIssues: 2, retainedIssues: 145, resolvedIssues: 5 } }),
+      ok({
+        scanRunId: 30,
+        time: "2026-10-22T05:54:23Z",
+        changesSinceLastRun: {
+          newIssues: 2,
+          retainedIssues: 145,
+          resolvedIssues: 5,
+        },
+      }),
     );
 
     await expect(fetcher().changesSinceLastRun("1234", "30")).resolves.toEqual({
@@ -561,6 +610,8 @@ describe("AccessibilityReportFetcher scan run history", () => {
       retainedIssues: 145,
       resolvedIssues: 5,
     });
-    expect(get.mock.calls[0][0].url).toBe(`${API}/website-scanner/v1/scans/1234/scan_runs/30`);
+    expect(get.mock.calls[0][0].url).toBe(
+      `${API}/website-scanner/v1/scans/1234/scan_runs/30`,
+    );
   });
 });

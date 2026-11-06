@@ -61,7 +61,10 @@ describe("elicitCredentialsIfSupported", () => {
   it("elicits missing values when supported and the user accepts", async () => {
     const server = makeServer({
       elicitationSupported: true,
-      elicitResult: { action: "accept", content: { username: "eu", password: "ep" } },
+      elicitResult: {
+        action: "accept",
+        content: { username: "eu", password: "ep" },
+      },
     });
     const out = await elicitCredentialsIfSupported(
       server,
@@ -106,7 +109,10 @@ describe("elicitCredentialsIfSupported", () => {
   });
 
   it("falls back to provided values when elicitation throws", async () => {
-    const server = makeServer({ elicitationSupported: true, elicitThrows: true });
+    const server = makeServer({
+      elicitationSupported: true,
+      elicitThrows: true,
+    });
     const out = await elicitCredentialsIfSupported(
       server,
       { username: "u", password: undefined },

@@ -9,7 +9,10 @@ import { fileURLToPath } from "node:url";
 // unresolvable ("unknown_capability … search again"); this test stops that
 // regressing.
 const INDEX = fileURLToPath(
-  new URL("../../capability/loadtesting.capability-index.json", import.meta.url),
+  new URL(
+    "../../capability/loadtesting.capability-index.json",
+    import.meta.url,
+  ),
 );
 
 const lt = JSON.parse(readFileSync(INDEX, "utf8")).loadtesting;
@@ -17,7 +20,10 @@ const lt = JSON.parse(readFileSync(INDEX, "utf8")).loadtesting;
 describe("loadtesting capability index — name contract", () => {
   it("every capability publishes a name", () => {
     const unnamed = lt.capabilities.filter((c: any) => !c.name);
-    expect(unnamed, unnamed.map((c: any) => `${c.method} ${c.path}`).join(", ")).toHaveLength(0);
+    expect(
+      unnamed,
+      unnamed.map((c: any) => `${c.method} ${c.path}`).join(", "),
+    ).toHaveLength(0);
   });
 
   it("capability names are unique", () => {
@@ -63,8 +69,7 @@ describe("loadtesting capability index — name contract", () => {
 // and date-window filtering on listLoadTestRuns. Without these params the agent
 // can only page-and-scan, which fans out badly in large projects.
 describe("loadtesting capability index — resolution contract", () => {
-  const byName = (n: string) =>
-    lt.capabilities.find((c: any) => c.name === n);
+  const byName = (n: string) => lt.capabilities.find((c: any) => c.name === n);
   const queryNames = (n: string) =>
     (byName(n)?.query || []).map((q: any) => q.name);
 
@@ -86,7 +91,9 @@ describe("loadtesting capability index — resolution contract", () => {
     const create = byName("createLoadTest");
     const nameField = (create.body || []).find((f: any) => f.name === "name");
     expect(nameField.maxLength).toBe(255);
-    expect((create.body || []).some((f: any) => f.name === "children")).toBe(true);
+    expect((create.body || []).some((f: any) => f.name === "children")).toBe(
+      true,
+    );
   });
 
   // The framework options must be scoped to the chosen testType: picking API must
@@ -118,9 +125,9 @@ describe("loadtesting capability index — resolution contract", () => {
     );
     // no framework appears under both types
     const api = new Set<string>(framework.valuesByTestType.plu);
-    expect(
-      framework.valuesByTestType.blu.some((f: string) => api.has(f)),
-    ).toBe(false);
+    expect(framework.valuesByTestType.blu.some((f: string) => api.has(f))).toBe(
+      false,
+    );
     // the flat enum still carries every value so invoke-time validation accepts any valid framework
     expect(framework.values).toEqual([
       ...framework.valuesByTestType.plu,

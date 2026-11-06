@@ -28,7 +28,8 @@ describe("the default page size", () => {
   it("is the same for a CSV report", async () => {
     // Each issue's rule text, its fix here, counts against the page the first time the page
     // names the rule. (A long HTML snippet is cut short, so it cannot fill a page.)
-    const header = '"Issue type","Severity","Component","Issue description","Affected page","HTML snippet","How to fix this issue"';
+    const header =
+      '"Issue type","Severity","Component","Issue description","Affected page","HTML snippet","How to fix this issue"';
     const line = (n: number) =>
       `"rule-${n}","serious","div","d","https://shop.example/","<div>","${"x".repeat(9000)}"`;
     (apiClient.get as Mock).mockResolvedValue({
@@ -47,12 +48,18 @@ describe("the default page size", () => {
 describe("a record longer than a page", () => {
   it("is handed out on a page of its own, so the cursor moves past it", () => {
     const first = pageOf([row(1), { id: 2, text: "x".repeat(40_000) }, row(3)]);
-    const second = pageOf([row(1), { id: 2, text: "x".repeat(40_000) }, row(3)], {
-      nextPage: first.next_page!,
-    });
-    const third = pageOf([row(1), { id: 2, text: "x".repeat(40_000) }, row(3)], {
-      nextPage: second.next_page!,
-    });
+    const second = pageOf(
+      [row(1), { id: 2, text: "x".repeat(40_000) }, row(3)],
+      {
+        nextPage: first.next_page!,
+      },
+    );
+    const third = pageOf(
+      [row(1), { id: 2, text: "x".repeat(40_000) }, row(3)],
+      {
+        nextPage: second.next_page!,
+      },
+    );
 
     expect(first.records.map((r) => r.id)).toEqual([1]);
     expect(second.records.map((r) => r.id)).toEqual([2]);

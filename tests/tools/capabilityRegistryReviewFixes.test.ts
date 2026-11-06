@@ -42,7 +42,7 @@ function harness(index: unknown) {
     } as never,
   );
   const call = async (tool: string, input: unknown) =>
-    readAnswer((await handlers[tool](input, {} as never)));
+    readAnswer(await handlers[tool](input, {} as never));
   return { sent, call };
 }
 

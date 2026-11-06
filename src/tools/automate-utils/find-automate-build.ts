@@ -8,7 +8,6 @@ export interface AutomateBuildMatch {
   hashedBuildId: string;
   sessionType: SessionType;
   name: string;
-  createdAt?: string;
 }
 
 // One page per product: clients retry failed lookups.
@@ -26,6 +25,7 @@ const normalise = (value: string) => value.trim().toLowerCase();
 export async function findAutomateBuildsByName(
   buildName: string,
   config: BrowserStackConfig,
+  products: SessionType[] = [SessionType.Automate, SessionType.AppAutomate],
 ): Promise<AutomateBuildMatch[]> {
   const wanted = normalise(buildName);
   const headers = {
@@ -56,7 +56,6 @@ export async function findAutomateBuildsByName(
             hashedBuildId: build.hashed_id,
             sessionType,
             name: build.name,
-            createdAt: build.created_at ?? undefined,
           });
         }
       }
@@ -65,11 +64,5 @@ export async function findAutomateBuildsByName(
     return matches;
   };
 
-  const [automate, appAutomate] = await Promise.all([
-    searchProduct(SessionType.Automate),
-    searchProduct(SessionType.AppAutomate),
-  ]);
-  return [...automate, ...appAutomate].sort((a, b) =>
-    (b.createdAt ?? "").localeCompare(a.createdAt ?? ""),
-  );
+  return (await Promise.all(products.map(searchProduct))).flat();
 }

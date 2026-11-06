@@ -72,7 +72,9 @@ const themesPayload = (extra: Record<string, any> = {}) => ({
       themeId: "t-uuid-1",
       buildFailureThemeId: 3874449,
       themeData: { name: "Data Assertion Mismatch", description: "..." },
-      affectedWorkflows: [{ id: 1, workflowData: { name: "wf", description: "d" } }],
+      affectedWorkflows: [
+        { id: 1, workflowData: { name: "wf", description: "d" } },
+      ],
       affectedWorkflowCount: 1,
       testRunCount: 5,
       testPercentage: 20,
@@ -110,7 +112,11 @@ describe("fetchBuildFailureThemes", () => {
     expect(result.buildThemes).toHaveLength(1);
     expect(result.buildThemes![0].buildFailureThemeId).toBe(3874449);
     expect(result.buildWorkflows).toHaveLength(1);
-    expect(result.stats).toEqual({ totalThemes: 1, newThemes: 1, existingThemes: 0 });
+    expect(result.stats).toEqual({
+      totalThemes: 1,
+      newThemes: 1,
+      existingThemes: 0,
+    });
     expect(post).not.toHaveBeenCalled();
 
     const call = get.mock.calls[0][0];
@@ -140,7 +146,9 @@ describe("fetchBuildFailureThemes", () => {
 
   it("200 with no buildThemeWorkflow at all → triggers once, then polls to SUCCESS", async () => {
     get
-      .mockResolvedValueOnce(ok({ buildId: "b-1", buildThemes: [], buildWorkflows: [] }))
+      .mockResolvedValueOnce(
+        ok({ buildId: "b-1", buildThemes: [], buildWorkflows: [] }),
+      )
       .mockResolvedValueOnce(ok(themesPayload()));
     post.mockResolvedValue(ok({ triggered: true }));
 
@@ -167,7 +175,9 @@ describe("fetchBuildFailureThemes", () => {
 
   it("FAILED status → triggers once, then polls to SUCCESS", async () => {
     get
-      .mockResolvedValueOnce(ok(themesPayload({ buildThemeWorkflow: { status: "FAILED" } })))
+      .mockResolvedValueOnce(
+        ok(themesPayload({ buildThemeWorkflow: { status: "FAILED" } })),
+      )
       .mockResolvedValueOnce(ok(themesPayload()));
     post.mockResolvedValue(ok({ triggered: true }));
 
@@ -295,19 +305,34 @@ describe("fetchTestsInFailureTheme", () => {
     get.mockResolvedValue(
       ok({
         testRuns: [
-          { id: "flat-1", title: "some test", details: { id: 12345, status: "failed" } },
+          {
+            id: "flat-1",
+            title: "some test",
+            details: { id: 12345, status: "failed" },
+          },
         ],
         nextCursor: "cursor-2",
       }),
     );
 
     const result = await fetchTestsInFailureTheme(
-      { buildUuid: "b-1", themeId: 3874449, workflowId: 1, limit: 5, cursor: "cursor-1" },
+      {
+        buildUuid: "b-1",
+        themeId: 3874449,
+        workflowId: 1,
+        limit: 5,
+        cursor: "cursor-1",
+      },
       mockConfig as any,
     );
 
     expect(result.tests).toEqual([
-      { testRunId: 12345, title: "some test", status: "failed", raw: expect.any(Object) },
+      {
+        testRunId: 12345,
+        title: "some test",
+        status: "failed",
+        raw: expect.any(Object),
+      },
     ]);
     expect(result.nextCursor).toBe("cursor-2");
 
@@ -397,7 +422,11 @@ describe("listTestsInFailureThemeTool (direct)", () => {
 
   it("wraps the util result as a JSON CallToolResult", async () => {
     get.mockResolvedValue(
-      ok({ testRuns: [{ id: "f-1", title: "t", details: { id: 1, status: "failed" } }] }),
+      ok({
+        testRuns: [
+          { id: "f-1", title: "t", details: { id: 1, status: "failed" } },
+        ],
+      }),
     );
 
     const result = await listTestsInFailureThemeTool(
@@ -499,7 +528,12 @@ describe("listTestsInFailureTheme handler", () => {
     addTfaRcaCollaborationTools(server as any, mockConfig as any);
 
     const fieldNames = Object.keys(tools.listTestsInFailureTheme.schema ?? {});
-    expect(fieldNames).toEqual(["buildUuid", "themeId", "workflowId", "limit", "cursor"]);
+    expect(fieldNames).toEqual([
+      "buildUuid",
+      "themeId",
+      "workflowId",
+      "limit",
+      "cursor",
+    ]);
   });
 });
-

@@ -274,8 +274,18 @@ describe("listSessionIdsTool", () => {
   it("falls back to resolution when a 40-hex id is an observability id, not a hashed id", async () => {
     const OBS_HEX = "419836ad9989011f736793ef058e802bac257be3";
     (apiClient.get as Mock)
-      .mockResolvedValueOnce({ ok: false, status: 404, statusText: "Not Found", data: {} })
-      .mockResolvedValueOnce({ ok: false, status: 404, statusText: "Not Found", data: {} })
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 404,
+        statusText: "Not Found",
+        data: {},
+      })
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 404,
+        statusText: "Not Found",
+        data: {},
+      })
       .mockResolvedValueOnce({ ok: true, status: 200, data: samplePayload });
     (resolveHashedBuildId as Mock).mockResolvedValue({
       hashedBuildId: HASHED_BUILD,
@@ -330,7 +340,12 @@ describe("listSessionIdsTool", () => {
 
   it("switches product when the hashed build ran on the other one", async () => {
     (apiClient.get as Mock)
-      .mockResolvedValueOnce({ ok: false, status: 404, statusText: "Not Found", data: {} })
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 404,
+        statusText: "Not Found",
+        data: {},
+      })
       .mockResolvedValueOnce({ ok: true, status: 200, data: samplePayload });
 
     const result = await listSessionIdsTool(
@@ -341,26 +356,34 @@ describe("listSessionIdsTool", () => {
     expect((apiClient.get as Mock).mock.calls[1][0].url).toContain(
       `/app-automate/builds/${HASHED_BUILD}/sessions.json`,
     );
-    expect(JSON.parse(result.content[0].text as string)[0].sessionId).toBe("sess-aaa");
+    expect(JSON.parse(result.content[0].text as string)[0].sessionId).toBe(
+      "sess-aaa",
+    );
     expect(result.content[1].text).toContain('use sessionType "app-automate"');
     expect(resolveHashedBuildId).not.toHaveBeenCalled();
   });
 
   it("routes a base-36 TRA id straight to resolution", async () => {
     const TRA_ID = "jlcb5jo8xakocnjyll3n10b1rx5sqnrprh3y6zsp";
-    (resolveHashedBuildId as Mock).mockRejectedValue(new NoSessionsError(TRA_ID));
+    (resolveHashedBuildId as Mock).mockRejectedValue(
+      new NoSessionsError(TRA_ID),
+    );
 
     await expect(
       listSessionIdsTool(
         { sessionType: SessionType.Automate, buildId: TRA_ID },
         mockConfig,
       ),
-    ).rejects.toThrow(/has no BrowserStack sessions: its results were uploaded/);
+    ).rejects.toThrow(
+      /has no BrowserStack sessions: its results were uploaded/,
+    );
     expect(apiClient.get).not.toHaveBeenCalled();
   });
 
   it("surfaces the resolver error for a UUID with no sessions", async () => {
-    (resolveHashedBuildId as Mock).mockRejectedValue(new NoSessionsError(OBS_UUID));
+    (resolveHashedBuildId as Mock).mockRejectedValue(
+      new NoSessionsError(OBS_UUID),
+    );
 
     await expect(
       listSessionIdsTool(

@@ -1,3 +1,4 @@
+import { HttpError } from "../../src/lib/error";
 import { describe, it, expect, vi, beforeEach, Mock } from "vitest";
 import {
   getBuildIdTool,
@@ -149,9 +150,11 @@ describe("RCA Agent Tools", () => {
     it("SUCCESS: maps an Automate hashed id to its TRA build on 404", async () => {
       const hashed = "ca9cccc228cf0e3ff3cb90dd62e2e2bfb4b20bc7";
       (getTestIds as Mock)
-        .mockRejectedValueOnce(new Error("Failed to fetch test runs: 404 Not Found"))
+        .mockRejectedValueOnce(
+          new HttpError("Failed to fetch test runs: 404 Not Found", 404),
+        )
         .mockResolvedValueOnce([{ test_id: "1" }]);
-      (mapHashedToTra as Mock).mockResolvedValue("tra-build-1");
+      (mapHashedToTra as Mock).mockResolvedValue({ traBuildId: "tra-build-1" });
 
       const result = await listTestIdsTool({ buildId: hashed }, mockConfig);
 
@@ -162,7 +165,7 @@ describe("RCA Agent Tools", () => {
 
     it("FAIL: does not map non-hex ids on 404", async () => {
       (getTestIds as Mock).mockRejectedValue(
-        new Error("Failed to fetch test runs: 404 Not Found"),
+        new HttpError("Failed to fetch test runs: 404 Not Found", 404),
       );
 
       const result = await listTestIdsTool(

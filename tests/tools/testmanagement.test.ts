@@ -13,38 +13,41 @@ import {
   getTestPlanTool,
   listSubTestPlansTool,
   getSubTestPlanTool,
-} from '../../src/tools/testmanagement';
-import addTestManagementTools from '../../src/tools/testmanagement';
-import { createProjectOrFolder } from '../../src/tools/testmanagement-utils/create-project-folder';
-import { createTestCase, sanitizeArgs, TestCaseCreateRequest } from '../../src/tools/testmanagement-utils/create-testcase';
-import { listTestCases } from '../../src/tools/testmanagement-utils/list-testcases';
-import { createTestRun } from '../../src/tools/testmanagement-utils/create-testrun';
-import { addTestResult } from '../../src/tools/testmanagement-utils/add-test-result';
-import { listTestRuns } from '../../src/tools/testmanagement-utils/list-testruns';
-import { updateTestRun } from '../../src/tools/testmanagement-utils/update-testrun';
-import { listTestPlans } from '../../src/tools/testmanagement-utils/list-testplans';
-import { getTestPlan } from '../../src/tools/testmanagement-utils/get-testplan';
-import { listSubTestPlans } from '../../src/tools/testmanagement-utils/list-sub-testplans';
-import { getSubTestPlan } from '../../src/tools/testmanagement-utils/get-sub-testplan';
-import { createTestCasesFromFile } from '../../src/tools/testmanagement-utils/testcase-from-file';
-import { createLCASteps } from '../../src/tools/testmanagement-utils/create-lca-steps';
-import axios from 'axios';
-import { beforeAll, beforeEach, it, expect, describe, Mocked} from 'vitest';
-import { vi, Mock } from 'vitest';
-import { trackMCP } from '../../src/lib/instrumentation';
-import { signedUrlMap } from '../../src/lib/inmemory-store';
-import { uploadFile } from '../../src/tools/testmanagement-utils/upload-file';
-
+} from "../../src/tools/testmanagement";
+import addTestManagementTools from "../../src/tools/testmanagement";
+import { createProjectOrFolder } from "../../src/tools/testmanagement-utils/create-project-folder";
+import {
+  createTestCase,
+  sanitizeArgs,
+  TestCaseCreateRequest,
+} from "../../src/tools/testmanagement-utils/create-testcase";
+import { listTestCases } from "../../src/tools/testmanagement-utils/list-testcases";
+import { createTestRun } from "../../src/tools/testmanagement-utils/create-testrun";
+import { addTestResult } from "../../src/tools/testmanagement-utils/add-test-result";
+import { listTestRuns } from "../../src/tools/testmanagement-utils/list-testruns";
+import { updateTestRun } from "../../src/tools/testmanagement-utils/update-testrun";
+import { listTestPlans } from "../../src/tools/testmanagement-utils/list-testplans";
+import { getTestPlan } from "../../src/tools/testmanagement-utils/get-testplan";
+import { listSubTestPlans } from "../../src/tools/testmanagement-utils/list-sub-testplans";
+import { getSubTestPlan } from "../../src/tools/testmanagement-utils/get-sub-testplan";
+import { createTestCasesFromFile } from "../../src/tools/testmanagement-utils/testcase-from-file";
+import { createLCASteps } from "../../src/tools/testmanagement-utils/create-lca-steps";
+import axios from "axios";
+import { beforeAll, beforeEach, it, expect, describe, Mocked } from "vitest";
+import { vi, Mock } from "vitest";
+import { trackMCP } from "../../src/lib/instrumentation";
+import { signedUrlMap } from "../../src/lib/inmemory-store";
+import { uploadFile } from "../../src/tools/testmanagement-utils/upload-file";
 
 // Mock dependencies
-vi.mock('../../src/tools/testmanagement-utils/create-project-folder', () => ({
+vi.mock("../../src/tools/testmanagement-utils/create-project-folder", () => ({
   createProjectOrFolder: vi.fn(),
   CreateProjFoldSchema: {
     parse: (args: any) => args,
     shape: {},
   },
 }));
-vi.mock('../../src/tools/testmanagement-utils/create-testcase', () => ({
+vi.mock("../../src/tools/testmanagement-utils/create-testcase", () => ({
   createTestCase: vi.fn(),
   sanitizeArgs: vi.fn((args) => args),
   CreateTestCaseSchema: {
@@ -52,18 +55,18 @@ vi.mock('../../src/tools/testmanagement-utils/create-testcase', () => ({
   },
 }));
 
-vi.mock('../../src/tools/testmanagement-utils/testcase-from-file', () => ({
+vi.mock("../../src/tools/testmanagement-utils/testcase-from-file", () => ({
   createTestCasesFromFile: vi.fn(),
 }));
 
-vi.mock('../../src/tools/testmanagement-utils/TCG-utils/types', () => ({
+vi.mock("../../src/tools/testmanagement-utils/TCG-utils/types", () => ({
   CreateTestCasesFromFileSchema: {
     parse: (args: any) => args,
     shape: {},
   },
 }));
 
-vi.mock('../../src/tools/testmanagement-utils/create-lca-steps', () => ({
+vi.mock("../../src/tools/testmanagement-utils/create-lca-steps", () => ({
   createLCASteps: vi.fn(),
   CreateLCAStepsSchema: {
     parse: (args: any) => args,
@@ -71,21 +74,21 @@ vi.mock('../../src/tools/testmanagement-utils/create-lca-steps', () => ({
   },
 }));
 
-vi.mock('../../src/tools/testmanagement-utils/poll-lca-status', () => ({
+vi.mock("../../src/tools/testmanagement-utils/poll-lca-status", () => ({
   pollLCAStatus: vi.fn(),
 }));
-vi.mock('../../src/config', () => ({
+vi.mock("../../src/config", () => ({
   __esModule: true,
   default: {
-    browserstackUsername: 'fake-user',
-    browserstackAccessKey: 'fake-key',
+    browserstackUsername: "fake-user",
+    browserstackAccessKey: "fake-key",
   },
 }));
-vi.mock('../../src/lib/instrumentation', () => ({
-  trackMCP: vi.fn()
+vi.mock("../../src/lib/instrumentation", () => ({
+  trackMCP: vi.fn(),
 }));
 
-vi.mock('../../src/tools/testmanagement-utils/add-test-result', () => ({
+vi.mock("../../src/tools/testmanagement-utils/add-test-result", () => ({
   addTestResult: vi.fn(),
   AddTestResultSchema: {
     parse: (args: any) => args,
@@ -93,99 +96,104 @@ vi.mock('../../src/tools/testmanagement-utils/add-test-result', () => ({
   },
 }));
 
-vi.mock('fs');
-vi.mock('../../src/lib/inmemory-store', () => ({ signedUrlMap: new Map() }));
-vi.mock('../../src/lib/get-auth', () => ({
-  getBrowserStackAuth: vi.fn(() => 'fake-user:fake-key')
+vi.mock("fs");
+vi.mock("../../src/lib/inmemory-store", () => ({ signedUrlMap: new Map() }));
+vi.mock("../../src/lib/get-auth", () => ({
+  getBrowserStackAuth: vi.fn(() => "fake-user:fake-key"),
 }));
-vi.mock('../../src/tools/testmanagement-utils/TCG-utils/api', async (importActual) => {
-  const actual = await importActual<
-    typeof import('../../src/tools/testmanagement-utils/TCG-utils/api')
-  >();
-  return {
-    ...actual,
-    projectIdentifierToId: vi.fn(() => Promise.resolve('999')),
-    fetchFormFields: vi.fn(),
-    normalizeDefaultFieldValue: vi.fn(),
-  };
-});
-vi.mock('form-data', () => {
+vi.mock(
+  "../../src/tools/testmanagement-utils/TCG-utils/api",
+  async (importActual) => {
+    const actual =
+      await importActual<
+        typeof import("../../src/tools/testmanagement-utils/TCG-utils/api")
+      >();
+    return {
+      ...actual,
+      projectIdentifierToId: vi.fn(() => Promise.resolve("999")),
+      fetchFormFields: vi.fn(),
+      normalizeDefaultFieldValue: vi.fn(),
+    };
+  },
+);
+vi.mock("form-data", () => {
   return {
     default: vi.fn().mockImplementation(() => ({
       append: vi.fn(),
-      getHeaders: vi.fn(() => ({ 'content-type': 'multipart/form-data' }))
-    }))
+      getHeaders: vi.fn(() => ({ "content-type": "multipart/form-data" })),
+    })),
   };
 });
 
 const mockConfig = {
   getClientVersion: vi.fn(() => "test-version"),
   authHeaders: {
-    username: 'fake-user',
-    password: 'fake-key'
+    username: "fake-user",
+    password: "fake-key",
   },
   "browserstack-username": "fake-user",
-  "browserstack-access-key": "fake-key"
+  "browserstack-access-key": "fake-key",
 };
 
 // Create a mock server for all tool calls
-const mockServer = { server: { getClientVersion: () => "test-version" } } as any;
+const mockServer = {
+  server: { getClientVersion: () => "test-version" },
+} as any;
 mockServer.tool = vi.fn();
 addTestManagementTools(mockServer, mockConfig);
 
-vi.mock('../../src/tools/testmanagement-utils/create-testrun', () => ({
+vi.mock("../../src/tools/testmanagement-utils/create-testrun", () => ({
   createTestRun: vi.fn(),
   CreateTestRunSchema: {
     parse: (args: any) => args,
     shape: {},
   },
 }));
-vi.mock('axios');
+vi.mock("axios");
 
-
-vi.mock('../../src/tools/testmanagement-utils/list-testruns', () => ({
+vi.mock("../../src/tools/testmanagement-utils/list-testruns", () => ({
   listTestRuns: vi.fn(),
   ListTestRunsSchema: {
     parse: (args: any) => args,
     shape: {},
   },
 }));
-vi.mock('../../src/tools/testmanagement-utils/update-testrun', () => ({
+vi.mock("../../src/tools/testmanagement-utils/update-testrun", () => ({
   updateTestRun: vi.fn(),
   UpdateTestRunSchema: {
     parse: (args: any) => args,
     shape: {},
   },
 }));
-vi.mock('../../src/tools/testmanagement-utils/list-testcases', () => ({
+vi.mock("../../src/tools/testmanagement-utils/list-testcases", () => ({
   listTestCases: vi.fn(),
   ListTestCasesSchema: {
     parse: (args: any) => args,
     shape: {},
   },
 }));
-vi.mock('../../src/tools/testmanagement-utils/list-testplans', () => ({
+vi.mock("../../src/tools/testmanagement-utils/list-testplans", () => ({
   listTestPlans: vi.fn(),
   ListTestPlansSchema: {
     parse: (args: any) => args,
     shape: {},
   },
 }));
-vi.mock('../../src/tools/testmanagement-utils/get-testplan', () => ({
+vi.mock("../../src/tools/testmanagement-utils/get-testplan", () => ({
   getTestPlan: vi.fn(),
   GetTestPlanSchema: {
     parse: (args: any) => args,
     shape: {},
   },
 }));
-vi.mock('../../src/tools/testmanagement-utils/list-sub-testplans', () => ({
+vi.mock("../../src/tools/testmanagement-utils/list-sub-testplans", () => ({
   listSubTestPlans: vi.fn(),
   ListSubTestPlansSchema: {
     parse: (args: any) => args,
     shape: {},
   },
 }));
-vi.mock('../../src/tools/testmanagement-utils/get-sub-testplan', () => ({
+vi.mock("../../src/tools/testmanagement-utils/get-sub-testplan", () => ({
   getSubTestPlan: vi.fn(),
   GetSubTestPlanSchema: {
     parse: (args: any) => args,
@@ -196,51 +204,60 @@ vi.mock('../../src/tools/testmanagement-utils/get-sub-testplan', () => ({
 // vi.importActual to reach the real util). Other tests in this file mock their
 // utils at the module level, so apiClient and tm-base-url never get reached
 // through real code paths today — adding these mocks is safe.
-vi.mock('../../src/lib/apiClient', () => ({
+vi.mock("../../src/lib/apiClient", () => ({
   apiClient: { get: vi.fn(), post: vi.fn(), patch: vi.fn() },
 }));
-vi.mock('../../src/lib/tm-base-url', () => ({
-  getTMBaseURL: vi.fn(async () => 'https://test-management.browserstack.com'),
+vi.mock("../../src/lib/tm-base-url", () => ({
+  getTMBaseURL: vi.fn(async () => "https://test-management.browserstack.com"),
 }));
-vi.mock('../../src/logger', () => ({
+vi.mock("../../src/logger", () => ({
   default: { error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug: vi.fn() },
 }));
 
-
 const mockedAxios = axios as Mocked<typeof axios>;
 
-describe('createTestCaseTool', () => {
+describe("createTestCaseTool", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   const validArgs: TestCaseCreateRequest = {
-    project_identifier: 'proj-123',
-    folder_id: 'fold-456',
-    name: 'Sample Test Case',
-    description: 'Test case description',
-    owner: 'user@example.com',
-    preconditions: 'Some precondition',
+    project_identifier: "proj-123",
+    folder_id: "fold-456",
+    name: "Sample Test Case",
+    description: "Test case description",
+    owner: "user@example.com",
+    preconditions: "Some precondition",
     test_case_steps: [
-      { step: 'Step 1', result: 'Result 1' },
-      { step: 'Step 2', result: 'Result 2' },
+      { step: "Step 1", result: "Result 1" },
+      { step: "Step 2", result: "Result 2" },
     ],
-    issues: ['JIRA-1'],
-    issue_tracker: { name: 'jira', host: 'https://jira.example.com' },
-    tags: ['smoke'],
-    custom_fields: { priority: 'high' },
-    automation_status: 'not_automated',
+    issues: ["JIRA-1"],
+    issue_tracker: { name: "jira", host: "https://jira.example.com" },
+    tags: ["smoke"],
+    custom_fields: { priority: "high" },
+    automation_status: "not_automated",
   };
 
   const mockCallToolResult = {
     content: [
-      { type: 'text', text: 'Successfully created test case TC-001: Sample Test Case' },
-      { type: 'text', text: JSON.stringify({ identifier: 'TC-001', title: 'Sample Test Case' }, null, 2) },
+      {
+        type: "text",
+        text: "Successfully created test case TC-001: Sample Test Case",
+      },
+      {
+        type: "text",
+        text: JSON.stringify(
+          { identifier: "TC-001", title: "Sample Test Case" },
+          null,
+          2,
+        ),
+      },
     ],
     isError: false,
   };
 
-  it('should successfully create a test case', async () => {
+  it("should successfully create a test case", async () => {
     (createTestCase as Mock).mockResolvedValue(mockCallToolResult);
     const result = await createTestCaseTool(validArgs, mockConfig, mockServer);
     expect(sanitizeArgs).toHaveBeenCalledWith(validArgs);
@@ -248,134 +265,196 @@ describe('createTestCaseTool', () => {
     expect(result).toBe(mockCallToolResult);
   });
 
-  it('should handle API errors while creating test case', async () => {
-    (createTestCase as Mock).mockRejectedValue(new Error('API Error'));
+  it("should handle API errors while creating test case", async () => {
+    (createTestCase as Mock).mockRejectedValue(new Error("API Error"));
     const result = await createTestCaseTool(validArgs, mockConfig, mockServer);
     expect(result.isError).toBe(true);
-    expect(result.content?.[0]?.text).toContain('Failed to create test case: API Error');
+    expect(result.content?.[0]?.text).toContain(
+      "Failed to create test case: API Error",
+    );
   });
 
-  it('should handle unknown error while creating test case', async () => {
-    (createTestCase as Mock).mockRejectedValue('unexpected');
+  it("should handle unknown error while creating test case", async () => {
+    (createTestCase as Mock).mockRejectedValue("unexpected");
     const result = await createTestCaseTool(validArgs, mockConfig, mockServer);
     expect(result.isError).toBe(true);
-    expect(result.content?.[0]?.text).toContain('Unknown error');
+    expect(result.content?.[0]?.text).toContain("Unknown error");
   });
 });
 
-describe('createProjectOrFolderTool', () => {
+describe("createProjectOrFolderTool", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   const validProjectArgs = {
-    project_name: 'My New Project',
-    project_description: 'This is a test project',
+    project_name: "My New Project",
+    project_description: "This is a test project",
   };
 
   const validFolderArgs = {
-    project_identifier: 'proj-123',
-    folder_name: 'My Test Folder',
-    folder_description: 'This is a folder under project',
+    project_identifier: "proj-123",
+    folder_name: "My Test Folder",
+    folder_description: "This is a folder under project",
   };
 
   const mockProjectResponse = {
-    content: [{ type: 'text', text: 'Project created with identifier=proj-123' }],
+    content: [
+      { type: "text", text: "Project created with identifier=proj-123" },
+    ],
   };
 
   const mockFolderResponse = {
-    content: [{ type: 'text', text: 'Folder created: ID=fold-123, name="My Folder" in project proj-123' }],
+    content: [
+      {
+        type: "text",
+        text: 'Folder created: ID=fold-123, name="My Folder" in project proj-123',
+      },
+    ],
   };
 
-  it('should successfully create a project', async () => {
+  it("should successfully create a project", async () => {
     (createProjectOrFolder as Mock).mockResolvedValue(mockProjectResponse);
-    const result = await createProjectOrFolderTool(validProjectArgs, mockConfig, mockServer);
-    expect(createProjectOrFolder).toHaveBeenCalledWith(validProjectArgs, mockConfig);
-    expect(result.content?.[0]?.text).toContain('Project created with identifier=proj-123');
-  });
-
-  it('should successfully create a folder', async () => {
-    (createProjectOrFolder as Mock).mockResolvedValue(mockFolderResponse);
-    const result = await createProjectOrFolderTool(validFolderArgs, mockConfig, mockServer);
-    expect(createProjectOrFolder).toHaveBeenCalledWith(validFolderArgs, mockConfig);
-    expect(result.content?.[0]?.text).toContain('Folder created: ID=fold-123');
-  });
-
-  it('should handle error while creating project or folder', async () => {
-    (createProjectOrFolder as Mock).mockRejectedValue(new Error('Failed to create project/folder'));
-    const result = await createProjectOrFolderTool(validProjectArgs, mockConfig, mockServer);
-    expect(result.isError).toBe(true);
+    const result = await createProjectOrFolderTool(
+      validProjectArgs,
+      mockConfig,
+      mockServer,
+    );
+    expect(createProjectOrFolder).toHaveBeenCalledWith(
+      validProjectArgs,
+      mockConfig,
+    );
     expect(result.content?.[0]?.text).toContain(
-      'Failed to create project/folder: Failed to create project/folder. Please open an issue on GitHub if the problem persists'
+      "Project created with identifier=proj-123",
     );
   });
-  it('should handle unknown error while creating project or folder', async () => {
-    (createProjectOrFolder as Mock).mockRejectedValue('some unknown error');
-    const result = await createProjectOrFolderTool(validProjectArgs, mockConfig, mockServer);
+
+  it("should successfully create a folder", async () => {
+    (createProjectOrFolder as Mock).mockResolvedValue(mockFolderResponse);
+    const result = await createProjectOrFolderTool(
+      validFolderArgs,
+      mockConfig,
+      mockServer,
+    );
+    expect(createProjectOrFolder).toHaveBeenCalledWith(
+      validFolderArgs,
+      mockConfig,
+    );
+    expect(result.content?.[0]?.text).toContain("Folder created: ID=fold-123");
+  });
+
+  it("should handle error while creating project or folder", async () => {
+    (createProjectOrFolder as Mock).mockRejectedValue(
+      new Error("Failed to create project/folder"),
+    );
+    const result = await createProjectOrFolderTool(
+      validProjectArgs,
+      mockConfig,
+      mockServer,
+    );
     expect(result.isError).toBe(true);
     expect(result.content?.[0]?.text).toContain(
-      'Failed to create project/folder: Unknown error. Please open an issue on GitHub if the problem persists'
+      "Failed to create project/folder: Failed to create project/folder. Please open an issue on GitHub if the problem persists",
+    );
+  });
+  it("should handle unknown error while creating project or folder", async () => {
+    (createProjectOrFolder as Mock).mockRejectedValue("some unknown error");
+    const result = await createProjectOrFolderTool(
+      validProjectArgs,
+      mockConfig,
+      mockServer,
+    );
+    expect(result.isError).toBe(true);
+    expect(result.content?.[0]?.text).toContain(
+      "Failed to create project/folder: Unknown error. Please open an issue on GitHub if the problem persists",
     );
   });
 });
 
-describe('listTestCases util', () => {
+describe("listTestCases util", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   const mockCases = [
-    { identifier: 'TC-1', title: 'Test One', case_type: 'functional', status: 'active', priority: 'high' },
-    { identifier: 'TC-2', title: 'Test Two', case_type: 'regression', status: 'draft', priority: 'medium' },
+    {
+      identifier: "TC-1",
+      title: "Test One",
+      case_type: "functional",
+      status: "active",
+      priority: "high",
+    },
+    {
+      identifier: "TC-2",
+      title: "Test Two",
+      case_type: "regression",
+      status: "draft",
+      priority: "medium",
+    },
   ];
 
-  it('should return formatted summary and raw JSON on success', async () => {
+  it("should return formatted summary and raw JSON on success", async () => {
     (listTestCases as Mock).mockResolvedValue({
       content: [
-        { type: 'text', text: 'Found 2 test case(s):\n\n• TC-1: Test One [functional | high]\n• TC-2: Test Two [regression | medium]' },
-        { type: 'text', text: JSON.stringify(mockCases, null, 2) },
+        {
+          type: "text",
+          text: "Found 2 test case(s):\n\n• TC-1: Test One [functional | high]\n• TC-2: Test Two [regression | medium]",
+        },
+        { type: "text", text: JSON.stringify(mockCases, null, 2) },
       ],
       isError: false,
     });
-    const args = { project_identifier: 'PR-1', status: 'active', p: 1 };
+    const args = { project_identifier: "PR-1", status: "active", p: 1 };
     const result = await listTestCasesTool(args as any, mockConfig, mockServer);
-    expect(result.content?.[0]?.text).toContain('Found 2 test case(s):');
-    expect(result.content?.[0]?.text).toContain('TC-1: Test One [functional | high]');
+    expect(result.content?.[0]?.text).toContain("Found 2 test case(s):");
+    expect(result.content?.[0]?.text).toContain(
+      "TC-1: Test One [functional | high]",
+    );
     expect(result.content?.[1]?.text).toBe(JSON.stringify(mockCases, null, 2));
   });
 
-  it('should handle API errors gracefully', async () => {
+  it("should handle API errors gracefully", async () => {
     (listTestCases as Mock).mockResolvedValue({
       content: [
-        { type: 'text', text: 'Failed to list test cases: Network Error', isError: true },
+        {
+          type: "text",
+          text: "Failed to list test cases: Network Error",
+          isError: true,
+        },
       ],
       isError: true,
     });
-    const result = await listTestCasesTool({ project_identifier: 'PR-1' } as any, mockConfig, mockServer);
+    const result = await listTestCasesTool(
+      { project_identifier: "PR-1" } as any,
+      mockConfig,
+      mockServer,
+    );
     expect(result.isError).toBe(true);
-    expect(result.content?.[0]?.text).toContain('Failed to list test cases: Network Error');
+    expect(result.content?.[0]?.text).toContain(
+      "Failed to list test cases: Network Error",
+    );
   });
 });
 
-describe('createTestRunTool', () => {
+describe("createTestRunTool", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   const validRunArgs = {
-    project_identifier: 'proj-123',
-    run_name: 'Nightly Regression',
-    test_cases: ['TC-001', 'TC-002'],
-    environment: 'chrome',
-    metadata: { os: 'macOS' },
+    project_identifier: "proj-123",
+    run_name: "Nightly Regression",
+    test_cases: ["TC-001", "TC-002"],
+    environment: "chrome",
+    metadata: { os: "macOS" },
   };
 
   const successRunResult = {
-    content: [{ type: 'text', text: 'Successfully created test run: Run-001' }],
+    content: [{ type: "text", text: "Successfully created test run: Run-001" }],
     isError: false,
   };
 
-  it('should successfully create a test run', async () => {
+  it("should successfully create a test run", async () => {
     (createTestRun as Mock).mockResolvedValue(successRunResult);
     const runArgs = {
       project_identifier: validRunArgs.project_identifier,
@@ -383,96 +462,118 @@ describe('createTestRunTool', () => {
         name: validRunArgs.run_name,
         test_cases: validRunArgs.test_cases,
         environment: validRunArgs.environment,
-        metadata: validRunArgs.metadata
-      }
+        metadata: validRunArgs.metadata,
+      },
     };
     const result = await createTestRunTool(runArgs, mockConfig, mockServer);
     expect(result).toBe(successRunResult);
   });
 
-  it('should handle API errors while creating test run', async () => {
-    (createTestRun as Mock).mockRejectedValue(new Error('API Error'));
+  it("should handle API errors while creating test run", async () => {
+    (createTestRun as Mock).mockRejectedValue(new Error("API Error"));
     const runArgs = {
       project_identifier: validRunArgs.project_identifier,
       test_run: {
         name: validRunArgs.run_name,
         test_cases: validRunArgs.test_cases,
         environment: validRunArgs.environment,
-        metadata: validRunArgs.metadata
-      }
+        metadata: validRunArgs.metadata,
+      },
     };
     const result = await createTestRunTool(runArgs, mockConfig, mockServer);
     expect(result.isError).toBe(true);
-    expect(result.content?.[0]?.text).toContain('Failed to create test run: API Error');
+    expect(result.content?.[0]?.text).toContain(
+      "Failed to create test run: API Error",
+    );
   });
 
-  it('should handle unknown error while creating test run', async () => {
-    (createTestRun as Mock).mockRejectedValue('unexpected');
+  it("should handle unknown error while creating test run", async () => {
+    (createTestRun as Mock).mockRejectedValue("unexpected");
     const runArgs = {
       project_identifier: validRunArgs.project_identifier,
       test_run: {
         name: validRunArgs.run_name,
         test_cases: validRunArgs.test_cases,
         environment: validRunArgs.environment,
-        metadata: validRunArgs.metadata
-      }
+        metadata: validRunArgs.metadata,
+      },
     };
     const result = await createTestRunTool(runArgs, mockConfig, mockServer);
     expect(result.isError).toBe(true);
-    expect(result.content?.[0]?.text).toContain('Unknown error');
+    expect(result.content?.[0]?.text).toContain("Unknown error");
   });
 });
 
-describe('listTestRunsTool', () => {
+describe("listTestRunsTool", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   const mockRuns = [
-    { identifier: 'TR-1', name: 'Run One', run_state: 'new_run' },
-    { identifier: 'TR-2', name: 'Run Two', run_state: 'done' },
+    { identifier: "TR-1", name: "Run One", run_state: "new_run" },
+    { identifier: "TR-2", name: "Run Two", run_state: "done" },
   ];
-  const projectId = 'PR-123';
+  const projectId = "PR-123";
 
-  it('should return summary and raw JSON on success', async () => {
+  it("should return summary and raw JSON on success", async () => {
     (listTestRuns as Mock).mockResolvedValue({
       content: [
-        { type: 'text', text: `Found 2 test run(s):\n\n• TR-1: Run One [new_run]\n• TR-2: Run Two [done]` },
-        { type: 'text', text: JSON.stringify(mockRuns, null, 2) },
+        {
+          type: "text",
+          text: `Found 2 test run(s):\n\n• TR-1: Run One [new_run]\n• TR-2: Run Two [done]`,
+        },
+        { type: "text", text: JSON.stringify(mockRuns, null, 2) },
       ],
       isError: false,
     });
-    const result = await listTestRunsTool({ project_identifier: projectId }, mockConfig, mockServer);
+    const result = await listTestRunsTool(
+      { project_identifier: projectId },
+      mockConfig,
+      mockServer,
+    );
     expect(result.isError).toBe(false);
-    expect(result.content?.[0]?.text).toContain('Found 2 test run(s):');
+    expect(result.content?.[0]?.text).toContain("Found 2 test run(s):");
     expect(result.content?.[1]?.text).toBe(JSON.stringify(mockRuns, null, 2));
   });
 
-  it('should handle errors', async () => {
-    (listTestRuns as Mock).mockRejectedValue(new Error('Network Error'));
-    const result = await listTestRunsTool({ project_identifier: projectId }, mockConfig, mockServer);
+  it("should handle errors", async () => {
+    (listTestRuns as Mock).mockRejectedValue(new Error("Network Error"));
+    const result = await listTestRunsTool(
+      { project_identifier: projectId },
+      mockConfig,
+      mockServer,
+    );
     expect(result.isError).toBe(true);
-    expect(result.content?.[0]?.text).toContain('Failed to list test runs: Network Error');
+    expect(result.content?.[0]?.text).toContain(
+      "Failed to list test runs: Network Error",
+    );
   });
 });
 
-describe('updateTestRunTool', () => {
+describe("updateTestRunTool", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   const args = {
-    project_identifier: 'PR-123',
-    test_run_id: 'TR-1',
-    test_run: { name: 'Updated Name', run_state: 'in_progress' },
+    project_identifier: "PR-123",
+    test_run_id: "TR-1",
+    test_run: { name: "Updated Name", run_state: "in_progress" },
   };
 
-  it('should return success message and updated run JSON on success', async () => {
-    const updated = { name: 'Updated Name', run_state: 'in_progress', tags: [] };
+  it("should return success message and updated run JSON on success", async () => {
+    const updated = {
+      name: "Updated Name",
+      run_state: "in_progress",
+      tags: [],
+    };
     (updateTestRun as Mock).mockResolvedValue({
       content: [
-        { type: 'text', text: `Successfully updated test run ${args.test_run_id}` },
-        { type: 'text', text: JSON.stringify(updated, null, 2) },
+        {
+          type: "text",
+          text: `Successfully updated test run ${args.test_run_id}`,
+        },
+        { type: "text", text: JSON.stringify(updated, null, 2) },
       ],
       isError: false,
     });
@@ -481,66 +582,77 @@ describe('updateTestRunTool', () => {
       test_run_id: args.test_run_id,
       test_run: {
         name: args.test_run.name,
-        run_state: "in_progress" as const
-      }
+        run_state: "in_progress" as const,
+      },
     };
     const result = await updateTestRunTool(updateArgs, mockConfig, mockServer);
     expect(result.isError).toBe(false);
-    expect(result.content?.[0]?.text).toContain(`Successfully updated test run ${args.test_run_id}`);
+    expect(result.content?.[0]?.text).toContain(
+      `Successfully updated test run ${args.test_run_id}`,
+    );
     expect(result.content?.[1]?.text).toBe(JSON.stringify(updated, null, 2));
   });
 
-  it('should handle errors', async () => {
-    (updateTestRun as Mock).mockRejectedValue(new Error('API Error'));
+  it("should handle errors", async () => {
+    (updateTestRun as Mock).mockRejectedValue(new Error("API Error"));
     const updateArgs = {
       project_identifier: args.project_identifier,
       test_run_id: args.test_run_id,
       test_run: {
         name: args.test_run.name,
-        run_state: "in_progress" as const
-      }
+        run_state: "in_progress" as const,
+      },
     };
     const result = await updateTestRunTool(updateArgs, mockConfig, mockServer);
     expect(result.isError).toBe(true);
-    expect(result.content?.[0]?.text).toContain('Failed to update test run: API Error');
+    expect(result.content?.[0]?.text).toContain(
+      "Failed to update test run: API Error",
+    );
   });
 });
 
-describe('addTestResultTool', () => {
+describe("addTestResultTool", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   const validArgs = {
-    project_identifier: 'proj-123',
-    test_run_id: 'run-456',
+    project_identifier: "proj-123",
+    test_run_id: "run-456",
     test_result: {
-      status: 'passed',
-      description: 'All good',
-      issues: ['ISSUE-1'],
-      issue_tracker: { name: 'jira', host: 'https://jira.example.com' },
-      custom_fields: { priority: 'high' },
+      status: "passed",
+      description: "All good",
+      issues: ["ISSUE-1"],
+      issue_tracker: { name: "jira", host: "https://jira.example.com" },
+      custom_fields: { priority: "high" },
     },
-    test_case_id: 'TC-1',
+    test_case_id: "TC-1",
   };
 
   const successAddResult = {
-    content: [{ type: 'text', text: 'Successfully added test result to test run run-456' }],
+    content: [
+      {
+        type: "text",
+        text: "Successfully added test result to test run run-456",
+      },
+    ],
     isError: false,
   };
 
-  it('should successfully add a test result', async () => {
+  it("should successfully add a test result", async () => {
     (addTestResult as Mock).mockResolvedValue(successAddResult);
     const result = await addTestResultTool(validArgs, mockConfig, mockServer);
     expect(result.isError).toBe(false);
-    expect(result.content?.[0]?.text).toContain('Successfully added test result to test run run-456');
+    expect(result.content?.[0]?.text).toContain(
+      "Successfully added test result to test run run-456",
+    );
   });
 
-  it('should handle unknown errors gracefully', async () => {
-    (addTestResult as Mock).mockRejectedValue('unexpected');
+  it("should handle unknown errors gracefully", async () => {
+    (addTestResult as Mock).mockRejectedValue("unexpected");
     const result = await addTestResultTool(validArgs, mockConfig, mockServer);
     expect(result.isError).toBe(true);
-    expect(result.content?.[0]?.text).toContain('Unknown error');
+    expect(result.content?.[0]?.text).toContain("Unknown error");
   });
 });
 
@@ -550,41 +662,68 @@ const testDocumentId = "mock-doc-id";
 const testFolderId = "mock-folder-id";
 const mockFileId = 12345;
 const mockDownloadUrl = "https://cdn.browserstack.com/mock.pdf";
-const mockContext = { sendNotification: vi.fn(), _meta: { progressToken: "test-progress-token" } };
+const mockContext = {
+  sendNotification: vi.fn(),
+  _meta: { progressToken: "test-progress-token" },
+};
 
 describe("uploadProductRequirementFileTool", () => {
   beforeEach(() => vi.resetAllMocks());
   it("returns error when file does not exist", async () => {
     (uploadFile as Mock).mockResolvedValue({
       content: [
-        { type: 'text', text: 'File /tmp/sample.pdf does not exist.', isError: true },
+        {
+          type: "text",
+          text: "File /tmp/sample.pdf does not exist.",
+          isError: true,
+        },
       ],
       isError: true,
     });
-    const res = await uploadProductRequirementFileTool({ project_identifier: testProjectId, file_path: testFilePath }, mockConfig, mockServer);
+    const res = await uploadProductRequirementFileTool(
+      { project_identifier: testProjectId, file_path: testFilePath },
+      mockConfig,
+      mockServer,
+    );
     expect(res.isError).toBe(true);
     expect(res.content?.[0]?.text).toContain("does not exist");
   });
   it("uploads file and returns metadata", async () => {
     const mockSuccessResponse = {
       content: [
-        { type: 'text', text: 'Successfully uploaded sample.pdf to BrowserStack Test Management.' },
-        { 
-          type: 'text', 
-          text: JSON.stringify([{
-            name: "sample.pdf",
-            documentID: "mock-doc-id",
-            contentType: "application/pdf",
-            size: 1024,
-            projectReferenceId: "999"
-          }], null, 2)
+        {
+          type: "text",
+          text: "Successfully uploaded sample.pdf to BrowserStack Test Management.",
+        },
+        {
+          type: "text",
+          text: JSON.stringify(
+            [
+              {
+                name: "sample.pdf",
+                documentID: "mock-doc-id",
+                contentType: "application/pdf",
+                size: 1024,
+                projectReferenceId: "999",
+              },
+            ],
+            null,
+            2,
+          ),
         },
       ],
       isError: false,
     };
     (uploadFile as Mock).mockResolvedValue(mockSuccessResponse);
-    const res = await uploadProductRequirementFileTool({ project_identifier: testProjectId, file_path: testFilePath }, mockConfig, mockServer);
-    expect(uploadFile).toHaveBeenCalledWith({ project_identifier: testProjectId, file_path: testFilePath }, mockConfig);
+    const res = await uploadProductRequirementFileTool(
+      { project_identifier: testProjectId, file_path: testFilePath },
+      mockConfig,
+      mockServer,
+    );
+    expect(uploadFile).toHaveBeenCalledWith(
+      { project_identifier: testProjectId, file_path: testFilePath },
+      mockConfig,
+    );
     expect(res.isError ?? false).toBe(false);
     expect(res.content?.[1]?.text).toContain("documentID");
   });
@@ -594,59 +733,107 @@ describe("createTestCasesFromFileTool", () => {
   beforeEach(() => vi.resetAllMocks());
   it("returns error when document is not in signedUrlMap", async () => {
     signedUrlMap.clear();
-    (createTestCasesFromFile as Mock).mockRejectedValue(new Error("Re-Upload the file"));
-    const args = { documentId: testDocumentId, folderId: testFolderId, projectReferenceId: testProjectId };
-    const res = await createTestCasesFromFileTool(args as any, mockContext, mockConfig, mockServer);
+    (createTestCasesFromFile as Mock).mockRejectedValue(
+      new Error("Re-Upload the file"),
+    );
+    const args = {
+      documentId: testDocumentId,
+      folderId: testFolderId,
+      projectReferenceId: testProjectId,
+    };
+    const res = await createTestCasesFromFileTool(
+      args as any,
+      mockContext,
+      mockConfig,
+      mockServer,
+    );
     expect(res.isError).toBe(true);
     expect(res.content?.[0]?.text).toContain("Re-Upload the file");
     // Both telemetry calls must carry config, otherwise the event is sent unauthenticated and dropped.
     expect(trackMCP).toHaveBeenCalledTimes(2);
-    expect(trackMCP).toHaveBeenNthCalledWith(1, "createTestCasesFromFile", "test-version", undefined, mockConfig);
-    expect(trackMCP).toHaveBeenNthCalledWith(2, "createTestCasesFromFile", "test-version", expect.any(Error), mockConfig);
+    expect(trackMCP).toHaveBeenNthCalledWith(
+      1,
+      "createTestCasesFromFile",
+      "test-version",
+      undefined,
+      mockConfig,
+    );
+    expect(trackMCP).toHaveBeenNthCalledWith(
+      2,
+      "createTestCasesFromFile",
+      "test-version",
+      expect.any(Error),
+      mockConfig,
+    );
   });
   it("creates test cases from a file successfully", async () => {
-    signedUrlMap.set(testDocumentId, { fileId: mockFileId, downloadUrl: mockDownloadUrl });
+    signedUrlMap.set(testDocumentId, {
+      fileId: mockFileId,
+      downloadUrl: mockDownloadUrl,
+    });
     mockedAxios.get.mockResolvedValueOnce({
       data: {
         default_fields: {
           priority: { values: [{ name: "Medium", value: 2 }] },
           status: { values: [{ internal_name: "active", value: 1 }] },
-          case_type: { values: [{ internal_name: "functional", value: 3 }] }
+          case_type: { values: [{ internal_name: "functional", value: 3 }] },
         },
-        custom_fields: []
-      }
+        custom_fields: [],
+      },
     });
     mockedAxios.post.mockImplementation((url: string) => {
       if (url.includes("suggest-test-cases")) {
-        return Promise.resolve({ status: 200, data: { "x-bstack-traceRequestId": "trace" } });
+        return Promise.resolve({
+          status: 200,
+          data: { "x-bstack-traceRequestId": "trace" },
+        });
       }
       if (url.includes("test-cases-polling")) {
-        return Promise.resolve({ status: 200, data: { data: { success: true, message: [{ type: "termination" }] } } });
+        return Promise.resolve({
+          status: 200,
+          data: { data: { success: true, message: [{ type: "termination" }] } },
+        });
       }
       if (url.includes("bulk-test-cases")) {
         return Promise.resolve({ status: 200, data: {} });
       }
       return Promise.resolve({ status: 404, data: {} });
     });
-    const args = { documentId: testDocumentId, folderId: testFolderId, projectReferenceId: testProjectId };
+    const args = {
+      documentId: testDocumentId,
+      folderId: testFolderId,
+      projectReferenceId: testProjectId,
+    };
     (createTestCasesFromFile as Mock).mockReturnValue({
-      content: [{ type: "text", text: "Total of 5 test cases created in 2 scenarios." }],
-      isError: false
+      content: [
+        { type: "text", text: "Total of 5 test cases created in 2 scenarios." },
+      ],
+      isError: false,
     });
-    const res = await createTestCasesFromFileTool(args as any, mockContext, mockConfig, mockServer);
+    const res = await createTestCasesFromFileTool(
+      args as any,
+      mockContext,
+      mockConfig,
+      mockServer,
+    );
     expect(res.isError ?? false).toBe(false);
     expect(res.content?.[0]?.text).toContain("test cases created");
     expect(trackMCP).toHaveBeenCalledTimes(1);
-    expect(trackMCP).toHaveBeenCalledWith("createTestCasesFromFile", "test-version", undefined, mockConfig);
+    expect(trackMCP).toHaveBeenCalledWith(
+      "createTestCasesFromFile",
+      "test-version",
+      undefined,
+      mockConfig,
+    );
   });
 });
 
 describe("createLCAStepsTool", () => {
   beforeEach(() => vi.resetAllMocks());
 
-  const mockContext = { 
-    sendNotification: vi.fn(), 
-    _meta: { progressToken: "test-lca-progress-token" } 
+  const mockContext = {
+    sendNotification: vi.fn(),
+    _meta: { progressToken: "test-lca-progress-token" },
   };
 
   const validArgs = {
@@ -674,7 +861,10 @@ describe("createLCAStepsTool", () => {
   it("creates LCA steps successfully", async () => {
     const mockResponse = {
       content: [
-        { type: "text", text: "Successfully created LCA steps for test case TC-456" },
+        {
+          type: "text",
+          text: "Successfully created LCA steps for test case TC-456",
+        },
         { type: "text", text: JSON.stringify({ success: true }, null, 2) },
       ],
       isError: false,
@@ -682,9 +872,18 @@ describe("createLCAStepsTool", () => {
 
     (createLCASteps as Mock).mockResolvedValue(mockResponse);
 
-    const result = await createLCAStepsTool(validArgs as any, mockContext, mockConfig, mockServer);
+    const result = await createLCAStepsTool(
+      validArgs as any,
+      mockContext,
+      mockConfig,
+      mockServer,
+    );
 
-    expect(createLCASteps).toHaveBeenCalledWith(validArgs, mockContext, mockConfig);
+    expect(createLCASteps).toHaveBeenCalledWith(
+      validArgs,
+      mockContext,
+      mockConfig,
+    );
     expect(result).toBe(mockResponse);
     expect(result.isError).toBe(false);
   });
@@ -701,7 +900,11 @@ describe("createLCAStepsTool", () => {
         }),
       },
     } as any;
-    const args = { ...validArgs, credentials: undefined, requires_authentication: true };
+    const args = {
+      ...validArgs,
+      credentials: undefined,
+      requires_authentication: true,
+    };
 
     await createLCAStepsTool(args as any, mockContext, mockConfig, localServer);
 
@@ -725,7 +928,11 @@ describe("createLCAStepsTool", () => {
         elicitInput,
       },
     } as any;
-    const args = { ...validArgs, credentials: undefined, requires_authentication: false };
+    const args = {
+      ...validArgs,
+      credentials: undefined,
+      requires_authentication: false,
+    };
 
     await createLCAStepsTool(args as any, mockContext, mockConfig, localServer);
 
@@ -742,9 +949,18 @@ describe("createLCAStepsTool", () => {
         elicitInput,
       },
     } as any;
-    const args = { ...validArgs, credentials: undefined, requires_authentication: true };
+    const args = {
+      ...validArgs,
+      credentials: undefined,
+      requires_authentication: true,
+    };
 
-    const result = await createLCAStepsTool(args as any, mockContext, mockConfig, localServer);
+    const result = await createLCAStepsTool(
+      args as any,
+      mockContext,
+      mockConfig,
+      localServer,
+    );
 
     expect(elicitInput).not.toHaveBeenCalled();
     // No login test case is created without credentials — it fails clearly.
@@ -773,57 +989,95 @@ describe("createLCAStepsTool", () => {
   it("handles errors when creating LCA steps", async () => {
     (createLCASteps as Mock).mockRejectedValue(new Error("API Error"));
 
-    const result = await createLCAStepsTool(validArgs as any, mockContext, mockConfig, mockServer);
+    const result = await createLCAStepsTool(
+      validArgs as any,
+      mockContext,
+      mockConfig,
+      mockServer,
+    );
 
     expect(result.isError).toBe(true);
-    expect(result.content?.[0]?.text).toContain("Failed to create LCA steps: API Error");
+    expect(result.content?.[0]?.text).toContain(
+      "Failed to create LCA steps: API Error",
+    );
   });
 
   it("handles unknown errors when creating LCA steps", async () => {
     (createLCASteps as Mock).mockRejectedValue("unexpected error");
 
-    const result = await createLCAStepsTool(validArgs as any, mockContext, mockConfig, mockServer);
+    const result = await createLCAStepsTool(
+      validArgs as any,
+      mockContext,
+      mockConfig,
+      mockServer,
+    );
 
     expect(result.isError).toBe(true);
-    expect(result.content?.[0]?.text).toContain("Failed to create LCA steps: Unknown error");
+    expect(result.content?.[0]?.text).toContain(
+      "Failed to create LCA steps: Unknown error",
+    );
   });
 
   it("creates LCA steps with wait_for_completion disabled", async () => {
     const argsWithoutWait = { ...validArgs, wait_for_completion: false };
     const mockResponse = {
       content: [
-        { type: "text", text: "LCA steps creation initiated for test case TC-456" },
-        { type: "text", text: "LCA build started. Check the BrowserStack Test Management UI for completion status." },
+        {
+          type: "text",
+          text: "LCA steps creation initiated for test case TC-456",
+        },
+        {
+          type: "text",
+          text: "LCA build started. Check the BrowserStack Test Management UI for completion status.",
+        },
       ],
       isError: false,
     };
 
     (createLCASteps as Mock).mockResolvedValue(mockResponse);
 
-    const result = await createLCAStepsTool(argsWithoutWait as any, mockContext, mockConfig, mockServer);
+    const result = await createLCAStepsTool(
+      argsWithoutWait as any,
+      mockContext,
+      mockConfig,
+      mockServer,
+    );
 
-    expect(result.content?.[1]?.text).toContain("Check the BrowserStack Test Management UI");
+    expect(result.content?.[1]?.text).toContain(
+      "Check the BrowserStack Test Management UI",
+    );
   });
 
   it("creates LCA steps with custom max wait time", async () => {
     const argsWithCustomWait = { ...validArgs, max_wait_minutes: 5 };
     const mockResponse = {
       content: [
-        { type: "text", text: "LCA steps creation initiated for test case TC-456" },
-        { type: "text", text: "Warning: LCA build did not complete within 5 minutes." },
+        {
+          type: "text",
+          text: "LCA steps creation initiated for test case TC-456",
+        },
+        {
+          type: "text",
+          text: "Warning: LCA build did not complete within 5 minutes.",
+        },
       ],
       isError: false,
     };
 
     (createLCASteps as Mock).mockResolvedValue(mockResponse);
 
-    const result = await createLCAStepsTool(argsWithCustomWait as any, mockContext, mockConfig, mockServer);
+    const result = await createLCAStepsTool(
+      argsWithCustomWait as any,
+      mockContext,
+      mockConfig,
+      mockServer,
+    );
 
     expect(result.content?.[1]?.text).toContain("within 5 minutes");
   });
 });
 
-vi.mock('../../src/tools/testmanagement-utils/upload-file', () => {
+vi.mock("../../src/tools/testmanagement-utils/upload-file", () => {
   const uploadFile = vi.fn();
   return {
     uploadFile,
@@ -838,167 +1092,225 @@ vi.mock('../../src/tools/testmanagement-utils/upload-file', () => {
 
 // Get the mocked uploadFile
 
-describe('listTestPlansTool', () => {
+describe("listTestPlansTool", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  const projectId = 'PR-127';
+  const projectId = "PR-127";
   const mockPlans = [
-    { identifier: 'TP-25', name: 'Release 1.0', active_state: 'active' },
-    { identifier: 'TP-26', name: 'Release 2.0', active_state: 'active' },
+    { identifier: "TP-25", name: "Release 1.0", active_state: "active" },
+    { identifier: "TP-26", name: "Release 2.0", active_state: "active" },
   ];
 
-  it('should return summary and raw JSON on success', async () => {
+  it("should return summary and raw JSON on success", async () => {
     (listTestPlans as Mock).mockResolvedValue({
       content: [
-        { type: 'text', text: 'Found 2 test plan(s) in project PR-127:\n\n• TP-25: Release 1.0 [active]' },
-        { type: 'text', text: JSON.stringify(mockPlans, null, 2) },
+        {
+          type: "text",
+          text: "Found 2 test plan(s) in project PR-127:\n\n• TP-25: Release 1.0 [active]",
+        },
+        { type: "text", text: JSON.stringify(mockPlans, null, 2) },
       ],
       isError: false,
     });
-    const result = await listTestPlansTool({ project_identifier: projectId }, mockConfig, mockServer);
+    const result = await listTestPlansTool(
+      { project_identifier: projectId },
+      mockConfig,
+      mockServer,
+    );
     expect(result.isError).toBe(false);
-    expect(result.content?.[0]?.text).toContain('Found 2 test plan(s)');
+    expect(result.content?.[0]?.text).toContain("Found 2 test plan(s)");
     expect(result.content?.[1]?.text).toBe(JSON.stringify(mockPlans, null, 2));
   });
 
-  it('should handle errors', async () => {
-    (listTestPlans as Mock).mockRejectedValue(new Error('Network Error'));
-    const result = await listTestPlansTool({ project_identifier: projectId }, mockConfig, mockServer);
+  it("should handle errors", async () => {
+    (listTestPlans as Mock).mockRejectedValue(new Error("Network Error"));
+    const result = await listTestPlansTool(
+      { project_identifier: projectId },
+      mockConfig,
+      mockServer,
+    );
     expect(result.isError).toBe(true);
-    expect(result.content?.[0]?.text).toContain('Failed to list test plans: Network Error');
+    expect(result.content?.[0]?.text).toContain(
+      "Failed to list test plans: Network Error",
+    );
   });
 });
 
-describe('getTestPlanTool', () => {
+describe("getTestPlanTool", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   const args = {
-    project_identifier: 'PR-127',
-    test_plan_identifier: 'TP-25',
+    project_identifier: "PR-127",
+    test_plan_identifier: "TP-25",
   };
 
-  it('should return plan details, linked runs and status summary on success', async () => {
+  it("should return plan details, linked runs and status summary on success", async () => {
     const payload = {
       test_plan: {
-        identifier: 'TP-25',
-        name: 'Release 1.0',
-        active_state: 'active',
-        description: 'Plan for Release 1.0',
+        identifier: "TP-25",
+        name: "Release 1.0",
+        active_state: "active",
+        description: "Plan for Release 1.0",
       },
       linked_test_runs: [
-        { identifier: 'TR-1', name: 'Run One', run_state: 'new_run', test_cases_count: 10 },
-        { identifier: 'TR-2', name: 'Run Two', run_state: 'done', test_cases_count: 5 },
+        {
+          identifier: "TR-1",
+          name: "Run One",
+          run_state: "new_run",
+          test_cases_count: 10,
+        },
+        {
+          identifier: "TR-2",
+          name: "Run Two",
+          run_state: "done",
+          test_cases_count: 5,
+        },
       ],
       status_summary: { new_run: 1, done: 1 },
       total_test_cases: 15,
     };
     (getTestPlan as Mock).mockResolvedValue({
       content: [
-        { type: 'text', text: 'Test Plan TP-25: Release 1.0\nStatus: active\nTotal test cases across runs: 15' },
-        { type: 'text', text: JSON.stringify(payload, null, 2) },
+        {
+          type: "text",
+          text: "Test Plan TP-25: Release 1.0\nStatus: active\nTotal test cases across runs: 15",
+        },
+        { type: "text", text: JSON.stringify(payload, null, 2) },
       ],
       isError: false,
     });
     const result = await getTestPlanTool(args, mockConfig, mockServer);
     expect(result.isError).toBe(false);
-    expect(result.content?.[0]?.text).toContain('TP-25');
-    expect(result.content?.[0]?.text).toContain('Total test cases across runs: 15');
+    expect(result.content?.[0]?.text).toContain("TP-25");
+    expect(result.content?.[0]?.text).toContain(
+      "Total test cases across runs: 15",
+    );
     expect(result.content?.[1]?.text).toBe(JSON.stringify(payload, null, 2));
   });
 
-  it('should handle errors', async () => {
-    (getTestPlan as Mock).mockRejectedValue(new Error('Not Found'));
+  it("should handle errors", async () => {
+    (getTestPlan as Mock).mockRejectedValue(new Error("Not Found"));
     const result = await getTestPlanTool(args, mockConfig, mockServer);
     expect(result.isError).toBe(true);
-    expect(result.content?.[0]?.text).toContain('Failed to fetch test plan: Not Found');
+    expect(result.content?.[0]?.text).toContain(
+      "Failed to fetch test plan: Not Found",
+    );
   });
 });
 
-describe('listSubTestPlansTool', () => {
+describe("listSubTestPlansTool", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   const args = {
-    project_identifier: 'PR-1',
-    parent_test_plan_identifier: 'TP-45',
+    project_identifier: "PR-1",
+    parent_test_plan_identifier: "TP-45",
   };
   const mockSubPlans = [
-    { identifier: 'STP-194', name: 'Sprint 1', active_state: 'active', parent_plan_id: 'TP-45', tags: ['sprint'] },
-    { identifier: 'STP-195', name: 'Sprint 2', active_state: 'active', parent_plan_id: 'TP-45' },
+    {
+      identifier: "STP-194",
+      name: "Sprint 1",
+      active_state: "active",
+      parent_plan_id: "TP-45",
+      tags: ["sprint"],
+    },
+    {
+      identifier: "STP-195",
+      name: "Sprint 2",
+      active_state: "active",
+      parent_plan_id: "TP-45",
+    },
   ];
 
-  it('should return summary and raw JSON on success', async () => {
+  it("should return summary and raw JSON on success", async () => {
     (listSubTestPlans as Mock).mockResolvedValue({
       content: [
-        { type: 'text', text: 'Found 2 sub-test-plan(s) under TP-45 in project PR-1:\n\n• STP-194: Sprint 1 [active]' },
-        { type: 'text', text: JSON.stringify(mockSubPlans, null, 2) },
+        {
+          type: "text",
+          text: "Found 2 sub-test-plan(s) under TP-45 in project PR-1:\n\n• STP-194: Sprint 1 [active]",
+        },
+        { type: "text", text: JSON.stringify(mockSubPlans, null, 2) },
       ],
       isError: false,
     });
     const result = await listSubTestPlansTool(args, mockConfig, mockServer);
     expect(result.isError).toBe(false);
-    expect(result.content?.[0]?.text).toContain('Found 2 sub-test-plan(s)');
-    expect(result.content?.[1]?.text).toBe(JSON.stringify(mockSubPlans, null, 2));
+    expect(result.content?.[0]?.text).toContain("Found 2 sub-test-plan(s)");
+    expect(result.content?.[1]?.text).toBe(
+      JSON.stringify(mockSubPlans, null, 2),
+    );
   });
 
-  it('should handle errors', async () => {
-    (listSubTestPlans as Mock).mockRejectedValue(new Error('Network Error'));
+  it("should handle errors", async () => {
+    (listSubTestPlans as Mock).mockRejectedValue(new Error("Network Error"));
     const result = await listSubTestPlansTool(args, mockConfig, mockServer);
     expect(result.isError).toBe(true);
-    expect(result.content?.[0]?.text).toContain('Failed to list sub-test-plans: Network Error');
+    expect(result.content?.[0]?.text).toContain(
+      "Failed to list sub-test-plans: Network Error",
+    );
   });
 });
 
-describe('getSubTestPlanTool', () => {
+describe("getSubTestPlanTool", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   const args = {
-    project_identifier: 'PR-1',
-    parent_test_plan_identifier: 'TP-45',
-    sub_test_plan_identifier: 'STP-194',
+    project_identifier: "PR-1",
+    parent_test_plan_identifier: "TP-45",
+    sub_test_plan_identifier: "STP-194",
   };
 
-  it('should return sub-plan details, linked runs and status summary on success', async () => {
+  it("should return sub-plan details, linked runs and status summary on success", async () => {
     const payload = {
       sub_test_plan: {
-        identifier: 'STP-194',
-        name: 'Sprint 1',
-        active_state: 'active',
-        parent_plan_id: 'TP-45',
-        tags: ['sprint', 'regression'],
+        identifier: "STP-194",
+        name: "Sprint 1",
+        active_state: "active",
+        parent_plan_id: "TP-45",
+        tags: ["sprint", "regression"],
       },
       linked_test_runs: [
-        { identifier: 'TR-1', name: 'Run One', run_state: 'new_run', test_cases_count: 8 },
+        {
+          identifier: "TR-1",
+          name: "Run One",
+          run_state: "new_run",
+          test_cases_count: 8,
+        },
       ],
       status_summary: { new_run: 1 },
       total_test_cases: 8,
     };
     (getSubTestPlan as Mock).mockResolvedValue({
       content: [
-        { type: 'text', text: 'Sub-Test-Plan STP-194: Sprint 1\nParent plan: TP-45\nStatus: active\nTotal test cases across runs: 8' },
-        { type: 'text', text: JSON.stringify(payload, null, 2) },
+        {
+          type: "text",
+          text: "Sub-Test-Plan STP-194: Sprint 1\nParent plan: TP-45\nStatus: active\nTotal test cases across runs: 8",
+        },
+        { type: "text", text: JSON.stringify(payload, null, 2) },
       ],
       isError: false,
     });
     const result = await getSubTestPlanTool(args, mockConfig, mockServer);
     expect(result.isError).toBe(false);
-    expect(result.content?.[0]?.text).toContain('STP-194');
-    expect(result.content?.[0]?.text).toContain('Parent plan: TP-45');
+    expect(result.content?.[0]?.text).toContain("STP-194");
+    expect(result.content?.[0]?.text).toContain("Parent plan: TP-45");
     expect(result.content?.[1]?.text).toBe(JSON.stringify(payload, null, 2));
   });
 
-  it('should handle errors', async () => {
-    (getSubTestPlan as Mock).mockRejectedValue(new Error('Not Found'));
+  it("should handle errors", async () => {
+    (getSubTestPlan as Mock).mockRejectedValue(new Error("Not Found"));
     const result = await getSubTestPlanTool(args, mockConfig, mockServer);
     expect(result.isError).toBe(true);
-    expect(result.content?.[0]?.text).toContain('Failed to fetch sub-test-plan: Not Found');
+    expect(result.content?.[0]?.text).toContain(
+      "Failed to fetch sub-test-plan: Not Found",
+    );
   });
 });
 
@@ -1006,16 +1318,16 @@ describe('getSubTestPlanTool', () => {
 // Uses vi.importActual to reach the real util (the top-level vi.mock above
 // otherwise replaces it). vi.mock is statically hoisted, so a top-level import
 // is unusable — importActual inside beforeAll is the only viable path.
-describe('getSubTestPlan util — fail-soft enrichment', () => {
-  let getSubTestPlanReal: typeof import('../../src/tools/testmanagement-utils/get-sub-testplan').getSubTestPlan;
-  let apiClientMock: typeof import('../../src/lib/apiClient').apiClient;
+describe("getSubTestPlan util — fail-soft enrichment", () => {
+  let getSubTestPlanReal: typeof import("../../src/tools/testmanagement-utils/get-sub-testplan").getSubTestPlan;
+  let apiClientMock: typeof import("../../src/lib/apiClient").apiClient;
 
   beforeAll(async () => {
-    const actual = await vi.importActual<typeof import('../../src/tools/testmanagement-utils/get-sub-testplan')>(
-      '../../src/tools/testmanagement-utils/get-sub-testplan'
-    );
+    const actual = await vi.importActual<
+      typeof import("../../src/tools/testmanagement-utils/get-sub-testplan")
+    >("../../src/tools/testmanagement-utils/get-sub-testplan");
     getSubTestPlanReal = actual.getSubTestPlan;
-    const apiClientModule = await import('../../src/lib/apiClient');
+    const apiClientModule = await import("../../src/lib/apiClient");
     apiClientMock = apiClientModule.apiClient;
   });
 
@@ -1024,10 +1336,10 @@ describe('getSubTestPlan util — fail-soft enrichment', () => {
   });
 
   const baseSubPlan = {
-    identifier: 'STP-194',
-    name: 'Sprint 1',
-    active_state: 'active',
-    parent_plan_id: 'TP-45',
+    identifier: "STP-194",
+    name: "Sprint 1",
+    active_state: "active",
+    parent_plan_id: "TP-45",
     test_runs_count: { active: 0, closed: 0 },
     tags: [],
   };
@@ -1035,150 +1347,169 @@ describe('getSubTestPlan util — fail-soft enrichment', () => {
   it('returns sub-plan metadata + "No test runs linked" when enrichment rejects (does NOT flip isError); calls the link URL verbatim', async () => {
     const subPlan = {
       ...baseSubPlan,
-      links: { test_runs: '/api/v2/projects/PR-1/test-plans/STP-194/test-runs' },
+      links: {
+        test_runs: "/api/v2/projects/PR-1/test-plans/STP-194/test-runs",
+      },
     };
     (apiClientMock.get as Mock)
-      .mockResolvedValueOnce({ data: { success: true, sub_test_plan: subPlan } })
-      .mockRejectedValueOnce(new Error('Network Error'));
+      .mockResolvedValueOnce({
+        data: { success: true, sub_test_plan: subPlan },
+      })
+      .mockRejectedValueOnce(new Error("Network Error"));
 
     const result = await getSubTestPlanReal(
       {
-        project_identifier: 'PR-1',
-        parent_test_plan_identifier: 'TP-45',
-        sub_test_plan_identifier: 'STP-194',
+        project_identifier: "PR-1",
+        parent_test_plan_identifier: "TP-45",
+        sub_test_plan_identifier: "STP-194",
       },
       mockConfig as any,
     );
 
     expect(result.isError).toBeFalsy();
-    expect(result.content?.[0]?.text).toContain('STP-194');
-    expect(result.content?.[0]?.text).toContain('Parent plan: TP-45');
-    expect(result.content?.[0]?.text).toContain('No test runs linked to this sub-plan');
+    expect(result.content?.[0]?.text).toContain("STP-194");
+    expect(result.content?.[0]?.text).toContain("Parent plan: TP-45");
+    expect(result.content?.[0]?.text).toContain(
+      "No test runs linked to this sub-plan",
+    );
 
     // Verify the enrichment call hit the link URL verbatim (joined under tmBaseUrl),
     // not a re-constructed path. This protects the URL composition contract.
     const enrichmentCall = (apiClientMock.get as Mock).mock.calls[1][0];
     expect(enrichmentCall.url).toBe(
-      'https://test-management.browserstack.com/api/v2/projects/PR-1/test-plans/STP-194/test-runs',
+      "https://test-management.browserstack.com/api/v2/projects/PR-1/test-plans/STP-194/test-runs",
     );
   });
 
   it('returns sub-plan metadata + "No test runs linked" when enrichment returns success:false (non-throwing degradation)', async () => {
     const subPlan = {
       ...baseSubPlan,
-      links: { test_runs: '/api/v2/projects/PR-1/test-plans/STP-194/test-runs' },
+      links: {
+        test_runs: "/api/v2/projects/PR-1/test-plans/STP-194/test-runs",
+      },
     };
     (apiClientMock.get as Mock)
-      .mockResolvedValueOnce({ data: { success: true, sub_test_plan: subPlan } })
-      .mockResolvedValueOnce({ data: { success: false, error: 'rate limited' } });
+      .mockResolvedValueOnce({
+        data: { success: true, sub_test_plan: subPlan },
+      })
+      .mockResolvedValueOnce({
+        data: { success: false, error: "rate limited" },
+      });
 
     const result = await getSubTestPlanReal(
       {
-        project_identifier: 'PR-1',
-        parent_test_plan_identifier: 'TP-45',
-        sub_test_plan_identifier: 'STP-194',
+        project_identifier: "PR-1",
+        parent_test_plan_identifier: "TP-45",
+        sub_test_plan_identifier: "STP-194",
       },
       mockConfig as any,
     );
 
     expect(result.isError).toBeFalsy();
-    expect(result.content?.[0]?.text).toContain('STP-194');
-    expect(result.content?.[0]?.text).toContain('No test runs linked to this sub-plan');
+    expect(result.content?.[0]?.text).toContain("STP-194");
+    expect(result.content?.[0]?.text).toContain(
+      "No test runs linked to this sub-plan",
+    );
   });
 
-  it('falls back to constructed URL when links.test_runs is an absolute URL with a mismatched host (SSRF guard)', async () => {
+  it("falls back to constructed URL when links.test_runs is an absolute URL with a mismatched host (SSRF guard)", async () => {
     const subPlan = {
       ...baseSubPlan,
-      links: { test_runs: 'http://169.254.169.254/latest/meta-data/' },
+      links: { test_runs: "http://169.254.169.254/latest/meta-data/" },
     };
     (apiClientMock.get as Mock)
-      .mockResolvedValueOnce({ data: { success: true, sub_test_plan: subPlan } })
-      .mockRejectedValueOnce(new Error('Network Error'));
+      .mockResolvedValueOnce({
+        data: { success: true, sub_test_plan: subPlan },
+      })
+      .mockRejectedValueOnce(new Error("Network Error"));
 
     await getSubTestPlanReal(
       {
-        project_identifier: 'PR-1',
-        parent_test_plan_identifier: 'TP-45',
-        sub_test_plan_identifier: 'STP-194',
+        project_identifier: "PR-1",
+        parent_test_plan_identifier: "TP-45",
+        sub_test_plan_identifier: "STP-194",
       },
       mockConfig as any,
     );
 
     // The off-host link must NOT be called; the constructed fallback must be used instead.
     const enrichmentCall = (apiClientMock.get as Mock).mock.calls[1][0];
-    expect(enrichmentCall.url).not.toContain('169.254.169.254');
+    expect(enrichmentCall.url).not.toContain("169.254.169.254");
     expect(enrichmentCall.url).toBe(
-      'https://test-management.browserstack.com/api/v2/projects/PR-1/test-plans/STP-194/test-runs',
+      "https://test-management.browserstack.com/api/v2/projects/PR-1/test-plans/STP-194/test-runs",
     );
   });
 
-  it('returns isError on primary fetch failure', async () => {
+  it("returns isError on primary fetch failure", async () => {
     (apiClientMock.get as Mock).mockResolvedValueOnce({
-      data: { success: false, message: 'Sub-plan not found' },
+      data: { success: false, message: "Sub-plan not found" },
     });
 
     const result = await getSubTestPlanReal(
       {
-        project_identifier: 'PR-1',
-        parent_test_plan_identifier: 'TP-45',
-        sub_test_plan_identifier: 'STP-999',
+        project_identifier: "PR-1",
+        parent_test_plan_identifier: "TP-45",
+        sub_test_plan_identifier: "STP-999",
       },
       mockConfig as any,
     );
 
     expect(result.isError).toBe(true);
-    expect(result.content?.[0]?.text).toContain('Failed to fetch sub-test-plan');
+    expect(result.content?.[0]?.text).toContain(
+      "Failed to fetch sub-test-plan",
+    );
   });
 });
 
 // Real function via importActual (the module is mocked at the top).
-describe('normalizeDefaultFieldValue', () => {
-  let normalize: typeof import('../../src/tools/testmanagement-utils/TCG-utils/api').normalizeDefaultFieldValue;
+describe("normalizeDefaultFieldValue", () => {
+  let normalize: typeof import("../../src/tools/testmanagement-utils/TCG-utils/api").normalizeDefaultFieldValue;
 
   beforeAll(async () => {
     const actual = await vi.importActual<
-      typeof import('../../src/tools/testmanagement-utils/TCG-utils/api')
-    >('../../src/tools/testmanagement-utils/TCG-utils/api');
+      typeof import("../../src/tools/testmanagement-utils/TCG-utils/api")
+    >("../../src/tools/testmanagement-utils/TCG-utils/api");
     normalize = actual.normalizeDefaultFieldValue;
   });
 
   const values = [
-    { name: 'Critical', internal_name: 'critical', value: 1 },
-    { name: 'Medium', internal_name: 'medium', value: 2 },
+    { name: "Critical", internal_name: "critical", value: 1 },
+    { name: "Medium", internal_name: "medium", value: 2 },
   ];
 
-  it('resolves a lowercase internal name to the Title-Case display name', () => {
-    expect(normalize(values, 'critical', 'name')).toBe('Critical');
+  it("resolves a lowercase internal name to the Title-Case display name", () => {
+    expect(normalize(values, "critical", "name")).toBe("Critical");
   });
 
-  it('matches case-insensitively regardless of input casing', () => {
-    expect(normalize(values, 'CRITICAL', 'name')).toBe('Critical');
-    expect(normalize(values, '  Critical  ', 'name')).toBe('Critical');
+  it("matches case-insensitively regardless of input casing", () => {
+    expect(normalize(values, "CRITICAL", "name")).toBe("Critical");
+    expect(normalize(values, "  Critical  ", "name")).toBe("Critical");
   });
 
-  it('resolves a display name to the internal name when emit is internal_name', () => {
-    expect(normalize(values, 'Critical', 'internal_name')).toBe('critical');
+  it("resolves a display name to the internal name when emit is internal_name", () => {
+    expect(normalize(values, "Critical", "internal_name")).toBe("critical");
   });
 
-  it('returns undefined when no option matches (caller passes raw value through)', () => {
-    expect(normalize(values, 'urgent', 'name')).toBeUndefined();
-    expect(normalize([], 'critical', 'name')).toBeUndefined();
+  it("returns undefined when no option matches (caller passes raw value through)", () => {
+    expect(normalize(values, "urgent", "name")).toBeUndefined();
+    expect(normalize([], "critical", "name")).toBeUndefined();
   });
 });
 
 // Real createTestCase via importActual; collaborators are mocked at module scope.
-describe('createTestCase — priority normalization', () => {
-  let createTestCaseReal: typeof import('../../src/tools/testmanagement-utils/create-testcase').createTestCase;
-  let apiClientMock: typeof import('../../src/lib/apiClient').apiClient;
+describe("createTestCase — priority normalization", () => {
+  let createTestCaseReal: typeof import("../../src/tools/testmanagement-utils/create-testcase").createTestCase;
+  let apiClientMock: typeof import("../../src/lib/apiClient").apiClient;
   let fetchFormFieldsMock: Mock;
 
   beforeAll(async () => {
     const actual = await vi.importActual<
-      typeof import('../../src/tools/testmanagement-utils/create-testcase')
-    >('../../src/tools/testmanagement-utils/create-testcase');
+      typeof import("../../src/tools/testmanagement-utils/create-testcase")
+    >("../../src/tools/testmanagement-utils/create-testcase");
     createTestCaseReal = actual.createTestCase;
-    apiClientMock = (await import('../../src/lib/apiClient')).apiClient;
-    const api = await import('../../src/tools/testmanagement-utils/TCG-utils/api');
+    apiClientMock = (await import("../../src/lib/apiClient")).apiClient;
+    const api =
+      await import("../../src/tools/testmanagement-utils/TCG-utils/api");
     fetchFormFieldsMock = api.fetchFormFields as unknown as Mock;
   });
 
@@ -1188,8 +1519,8 @@ describe('createTestCase — priority normalization', () => {
 
   // Priority options as returned by fetchFormFields.
   const priorityValues = [
-    { name: 'Critical', internal_name: 'critical', value: 1 },
-    { name: 'Medium', internal_name: 'medium', value: 2 },
+    { name: "Critical", internal_name: "critical", value: 1 },
+    { name: "Medium", internal_name: "medium", value: 2 },
   ];
   const formFields = {
     default_fields: { priority: { values: priorityValues } },
@@ -1200,9 +1531,9 @@ describe('createTestCase — priority normalization', () => {
       data: {
         success: true,
         test_case: {
-          identifier: 'TC-1',
-          title: 'Sample',
-          priority: 'Critical',
+          identifier: "TC-1",
+          title: "Sample",
+          priority: "Critical",
           folder_id: 1,
         },
       },
@@ -1210,18 +1541,18 @@ describe('createTestCase — priority normalization', () => {
   };
 
   const baseArgs = {
-    project_identifier: 'PR-1',
-    folder_id: 'F-1',
-    name: 'Sample',
-    test_case_steps: [{ step: 'a', result: 'b' }],
+    project_identifier: "PR-1",
+    folder_id: "F-1",
+    name: "Sample",
+    test_case_steps: [{ step: "a", result: "b" }],
   };
 
-  it('looks up the project form fields and sends the normalized priority in the request body', async () => {
+  it("looks up the project form fields and sends the normalized priority in the request body", async () => {
     fetchFormFieldsMock.mockResolvedValue(formFields);
     (apiClientMock.post as Mock).mockResolvedValueOnce(createSuccess);
 
     const result = await createTestCaseReal(
-      { ...baseArgs, priority: 'critical' },
+      { ...baseArgs, priority: "critical" },
       mockConfig as any,
     );
 
@@ -1229,38 +1560,38 @@ describe('createTestCase — priority normalization', () => {
     // Real normalizeDefaultFields maps the internal name 'critical' to the
     // display name 'Critical' the create endpoint requires.
     const body = (apiClientMock.post as Mock).mock.calls[0][0].body;
-    expect(body.test_case.priority).toBe('Critical');
+    expect(body.test_case.priority).toBe("Critical");
   });
 
-  it('omits priority from the request body when not provided (preserves project default)', async () => {
+  it("omits priority from the request body when not provided (preserves project default)", async () => {
     (apiClientMock.post as Mock).mockResolvedValueOnce(createSuccess);
 
     await createTestCaseReal({ ...baseArgs }, mockConfig as any);
 
     expect(fetchFormFieldsMock).not.toHaveBeenCalled();
     const body = (apiClientMock.post as Mock).mock.calls[0][0].body;
-    expect(body.test_case).not.toHaveProperty('priority');
+    expect(body.test_case).not.toHaveProperty("priority");
   });
 
-  it('passes the raw priority through when the form-fields lookup fails (graceful fallback)', async () => {
-    fetchFormFieldsMock.mockRejectedValue(new Error('Network Error'));
+  it("passes the raw priority through when the form-fields lookup fails (graceful fallback)", async () => {
+    fetchFormFieldsMock.mockRejectedValue(new Error("Network Error"));
     (apiClientMock.post as Mock).mockResolvedValueOnce(createSuccess);
 
     await createTestCaseReal(
-      { ...baseArgs, priority: 'critical' },
+      { ...baseArgs, priority: "critical" },
       mockConfig as any,
     );
 
     const body = (apiClientMock.post as Mock).mock.calls[0][0].body;
-    expect(body.test_case.priority).toBe('critical');
+    expect(body.test_case.priority).toBe("critical");
   });
 
   const caseTypeValues = [
-    { name: 'Functional', internal_name: 'functional', value: 1 },
-    { name: 'Regression', internal_name: 'regression', value: 2 },
+    { name: "Functional", internal_name: "functional", value: 1 },
+    { name: "Regression", internal_name: "regression", value: 2 },
   ];
 
-  it('looks up the project form fields and sends the normalized case_type in the request body', async () => {
+  it("looks up the project form fields and sends the normalized case_type in the request body", async () => {
     fetchFormFieldsMock.mockResolvedValue({
       default_fields: { case_type: { values: caseTypeValues } },
       custom_fields: {},
@@ -1268,39 +1599,39 @@ describe('createTestCase — priority normalization', () => {
     (apiClientMock.post as Mock).mockResolvedValueOnce(createSuccess);
 
     const result = await createTestCaseReal(
-      { ...baseArgs, case_type: 'functional' },
+      { ...baseArgs, case_type: "functional" },
       mockConfig as any,
     );
 
     expect(result.isError).toBeFalsy();
     // Real normalizeDefaultFields maps 'functional' to the display name 'Functional'.
     const body = (apiClientMock.post as Mock).mock.calls[0][0].body;
-    expect(body.test_case.case_type).toBe('Functional');
+    expect(body.test_case.case_type).toBe("Functional");
   });
 
-  it('omits case_type from the request body when not provided (preserves project default)', async () => {
+  it("omits case_type from the request body when not provided (preserves project default)", async () => {
     (apiClientMock.post as Mock).mockResolvedValueOnce(createSuccess);
 
     await createTestCaseReal({ ...baseArgs }, mockConfig as any);
 
     const body = (apiClientMock.post as Mock).mock.calls[0][0].body;
-    expect(body.test_case).not.toHaveProperty('case_type');
+    expect(body.test_case).not.toHaveProperty("case_type");
   });
 
-  it('passes the raw case_type through when the form-fields lookup fails (graceful fallback)', async () => {
-    fetchFormFieldsMock.mockRejectedValue(new Error('Network Error'));
+  it("passes the raw case_type through when the form-fields lookup fails (graceful fallback)", async () => {
+    fetchFormFieldsMock.mockRejectedValue(new Error("Network Error"));
     (apiClientMock.post as Mock).mockResolvedValueOnce(createSuccess);
 
     await createTestCaseReal(
-      { ...baseArgs, case_type: 'functional' },
+      { ...baseArgs, case_type: "functional" },
       mockConfig as any,
     );
 
     const body = (apiClientMock.post as Mock).mock.calls[0][0].body;
-    expect(body.test_case.case_type).toBe('functional');
+    expect(body.test_case.case_type).toBe("functional");
   });
 
-  it('normalizes both priority and case_type in a single form-fields lookup', async () => {
+  it("normalizes both priority and case_type in a single form-fields lookup", async () => {
     fetchFormFieldsMock.mockResolvedValue({
       default_fields: {
         priority: { values: priorityValues },
@@ -1311,14 +1642,14 @@ describe('createTestCase — priority normalization', () => {
     (apiClientMock.post as Mock).mockResolvedValueOnce(createSuccess);
 
     await createTestCaseReal(
-      { ...baseArgs, priority: 'critical', case_type: 'functional' },
+      { ...baseArgs, priority: "critical", case_type: "functional" },
       mockConfig as any,
     );
 
     expect(fetchFormFieldsMock).toHaveBeenCalledTimes(1);
     const body = (apiClientMock.post as Mock).mock.calls[0][0].body;
-    expect(body.test_case.priority).toBe('Critical');
-    expect(body.test_case.case_type).toBe('Functional');
+    expect(body.test_case.priority).toBe("Critical");
+    expect(body.test_case.case_type).toBe("Functional");
   });
 });
 
@@ -1326,16 +1657,16 @@ describe('createTestCase — priority normalization', () => {
 // Behaviour verified against the live TM v2 API: the create endpoint keys on
 // the template's internal slug and silently falls back to the default for
 // unrecognized values; multi-select custom fields accept arrays keyed by name.
-describe('createTestCase — template & multi-select custom_fields', () => {
-  let createTestCaseReal: typeof import('../../src/tools/testmanagement-utils/create-testcase').createTestCase;
-  let apiClientMock: typeof import('../../src/lib/apiClient').apiClient;
+describe("createTestCase — template & multi-select custom_fields", () => {
+  let createTestCaseReal: typeof import("../../src/tools/testmanagement-utils/create-testcase").createTestCase;
+  let apiClientMock: typeof import("../../src/lib/apiClient").apiClient;
 
   beforeAll(async () => {
     const actual = await vi.importActual<
-      typeof import('../../src/tools/testmanagement-utils/create-testcase')
-    >('../../src/tools/testmanagement-utils/create-testcase');
+      typeof import("../../src/tools/testmanagement-utils/create-testcase")
+    >("../../src/tools/testmanagement-utils/create-testcase");
     createTestCaseReal = actual.createTestCase;
-    apiClientMock = (await import('../../src/lib/apiClient')).apiClient;
+    apiClientMock = (await import("../../src/lib/apiClient")).apiClient;
   });
 
   beforeEach(() => {
@@ -1343,58 +1674,63 @@ describe('createTestCase — template & multi-select custom_fields', () => {
   });
 
   const baseArgs = {
-    project_identifier: 'PR-1',
-    folder_id: 'F-1',
-    name: 'Sample',
-    test_case_steps: [{ step: 'a', result: 'b' }],
+    project_identifier: "PR-1",
+    folder_id: "F-1",
+    name: "Sample",
+    test_case_steps: [{ step: "a", result: "b" }],
   };
 
   const resp = (template: string) => ({
     data: {
       data: {
         success: true,
-        test_case: { identifier: 'TC-1', title: 'Sample', folder_id: 1, template },
+        test_case: {
+          identifier: "TC-1",
+          title: "Sample",
+          folder_id: 1,
+          template,
+        },
       },
     },
   });
 
-  it('passes the template slug through to the request body and does not warn when applied', async () => {
-    (apiClientMock.post as Mock).mockResolvedValueOnce(resp('test_case_bdd'));
+  it("passes the template slug through to the request body and does not warn when applied", async () => {
+    (apiClientMock.post as Mock).mockResolvedValueOnce(resp("test_case_bdd"));
 
     const result = await createTestCaseReal(
-      { ...baseArgs, template: 'test_case_bdd' },
+      { ...baseArgs, template: "test_case_bdd" },
       mockConfig as any,
     );
 
     const body = (apiClientMock.post as Mock).mock.calls[0][0].body;
-    expect(body.test_case.template).toBe('test_case_bdd');
-    const text = (result.content ?? []).map((c: any) => c.text).join('\n');
-    expect(text).not.toContain('was not applied');
+    expect(body.test_case.template).toBe("test_case_bdd");
+    const text = (result.content ?? []).map((c: any) => c.text).join("\n");
+    expect(text).not.toContain("was not applied");
   });
 
-  it('warns when the API silently falls back to a different template', async () => {
-    (apiClientMock.post as Mock).mockResolvedValueOnce(resp('test_case_steps'));
+  it("warns when the API silently falls back to a different template", async () => {
+    (apiClientMock.post as Mock).mockResolvedValueOnce(resp("test_case_steps"));
 
     const result = await createTestCaseReal(
-      { ...baseArgs, template: 'test_case_sec' },
+      { ...baseArgs, template: "test_case_sec" },
       mockConfig as any,
     );
 
-    const text = (result.content ?? []).map((c: any) => c.text).join('\n');
-    expect(text).toContain('was not applied');
-    expect(text).toContain('test_case_sec');
+    const text = (result.content ?? []).map((c: any) => c.text).join("\n");
+    expect(text).toContain("was not applied");
+    expect(text).toContain("test_case_sec");
   });
 
-  it('passes array (multi-select) custom_fields through to the request body', async () => {
-    (apiClientMock.post as Mock).mockResolvedValueOnce(resp('test_case_steps'));
+  it("passes array (multi-select) custom_fields through to the request body", async () => {
+    (apiClientMock.post as Mock).mockResolvedValueOnce(resp("test_case_steps"));
 
     await createTestCaseReal(
-      { ...baseArgs, custom_fields: { aaas: ['m40', 'm48'] } },
+      { ...baseArgs, custom_fields: { aaas: ["m40", "m48"] } },
       mockConfig as any,
     );
 
     const body = (apiClientMock.post as Mock).mock.calls[0][0].body;
-    expect(body.test_case.custom_fields).toEqual({ aaas: ['m40', 'm48'] });
+    expect(body.test_case.custom_fields).toEqual({ aaas: ["m40", "m48"] });
   });
 
   // A custom template can only be selected by its numeric template_id; the
@@ -1404,17 +1740,17 @@ describe('createTestCase — template & multi-select custom_fields', () => {
       data: {
         success: true,
         test_case: {
-          identifier: 'TC-1',
-          title: 'Sample',
+          identifier: "TC-1",
+          title: "Sample",
           folder_id: 1,
-          template: 'test_case_steps',
+          template: "test_case_steps",
           template_id,
         },
       },
     },
   });
 
-  it('passes template_id through to the request body and does not warn when applied', async () => {
+  it("passes template_id through to the request body and does not warn when applied", async () => {
     (apiClientMock.post as Mock).mockResolvedValueOnce(respWithId(4321));
 
     const result = await createTestCaseReal(
@@ -1424,11 +1760,11 @@ describe('createTestCase — template & multi-select custom_fields', () => {
 
     const body = (apiClientMock.post as Mock).mock.calls[0][0].body;
     expect(body.test_case.template_id).toBe(4321);
-    const text = (result.content ?? []).map((c: any) => c.text).join('\n');
-    expect(text).not.toContain('was not applied');
+    const text = (result.content ?? []).map((c: any) => c.text).join("\n");
+    expect(text).not.toContain("was not applied");
   });
 
-  it('warns when the API applies a different template_id than requested', async () => {
+  it("warns when the API applies a different template_id than requested", async () => {
     (apiClientMock.post as Mock).mockResolvedValueOnce(respWithId(1));
 
     const result = await createTestCaseReal(
@@ -1436,29 +1772,29 @@ describe('createTestCase — template & multi-select custom_fields', () => {
       mockConfig as any,
     );
 
-    const text = (result.content ?? []).map((c: any) => c.text).join('\n');
-    expect(text).toContain('template_id 4321 was not applied');
-    expect(text).toContain('template_id 1');
+    const text = (result.content ?? []).map((c: any) => c.text).join("\n");
+    expect(text).toContain("template_id 4321 was not applied");
+    expect(text).toContain("template_id 1");
   });
 
-  it('does not emit the slug warning when template_id is supplied (id takes precedence)', async () => {
+  it("does not emit the slug warning when template_id is supplied (id takes precedence)", async () => {
     (apiClientMock.post as Mock).mockResolvedValueOnce(respWithId(4321));
 
     const result = await createTestCaseReal(
-      { ...baseArgs, template: 'test_case_sec', template_id: 4321 },
+      { ...baseArgs, template: "test_case_sec", template_id: 4321 },
       mockConfig as any,
     );
 
-    const text = (result.content ?? []).map((c: any) => c.text).join('\n');
-    expect(text).not.toContain('The \'template\' field accepts only');
+    const text = (result.content ?? []).map((c: any) => c.text).join("\n");
+    expect(text).not.toContain("The 'template' field accepts only");
   });
 
-  it('reads the case back and warns when template_id is omitted from the create response but not applied', async () => {
+  it("reads the case back and warns when template_id is omitted from the create response but not applied", async () => {
     // Real API: create response carries `template` (step_type) but no template_id.
-    (apiClientMock.post as Mock).mockResolvedValueOnce(resp('test_case_steps'));
+    (apiClientMock.post as Mock).mockResolvedValueOnce(resp("test_case_steps"));
     // Read-back via v1 search shows the default (2) was applied, not 656127.
     (apiClientMock.get as Mock).mockResolvedValueOnce({
-      data: { test_cases: [{ identifier: 'TC-1', template_id: 2 }] },
+      data: { test_cases: [{ identifier: "TC-1", template_id: 2 }] },
     });
 
     const result = await createTestCaseReal(
@@ -1467,28 +1803,28 @@ describe('createTestCase — template & multi-select custom_fields', () => {
     );
 
     const getUrl = (apiClientMock.get as Mock).mock.calls[0][0].url;
-    expect(getUrl).toContain('/test-cases/search');
-    const text = (result.content ?? []).map((c: any) => c.text).join('\n');
-    expect(text).toContain('template_id 656127 was not applied');
-    expect(text).toContain('template_id 2');
+    expect(getUrl).toContain("/test-cases/search");
+    const text = (result.content ?? []).map((c: any) => c.text).join("\n");
+    expect(text).toContain("template_id 656127 was not applied");
+    expect(text).toContain("template_id 2");
   });
 
   // template_id is honoured only by the v1 create endpoint (v2 strips it), so a
   // template_id request must route to /api/v1/.../test-cases with API-TOKEN auth
   // and the folder carried in the body.
-  it('routes to the v1 create endpoint with API-TOKEN auth when template_id is set', async () => {
+  it("routes to the v1 create endpoint with API-TOKEN auth when template_id is set", async () => {
     (apiClientMock.post as Mock).mockResolvedValueOnce(respWithId(656127));
 
     await createTestCaseReal(
-      { ...baseArgs, folder_id: '50', template_id: 656127 },
+      { ...baseArgs, folder_id: "50", template_id: 656127 },
       mockConfig as any,
     );
 
     const call = (apiClientMock.post as Mock).mock.calls[0][0];
-    expect(call.url).toContain('/api/v1/projects/');
-    expect(call.url).toContain('/test-cases');
-    expect(call.url).not.toContain('/folders/'); // folder goes in the body for v1
-    expect(call.headers['API-TOKEN']).toBe('fake-user:fake-key');
+    expect(call.url).toContain("/api/v1/projects/");
+    expect(call.url).toContain("/test-cases");
+    expect(call.url).not.toContain("/folders/"); // folder goes in the body for v1
+    expect(call.headers["API-TOKEN"]).toBe("fake-user:fake-key");
     expect(call.headers.Authorization).toBeUndefined();
     expect(call.body.folder_id).toBe(50);
     expect(call.body.test_case.test_case_folder_id).toBe(50);
@@ -1500,12 +1836,15 @@ describe('createTestCase — template & multi-select custom_fields', () => {
 
   // case_type must survive into the v1 test_case body (spread from
   // testCaseParams), normalized to the display name the endpoint accepts.
-  it('carries the normalized case_type into the v1 body when template_id is set', async () => {
-    const api = await import('../../src/tools/testmanagement-utils/TCG-utils/api');
+  it("carries the normalized case_type into the v1 body when template_id is set", async () => {
+    const api =
+      await import("../../src/tools/testmanagement-utils/TCG-utils/api");
     (api.fetchFormFields as Mock).mockResolvedValue({
       default_fields: {
         case_type: {
-          values: [{ name: 'Functional', internal_name: 'functional', value: 1 }],
+          values: [
+            { name: "Functional", internal_name: "functional", value: 1 },
+          ],
         },
       },
       custom_fields: [],
@@ -1513,27 +1852,28 @@ describe('createTestCase — template & multi-select custom_fields', () => {
     (apiClientMock.post as Mock).mockResolvedValueOnce(respWithId(656127));
 
     await createTestCaseReal(
-      { ...baseArgs, template_id: 656127, case_type: 'functional' },
+      { ...baseArgs, template_id: 656127, case_type: "functional" },
       mockConfig as any,
     );
 
     const call = (apiClientMock.post as Mock).mock.calls[0][0];
-    expect(call.url).toContain('/api/v1/projects/');
-    expect(call.body.test_case.case_type).toBe('Functional');
+    expect(call.url).toContain("/api/v1/projects/");
+    expect(call.body.test_case.case_type).toBe("Functional");
   });
 
-  it('translates custom_fields name→id and option value→id on the v1 path', async () => {
-    const api = await import('../../src/tools/testmanagement-utils/TCG-utils/api');
+  it("translates custom_fields name→id and option value→id on the v1 path", async () => {
+    const api =
+      await import("../../src/tools/testmanagement-utils/TCG-utils/api");
     (api.fetchFormFields as Mock).mockResolvedValueOnce({
       default_fields: {},
       custom_fields: [
         {
-          field_name: 'aaas',
+          field_name: "aaas",
           id: 194184,
-          field_type: 'field_multi_dropdown',
+          field_type: "field_multi_dropdown",
           option_values: [
-            { option_value: 'm40', id: 111 },
-            { option_value: 'm48', id: 222 },
+            { option_value: "m40", id: 111 },
+            { option_value: "m48", id: 222 },
           ],
         },
       ],
@@ -1543,9 +1883,9 @@ describe('createTestCase — template & multi-select custom_fields', () => {
     await createTestCaseReal(
       {
         ...baseArgs,
-        folder_id: '50',
+        folder_id: "50",
         template_id: 656127,
-        custom_fields: { aaas: ['m40', 'm48'] },
+        custom_fields: { aaas: ["m40", "m48"] },
       },
       mockConfig as any,
     );
@@ -1556,33 +1896,33 @@ describe('createTestCase — template & multi-select custom_fields', () => {
 });
 
 // Multi-select custom fields on the update (PATCH) path.
-describe('updateTestCase — multi-select custom_fields', () => {
-  let updateTestCaseReal: typeof import('../../src/tools/testmanagement-utils/update-testcase').updateTestCase;
-  let apiClientMock: typeof import('../../src/lib/apiClient').apiClient;
+describe("updateTestCase — multi-select custom_fields", () => {
+  let updateTestCaseReal: typeof import("../../src/tools/testmanagement-utils/update-testcase").updateTestCase;
+  let apiClientMock: typeof import("../../src/lib/apiClient").apiClient;
 
   beforeAll(async () => {
     const actual = await vi.importActual<
-      typeof import('../../src/tools/testmanagement-utils/update-testcase')
-    >('../../src/tools/testmanagement-utils/update-testcase');
+      typeof import("../../src/tools/testmanagement-utils/update-testcase")
+    >("../../src/tools/testmanagement-utils/update-testcase");
     updateTestCaseReal = actual.updateTestCase;
-    apiClientMock = (await import('../../src/lib/apiClient')).apiClient;
+    apiClientMock = (await import("../../src/lib/apiClient")).apiClient;
   });
 
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it('passes array (multi-select) custom_fields through to the PATCH body', async () => {
+  it("passes array (multi-select) custom_fields through to the PATCH body", async () => {
     (apiClientMock.patch as Mock).mockResolvedValueOnce({
       data: {
         data: {
           success: true,
           test_case: {
-            identifier: 'TC-1',
-            title: 'Sample',
-            case_type: 'functional',
-            priority: 'Medium',
-            status: 'active',
+            identifier: "TC-1",
+            title: "Sample",
+            case_type: "functional",
+            priority: "Medium",
+            status: "active",
             folder_id: 1,
           },
         },
@@ -1591,24 +1931,24 @@ describe('updateTestCase — multi-select custom_fields', () => {
 
     const result = await updateTestCaseReal(
       {
-        project_identifier: 'PR-1',
-        test_case_identifier: 'TC-1',
-        custom_fields: { aaas: ['m40', 'm48'] },
+        project_identifier: "PR-1",
+        test_case_identifier: "TC-1",
+        custom_fields: { aaas: ["m40", "m48"] },
       },
       mockConfig as any,
     );
 
     expect(result.isError).toBeFalsy();
     const body = (apiClientMock.patch as Mock).mock.calls[0][0].body;
-    expect(body.test_case.custom_fields).toEqual({ aaas: ['m40', 'm48'] });
+    expect(body.test_case.custom_fields).toEqual({ aaas: ["m40", "m48"] });
   });
 });
 
 // Error path of updateTestCase: the upstream message must reach the caller as text.
-describe('updateTestCase — upstream error messages', () => {
-  let updateTestCaseReal: typeof import('../../src/tools/testmanagement-utils/update-testcase').updateTestCase;
-  let apiClientMock: typeof import('../../src/lib/apiClient').apiClient;
-  let AxiosErrorCtor: typeof import('axios').AxiosError;
+describe("updateTestCase — upstream error messages", () => {
+  let updateTestCaseReal: typeof import("../../src/tools/testmanagement-utils/update-testcase").updateTestCase;
+  let apiClientMock: typeof import("../../src/lib/apiClient").apiClient;
+  let AxiosErrorCtor: typeof import("axios").AxiosError;
 
   const axiosError = (status: number, data: unknown) =>
     Object.assign(Object.create(AxiosErrorCtor.prototype), {
@@ -1618,48 +1958,59 @@ describe('updateTestCase — upstream error messages', () => {
 
   beforeAll(async () => {
     const actual = await vi.importActual<
-      typeof import('../../src/tools/testmanagement-utils/update-testcase')
-    >('../../src/tools/testmanagement-utils/update-testcase');
+      typeof import("../../src/tools/testmanagement-utils/update-testcase")
+    >("../../src/tools/testmanagement-utils/update-testcase");
     updateTestCaseReal = actual.updateTestCase;
-    apiClientMock = (await import('../../src/lib/apiClient')).apiClient;
-    AxiosErrorCtor = (await import('axios')).AxiosError;
+    apiClientMock = (await import("../../src/lib/apiClient")).apiClient;
+    AxiosErrorCtor = (await import("axios")).AxiosError;
   });
 
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  const args = { project_identifier: 'PR-1', test_case_identifier: 'TC-1', description: 'd' };
+  const args = {
+    project_identifier: "PR-1",
+    test_case_identifier: "TC-1",
+    description: "d",
+  };
 
-  it('surfaces a string error from the response body with the HTTP status', async () => {
+  it("surfaces a string error from the response body with the HTTP status", async () => {
     (apiClientMock.patch as Mock).mockRejectedValueOnce(
-      axiosError(422, { success: false, error: 'Priority is not valid for this project' }),
+      axiosError(422, {
+        success: false,
+        error: "Priority is not valid for this project",
+      }),
     );
 
     const result = await updateTestCaseReal(args, mockConfig as any);
 
     expect(result.isError).toBe(true);
     const text = (result.content[0] as any).text as string;
-    expect(text).toBe('Failed to update test case (HTTP 422): Priority is not valid for this project.');
-    expect(text).not.toContain('[object Object]');
+    expect(text).toBe(
+      "Failed to update test case (HTTP 422): Priority is not valid for this project.",
+    );
+    expect(text).not.toContain("[object Object]");
   });
 
-  it('serialises an object error body instead of printing [object Object]', async () => {
+  it("serialises an object error body instead of printing [object Object]", async () => {
     (apiClientMock.patch as Mock).mockRejectedValueOnce(
-      axiosError(400, { errors: { name: ['is too long'] } }),
+      axiosError(400, { errors: { name: ["is too long"] } }),
     );
 
     const result = await updateTestCaseReal(args, mockConfig as any);
 
     const text = (result.content[0] as any).text as string;
-    expect(text).toContain('(HTTP 400)');
+    expect(text).toContain("(HTTP 400)");
     expect(text).toContain('{"name":["is too long"]}');
-    expect(text).not.toContain('[object Object]');
+    expect(text).not.toContain("[object Object]");
   });
 
-  it('returns the whole body when it has no message, error or errors field', async () => {
+  it("returns the whole body when it has no message, error or errors field", async () => {
     (apiClientMock.patch as Mock).mockRejectedValueOnce(
-      axiosError(400, { detail: { hint: 'priority must be one of: low, medium, high' } }),
+      axiosError(400, {
+        detail: { hint: "priority must be one of: low, medium, high" },
+      }),
     );
 
     const result = await updateTestCaseReal(args, mockConfig as any);
@@ -1670,35 +2021,43 @@ describe('updateTestCase — upstream error messages', () => {
     );
   });
 
-  it('adds the credentials hint only on 401', async () => {
-    (apiClientMock.patch as Mock).mockRejectedValueOnce(axiosError(401, 'Unauthorized'));
+  it("adds the credentials hint only on 401", async () => {
+    (apiClientMock.patch as Mock).mockRejectedValueOnce(
+      axiosError(401, "Unauthorized"),
+    );
 
     const result = await updateTestCaseReal(args, mockConfig as any);
 
     const text = (result.content[0] as any).text as string;
-    expect(text).toBe('Failed to update test case (HTTP 401): Unauthorized. Check the BrowserStack credentials in use.');
+    expect(text).toBe(
+      "Failed to update test case (HTTP 401): Unauthorized. Check the BrowserStack credentials in use.",
+    );
   });
 
-  it('falls back to the error message when there is no response', async () => {
-    (apiClientMock.patch as Mock).mockRejectedValueOnce(new Error('read ECONNRESET'));
+  it("falls back to the error message when there is no response", async () => {
+    (apiClientMock.patch as Mock).mockRejectedValueOnce(
+      new Error("read ECONNRESET"),
+    );
 
     const result = await updateTestCaseReal(args, mockConfig as any);
 
-    expect((result.content[0] as any).text).toBe('Failed to update test case: read ECONNRESET.');
+    expect((result.content[0] as any).text).toBe(
+      "Failed to update test case: read ECONNRESET.",
+    );
   });
 });
 
 // listTestCaseTemplates resolves a template name to a template_id.
-describe('listTemplates', () => {
-  let listTemplatesReal: typeof import('../../src/tools/testmanagement-utils/list-templates').listTemplates;
-  let apiClientMock: typeof import('../../src/lib/apiClient').apiClient;
+describe("listTemplates", () => {
+  let listTemplatesReal: typeof import("../../src/tools/testmanagement-utils/list-templates").listTemplates;
+  let apiClientMock: typeof import("../../src/lib/apiClient").apiClient;
 
   beforeAll(async () => {
     const actual = await vi.importActual<
-      typeof import('../../src/tools/testmanagement-utils/list-templates')
-    >('../../src/tools/testmanagement-utils/list-templates');
+      typeof import("../../src/tools/testmanagement-utils/list-templates")
+    >("../../src/tools/testmanagement-utils/list-templates");
     listTemplatesReal = actual.listTemplates;
-    apiClientMock = (await import('../../src/lib/apiClient')).apiClient;
+    apiClientMock = (await import("../../src/lib/apiClient")).apiClient;
   });
 
   beforeEach(() => {
@@ -1709,43 +2068,57 @@ describe('listTemplates', () => {
     data: {
       success: true,
       templates: [
-        { id: 2, name: 'Test Case Steps', step_type: 'test_case_steps', is_system: true, is_default: true, enabled: true },
-        { id: 42, name: 'Test Case - SEC', step_type: 'test_case_steps', is_system: false, is_default: false, enabled: true },
+        {
+          id: 2,
+          name: "Test Case Steps",
+          step_type: "test_case_steps",
+          is_system: true,
+          is_default: true,
+          enabled: true,
+        },
+        {
+          id: 42,
+          name: "Test Case - SEC",
+          step_type: "test_case_steps",
+          is_system: false,
+          is_default: false,
+          enabled: true,
+        },
       ],
     },
   };
 
-  it('queries the admin-v2 templates endpoint with API-TOKEN auth and surfaces ids', async () => {
+  it("queries the admin-v2 templates endpoint with API-TOKEN auth and surfaces ids", async () => {
     (apiClientMock.get as Mock).mockResolvedValueOnce(templatesResp);
 
     const result = await listTemplatesReal({}, mockConfig as any);
 
     const call = (apiClientMock.get as Mock).mock.calls[0][0];
-    expect(call.url).toContain('/api/v1/admin-v2/settings/templates');
-    expect(call.url).toContain('entity_type=TestCase');
-    expect(call.headers['API-TOKEN']).toBe('fake-user:fake-key');
+    expect(call.url).toContain("/api/v1/admin-v2/settings/templates");
+    expect(call.url).toContain("entity_type=TestCase");
+    expect(call.headers["API-TOKEN"]).toBe("fake-user:fake-key");
 
-    const text = (result.content ?? []).map((c: any) => c.text).join('\n');
-    expect(text).toContain('template_id=42');
-    expect(text).toContain('Test Case - SEC');
+    const text = (result.content ?? []).map((c: any) => c.text).join("\n");
+    expect(text).toContain("template_id=42");
+    expect(text).toContain("Test Case - SEC");
   });
 
-  it('filters by name client-side', async () => {
+  it("filters by name client-side", async () => {
     (apiClientMock.get as Mock).mockResolvedValueOnce(templatesResp);
 
-    const result = await listTemplatesReal({ name: 'SEC' }, mockConfig as any);
+    const result = await listTemplatesReal({ name: "SEC" }, mockConfig as any);
 
-    const text = (result.content ?? []).map((c: any) => c.text).join('\n');
-    expect(text).toContain('Test Case - SEC');
-    expect(text).not.toContain('[template_id=2]');
-    expect(text).toContain('Found 1 template');
+    const text = (result.content ?? []).map((c: any) => c.text).join("\n");
+    expect(text).toContain("Test Case - SEC");
+    expect(text).not.toContain("[template_id=2]");
+    expect(text).toContain("Found 1 template");
   });
 
-  it('reports when no templates match the name filter', async () => {
+  it("reports when no templates match the name filter", async () => {
     (apiClientMock.get as Mock).mockResolvedValueOnce(templatesResp);
 
-    const result = await listTemplatesReal({ name: 'nope' }, mockConfig as any);
-    const text = (result.content ?? []).map((c: any) => c.text).join('\n');
+    const result = await listTemplatesReal({ name: "nope" }, mockConfig as any);
+    const text = (result.content ?? []).map((c: any) => c.text).join("\n");
     expect(text).toContain('No templates matching "nope"');
   });
 });
@@ -1779,16 +2152,21 @@ describe("test-plan tools point writes at the capability functions", () => {
     "getSubTestPlan",
   ];
 
-  it.each(PLAN_TOOLS)("%s names the capability functions as the way to write a plan", (name) => {
-    const d = descriptionOf(name);
-    expect(d).toMatch(/not available as tools here/);
-    expect(d).toMatch(/use the capability functions/);
-    // As a GROUP, never an individual name: a function named here goes stale on the next
-    // rename, and which one to call is the registry's business, not this description's.
-    expect(d).not.toMatch(/searchCapability|invokeCapability|describeCapability/);
-    // The consent property matters: nobody should think this happens silently.
-    expect(d).toMatch(/ask you to confirm/);
-  });
+  it.each(PLAN_TOOLS)(
+    "%s names the capability functions as the way to write a plan",
+    (name) => {
+      const d = descriptionOf(name);
+      expect(d).toMatch(/not available as tools here/);
+      expect(d).toMatch(/use the capability functions/);
+      // As a GROUP, never an individual name: a function named here goes stale on the next
+      // rename, and which one to call is the registry's business, not this description's.
+      expect(d).not.toMatch(
+        /searchCapability|invokeCapability|describeCapability/,
+      );
+      // The consent property matters: nobody should think this happens silently.
+      expect(d).toMatch(/ask you to confirm/);
+    },
+  );
 
   it("names the missing OPERATIONS, so it is not a general invitation to route plans away", () => {
     // If this ever broadens to "use the agent for plans", the routing advantage of the

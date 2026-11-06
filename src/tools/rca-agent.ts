@@ -1,3 +1,4 @@
+import { isNotFoundError } from "../lib/error.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import logger from "../logger.js";
@@ -104,10 +105,6 @@ export async function fetchRCADataTool(
   }
 }
 
-function isNotFound(error: unknown): boolean {
-  return error instanceof Error && /\b404\b/.test(error.message);
-}
-
 export async function listTestIdsTool(
   args: {
     buildId: string;
@@ -131,8 +128,8 @@ export async function listTestIdsTool(
         includeFailureDetail,
       );
     } catch (error) {
-      if (!isNotFound(error) || !isHashedBuildId(buildId)) throw error;
-      const mapped = await mapHashedToTra(buildId, error, config);
+      if (!isNotFoundError(error) || !isHashedBuildId(buildId)) throw error;
+      const mapped = (await mapHashedToTra(buildId, error, config)).traBuildId;
       note = `Automate build ${buildId} maps to TRA build ${mapped}.`;
       buildId = mapped;
       testIds = await getTestIds(
@@ -225,7 +222,7 @@ export default function addRCATools(
 
   tools.listBuildId = server.tool(
     "listBuildId",
-    "Find a build id, any user: TRA project + build name, build number or link, or an Automate/App Automate build by name. Default: latest run.",
+    "Find a TRA or Automate build id from project + build name, build number or dashboard link. Searches all users.",
     GET_BUILD_ID_PARAMS,
     {
       title: "List Build IDs",

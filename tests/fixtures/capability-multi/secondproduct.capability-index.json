@@ -18,14 +18,7 @@
         "mode": "read",
         "entity": "widget",
         "intent": "List the widgets in a catalogue",
-        "returns": [
-          "success",
-          "widgets",
-          "info",
-          "id",
-          "name",
-          "state"
-        ],
+        "returns": ["success", "widgets", "info", "id", "name", "state"],
         "responses": {
           "200": {
             "$response": "Ok"
@@ -62,14 +55,7 @@
         "mode": "read",
         "entity": "widget",
         "intent": "Read one widget by id",
-        "returns": [
-          "success",
-          "widget",
-          "id",
-          "name",
-          "state",
-          "gadget_id"
-        ],
+        "returns": ["success", "widget", "id", "name", "state", "gadget_id"],
         "responses": {
           "200": {
             "$response": "Ok"
@@ -99,12 +85,7 @@
         "mode": "write",
         "entity": "widget",
         "intent": "Create a widget in a catalogue",
-        "returns": [
-          "success",
-          "widget",
-          "id",
-          "name"
-        ],
+        "returns": ["success", "widget", "id", "name"],
         "responses": {
           "200": {
             "$response": "Ok"
@@ -129,10 +110,7 @@
           {
             "name": "state",
             "type": "string",
-            "values": [
-              "idle",
-              "spinning"
-            ],
+            "values": ["idle", "spinning"],
             "description": "Starting state."
           }
         ]
@@ -144,13 +122,7 @@
         "mode": "read",
         "entity": "gadget",
         "intent": "List the gadgets in a catalogue",
-        "returns": [
-          "success",
-          "gadgets",
-          "info",
-          "id",
-          "label"
-        ],
+        "returns": ["success", "gadgets", "info", "id", "label"],
         "responses": {
           "200": {
             "$response": "Ok"
@@ -173,13 +145,7 @@
         "mode": "read",
         "entity": "gadget",
         "intent": "Read one gadget by id",
-        "returns": [
-          "success",
-          "gadget",
-          "id",
-          "label",
-          "sprocket_count"
-        ],
+        "returns": ["success", "gadget", "id", "label", "sprocket_count"],
         "responses": {
           "200": {
             "$response": "Ok"
@@ -209,12 +175,7 @@
         "mode": "write",
         "entity": "gadget",
         "intent": "Create a gadget in a catalogue",
-        "returns": [
-          "success",
-          "gadget",
-          "id",
-          "label"
-        ],
+        "returns": ["success", "gadget", "id", "label"],
         "responses": {
           "200": {
             "$response": "Ok"
@@ -245,13 +206,7 @@
         "mode": "read",
         "entity": "sprocket",
         "intent": "List the sprockets fitted to a catalogue's gadgets",
-        "returns": [
-          "success",
-          "sprockets",
-          "info",
-          "id",
-          "teeth"
-        ],
+        "returns": ["success", "sprockets", "info", "id", "teeth"],
         "responses": {
           "200": {
             "$response": "Ok"
@@ -274,13 +229,7 @@
         "mode": "read",
         "entity": "sprocket",
         "intent": "Read one sprocket by id",
-        "returns": [
-          "success",
-          "sprocket",
-          "id",
-          "teeth",
-          "pitch"
-        ],
+        "returns": ["success", "sprocket", "id", "teeth", "pitch"],
         "responses": {
           "200": {
             "$response": "Ok"
@@ -310,13 +259,7 @@
         "mode": "read",
         "entity": "blueprint",
         "intent": "List the blueprints a catalogue holds",
-        "returns": [
-          "success",
-          "blueprints",
-          "info",
-          "id",
-          "title"
-        ],
+        "returns": ["success", "blueprints", "info", "id", "title"],
         "responses": {
           "200": {
             "$response": "Ok"
@@ -339,13 +282,7 @@
         "mode": "read",
         "entity": "blueprint",
         "intent": "Read one blueprint by id",
-        "returns": [
-          "success",
-          "blueprint",
-          "id",
-          "title",
-          "revision_label"
-        ],
+        "returns": ["success", "blueprint", "id", "title", "revision_label"],
         "responses": {
           "200": {
             "$response": "Ok"
@@ -375,12 +312,7 @@
         "mode": "read",
         "entity": "pipeline",
         "intent": "Read the current state of a catalogue's assembly pipeline",
-        "returns": [
-          "success",
-          "state",
-          "queued",
-          "moving"
-        ],
+        "returns": ["success", "state", "queued", "moving"],
         "responses": {
           "200": {
             "$response": "Ok"
@@ -403,13 +335,7 @@
         "mode": "read",
         "entity": "channel",
         "intent": "List the broadcast channels a catalogue publishes on",
-        "returns": [
-          "success",
-          "channels",
-          "info",
-          "id",
-          "handle"
-        ],
+        "returns": ["success", "channels", "info", "id", "handle"],
         "responses": {
           "200": {
             "$response": "Ok"
@@ -432,12 +358,7 @@
         "mode": "read",
         "entity": "quota",
         "intent": "Read the account's assembly allowance and what is left of it",
-        "returns": [
-          "success",
-          "allowance",
-          "used",
-          "remaining"
-        ],
+        "returns": ["success", "allowance", "used", "remaining"],
         "responses": {
           "200": {
             "$response": "Ok"
@@ -451,13 +372,7 @@
         "mode": "read",
         "entity": "token",
         "intent": "List the passkeys issued to this account",
-        "returns": [
-          "success",
-          "tokens",
-          "info",
-          "id",
-          "label"
-        ],
+        "returns": ["success", "tokens", "info", "id", "label"],
         "responses": {
           "200": {
             "$response": "Ok"
@@ -471,13 +386,7 @@
         "mode": "read",
         "entity": "project",
         "intent": "List the catalogues this account can reach",
-        "returns": [
-          "success",
-          "projects",
-          "info",
-          "id",
-          "name"
-        ],
+        "returns": ["success", "projects", "info", "id", "name"],
         "responses": {
           "200": {
             "$response": "Ok"
@@ -491,13 +400,7 @@
         "mode": "read",
         "entity": "project",
         "intent": "Read one catalogue by id",
-        "returns": [
-          "success",
-          "project",
-          "id",
-          "name",
-          "widget_count"
-        ],
+        "returns": ["success", "project", "id", "name", "widget_count"],
         "responses": {
           "200": {
             "$response": "Ok"
@@ -520,13 +423,7 @@
         "mode": "read",
         "entity": "run",
         "intent": "List the assembly runs a catalogue has started",
-        "returns": [
-          "success",
-          "runs",
-          "info",
-          "id",
-          "state"
-        ],
+        "returns": ["success", "runs", "info", "id", "state"],
         "responses": {
           "200": {
             "$response": "Ok"
@@ -549,13 +446,7 @@
         "mode": "read",
         "entity": "run",
         "intent": "Read one assembly run by id",
-        "returns": [
-          "success",
-          "run",
-          "id",
-          "state",
-          "started_at"
-        ],
+        "returns": ["success", "run", "id", "state", "started_at"],
         "responses": {
           "200": {
             "$response": "Ok"
@@ -585,13 +476,7 @@
         "mode": "read",
         "entity": "report",
         "intent": "List the assembly reports a catalogue has produced",
-        "returns": [
-          "success",
-          "reports",
-          "info",
-          "id",
-          "title"
-        ],
+        "returns": ["success", "reports", "info", "id", "title"],
         "responses": {
           "200": {
             "$response": "Ok"
@@ -614,13 +499,7 @@
         "mode": "read",
         "entity": "report",
         "intent": "Read one assembly report by id",
-        "returns": [
-          "success",
-          "report",
-          "id",
-          "title",
-          "generated_at"
-        ],
+        "returns": ["success", "report", "id", "title", "generated_at"],
         "responses": {
           "200": {
             "$response": "Ok"
@@ -647,123 +526,68 @@
     "entities": {
       "project": {
         "title": "Catalogue",
-        "aliases": [
-          "catalogue",
-          "namespace"
-        ],
-        "capabilities": [
-          "get_project",
-          "list_projects"
-        ],
+        "aliases": ["catalogue", "namespace"],
+        "capabilities": ["get_project", "list_projects"],
         "id_convention": "project_id is an integer, discovered from the matching list capability."
       },
       "widget": {
         "title": "Widget",
-        "aliases": [
-          "gizmo",
-          "doodad"
-        ],
-        "capabilities": [
-          "create_widget",
-          "get_widget",
-          "list_widgets"
-        ],
+        "aliases": ["gizmo", "doodad"],
+        "capabilities": ["create_widget", "get_widget", "list_widgets"],
         "id_convention": "widget_id is an integer, discovered from the matching list capability."
       },
       "gadget": {
         "title": "Gadget",
-        "aliases": [
-          "contraption"
-        ],
-        "capabilities": [
-          "create_gadget",
-          "get_gadget",
-          "list_gadgets"
-        ],
+        "aliases": ["contraption"],
+        "capabilities": ["create_gadget", "get_gadget", "list_gadgets"],
         "id_convention": "gadget_id is an integer, discovered from the matching list capability."
       },
       "sprocket": {
         "title": "Sprocket",
-        "aliases": [
-          "cog"
-        ],
-        "capabilities": [
-          "get_sprocket",
-          "list_sprockets"
-        ],
+        "aliases": ["cog"],
+        "capabilities": ["get_sprocket", "list_sprockets"],
         "id_convention": "sprocket_id is an integer, discovered from the matching list capability."
       },
       "blueprint": {
         "title": "Blueprint",
-        "aliases": [
-          "schematic"
-        ],
-        "capabilities": [
-          "get_blueprint",
-          "list_blueprints"
-        ],
+        "aliases": ["schematic"],
+        "capabilities": ["get_blueprint", "list_blueprints"],
         "id_convention": "blueprint_id is an integer, discovered from the matching list capability."
       },
       "pipeline": {
         "title": "Pipeline",
-        "aliases": [
-          "conveyor"
-        ],
-        "capabilities": [
-          "get_pipeline_status"
-        ],
+        "aliases": ["conveyor"],
+        "capabilities": ["get_pipeline_status"],
         "id_convention": "pipeline_id is an integer, discovered from the matching list capability."
       },
       "channel": {
         "title": "Channel",
-        "aliases": [
-          "broadcast-lane"
-        ],
-        "capabilities": [
-          "list_channels"
-        ],
+        "aliases": ["broadcast-lane"],
+        "capabilities": ["list_channels"],
         "id_convention": "channel_id is an integer, discovered from the matching list capability."
       },
       "quota": {
         "title": "Allowance",
-        "aliases": [
-          "allowance"
-        ],
-        "capabilities": [
-          "get_quota"
-        ],
+        "aliases": ["allowance"],
+        "capabilities": ["get_quota"],
         "id_convention": "quota_id is an integer, discovered from the matching list capability."
       },
       "token": {
         "title": "Passkey",
-        "aliases": [
-          "passkey"
-        ],
-        "capabilities": [
-          "list_tokens"
-        ],
+        "aliases": ["passkey"],
+        "capabilities": ["list_tokens"],
         "id_convention": "token_id is an integer, discovered from the matching list capability."
       },
       "run": {
         "title": "Assembly Run",
-        "aliases": [
-          "runs"
-        ],
-        "capabilities": [
-          "get_run",
-          "list_runs"
-        ],
+        "aliases": ["runs"],
+        "capabilities": ["get_run", "list_runs"],
         "id_convention": "run_id is an integer, discovered from the matching list capability."
       },
       "report": {
         "title": "Assembly Report",
-        "aliases": [
-          "reports"
-        ],
-        "capabilities": [
-          "get_report",
-          "list_reports"
-        ],
+        "aliases": ["reports"],
+        "capabilities": ["get_report", "list_reports"],
         "id_convention": "report_id is an integer, discovered from the matching list capability."
       }
     },

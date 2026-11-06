@@ -21,7 +21,7 @@ export const GET_BUILD_ID_PARAMS = {
   browserStackBuildName: z
     .string()
     .optional()
-    .describe("Build name: the SDK's or the dashboard's."),
+    .describe("SDK or dashboard build name; latest run unless buildNumber."),
   buildNumber: z
     .number()
     .int()

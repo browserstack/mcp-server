@@ -331,34 +331,68 @@ describe("fetchAccessibilityIssues comparing app builds", () => {
   });
 
   it("does not count as resolved the issues on earlier screens the later build did not reach", async () => {
-    m.previousAppBuild.mockResolvedValue({ buildId: EARLIER_ID, same_name: true });
+    m.previousAppBuild.mockResolvedValue({
+      buildId: EARLIER_ID,
+      same_name: true,
+    });
     m.appBuildIssues.mockImplementation(async (id: string) =>
       id === BUILD_ID
         ? {
             ...AFTER,
             scan_count: 1,
-            issues: [row("interactable-element-content-label", "critical", "home_a", "Screen 1 (test_scan)")],
+            issues: [
+              row(
+                "interactable-element-content-label",
+                "critical",
+                "home_a",
+                "Screen 1 (test_scan)",
+              ),
+            ],
           }
         : {
             ...BEFORE,
             scan_count: 2,
             issues: [
-              row("interactable-element-content-label", "critical", "home_a", "Screen 1 (test_scan)"),
-              row("interactable-element-content-label", "critical", "home_b", "Screen 1 (test_scan)"),
-              row("interactable-element-content-label", "critical", "cart_a", "Screen 2 (test_scan)"),
-              row("interactable-element-content-label", "critical", "cart_b", "Screen 2 (test_scan)"),
+              row(
+                "interactable-element-content-label",
+                "critical",
+                "home_a",
+                "Screen 1 (test_scan)",
+              ),
+              row(
+                "interactable-element-content-label",
+                "critical",
+                "home_b",
+                "Screen 1 (test_scan)",
+              ),
+              row(
+                "interactable-element-content-label",
+                "critical",
+                "cart_a",
+                "Screen 2 (test_scan)",
+              ),
+              row(
+                "interactable-element-content-label",
+                "critical",
+                "cart_b",
+                "Screen 2 (test_scan)",
+              ),
             ],
           },
     );
 
-    const out = text(await fetchIssues()({ buildId: BUILD_ID, compareWith: "previous" }));
+    const out = text(
+      await fetchIssues()({ buildId: BUILD_ID, compareWith: "previous" }),
+    );
 
     expect(out).toContain("0 new, 1 resolved, 1 still open.");
     expect(out).toContain(
       "2 more issues of the earlier build are on 1 screen no screen of the later build resembles: the later build did not reach it, or the issues on it were fixed. They are not counted as resolved; scan that screen again to confirm.",
     );
     expect(out).toContain("Not confirmed resolved (2):");
-    expect(out.indexOf("cart_a")).toBeGreaterThan(out.indexOf("Not confirmed resolved (2):"));
+    expect(out.indexOf("cart_a")).toBeGreaterThan(
+      out.indexOf("Not confirmed resolved (2):"),
+    );
   });
 
   it("quotes the builds' names, which come from the user's CI, as untrusted data", async () => {
@@ -468,10 +502,15 @@ describe("fetchAccessibilityIssues comparing app builds", () => {
 
   it("refuses to compare a build whose screens were not all read, as the unread ones' issues would read as new or resolved", async () => {
     m.appBuildIssues.mockImplementation(async (id: string) =>
-      id === BUILD_ID ? { ...AFTER, scan_count: 1200, screens_read: 1000 } : BEFORE,
+      id === BUILD_ID
+        ? { ...AFTER, scan_count: 1200, screens_read: 1000 }
+        : BEFORE,
     );
 
-    const result = await fetchIssues()({ buildId: BUILD_ID, compareWith: EARLIER_ID });
+    const result = await fetchIssues()({
+      buildId: BUILD_ID,
+      compareWith: EARLIER_ID,
+    });
 
     expect(result.isError).toBe(true);
     expect(text(result)).toContain(
@@ -499,6 +538,8 @@ describe("fetchAccessibilityIssues comparing app builds", () => {
     });
 
     expect(result.isError).toBe(true);
-    expect(text(result)).toMatch(/Website Scanner runs and App Accessibility builds/);
+    expect(text(result)).toMatch(
+      /Website Scanner runs and App Accessibility builds/,
+    );
   });
 });

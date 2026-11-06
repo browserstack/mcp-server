@@ -1,3 +1,4 @@
+import { isNotFoundError } from "../lib/error.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
@@ -290,10 +291,8 @@ export async function fetchSelfHealSelectorTool(
     try {
       report = await fetchSelfHealingReportByBuild(buildUuid!, effectiveConfig);
     } catch (error) {
-      const notFound =
-        error instanceof Error && /\b404\b|Not Found/i.test(error.message);
-      if (!notFound || !isHashedBuildId(buildUuid!)) throw error;
-      const traBuildId = await mapHashedToTra(
+      if (!isNotFoundError(error) || !isHashedBuildId(buildUuid!)) throw error;
+      const { traBuildId } = await mapHashedToTra(
         buildUuid!,
         error,
         effectiveConfig,

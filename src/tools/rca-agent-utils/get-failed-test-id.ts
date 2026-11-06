@@ -1,3 +1,4 @@
+import { HttpError } from "../../lib/error.js";
 import logger from "../../logger.js";
 import { getAutomationBaseUrl } from "./constants.js";
 import {
@@ -54,8 +55,9 @@ export async function getTestIds(
       });
 
       if (!response.ok) {
-        throw new Error(
+        throw new HttpError(
           `Failed to fetch test runs: ${response.status} ${response.statusText}`,
+          response.status,
         );
       }
 

@@ -6,10 +6,7 @@ import {
   FEEDBACK_ACK,
   FEEDBACK_LIMITS,
 } from "../../src/tools/feedback";
-import {
-  withFeedbackHint,
-  FEEDBACK_HINT,
-} from "../../src/lib/feedback-hint";
+import { withFeedbackHint, FEEDBACK_HINT } from "../../src/lib/feedback-hint";
 
 vi.mock("../../src/lib/apiClient", () => ({
   apiClient: { post: vi.fn().mockResolvedValue({ status: 200, data: {} }) },
@@ -58,9 +55,9 @@ describe("submitFeedback", () => {
     expect(out.content[0].text).toBe(FEEDBACK_ACK);
     expect(out.isError).toBeUndefined();
     expect(apiClient.post).toHaveBeenCalledTimes(1);
-    expect(
-      (apiClient.post as any).mock.calls[0][0].body.event_type,
-    ).toBe("MCPInstrumentation");
+    expect((apiClient.post as any).mock.calls[0][0].body.event_type).toBe(
+      "MCPInstrumentation",
+    );
     expect(rows()[0]).toMatchObject({
       tool_name: "submitFeedback",
       success: true,
@@ -92,13 +89,14 @@ describe("submitFeedback", () => {
     const message = "step ".repeat(400).slice(0, FEEDBACK_LIMITS.message);
     await callFeedback({ message, category: "other" });
 
-    expect(rows()[0].feedback_message.length).toBe(
-      message.trim().length,
-    );
+    expect(rows()[0].feedback_message.length).toBe(message.trim().length);
   });
 
   it("omits absent optional fields instead of sending nulls", async () => {
-    await callFeedback({ message: "Positive: worked well.", category: "positive" });
+    await callFeedback({
+      message: "Positive: worked well.",
+      category: "positive",
+    });
 
     const sent = JSON.parse(JSON.stringify(rows()[0]));
     expect(sent).not.toHaveProperty("feedback_tool");
@@ -106,7 +104,10 @@ describe("submitFeedback", () => {
   });
 
   it("never gets the feedback hint appended to its own result", async () => {
-    const out = await callFeedback({ message: "x".repeat(20), category: "other" });
+    const out = await callFeedback({
+      message: "x".repeat(20),
+      category: "other",
+    });
     expect(JSON.stringify(out)).not.toContain(FEEDBACK_HINT);
   });
 });
@@ -181,11 +182,14 @@ describe("redactFeedback", () => {
       "customer=4471",
       "https://staging.acme.corp/checkout?[query]",
     ],
-    ["see https://app.acme.com/page#user=42", "user=42", "https://app.acme.com/page?[query]"],
+    [
+      "see https://app.acme.com/page#user=42",
+      "user=42",
+      "https://app.acme.com/page?[query]",
+    ],
   ])("redacts %s", async (input, leaked, expected) => {
-    const { redactFeedback } = await import(
-      "../../src/tools/capability-registry/redact"
-    );
+    const { redactFeedback } =
+      await import("../../src/tools/capability-registry/redact");
     const out = redactFeedback(input, 2000)!;
     expect(out).not.toContain(leaked);
     expect(out).toContain(expected);
@@ -198,9 +202,8 @@ describe("redactFeedback", () => {
     "Password reset page is not covered by any tool",
     "Build 12345678 had 42 failures",
   ])("keeps useful report text intact: %s", async (input) => {
-    const { redactFeedback } = await import(
-      "../../src/tools/capability-registry/redact"
-    );
+    const { redactFeedback } =
+      await import("../../src/tools/capability-registry/redact");
     const out = redactFeedback(input, 2000)!;
     expect(out).not.toContain("[secret]");
     expect(out).not.toContain("[code]");
@@ -208,18 +211,16 @@ describe("redactFeedback", () => {
   });
 
   it("still applies the base rules after the feedback ones", async () => {
-    const { redactFeedback } = await import(
-      "../../src/tools/capability-registry/redact"
-    );
+    const { redactFeedback } =
+      await import("../../src/tools/capability-registry/redact");
     expect(redactFeedback("mail jane@acme.com from 10.0.0.1", 2000)).toBe(
       "mail [email] from [ip]",
     );
   });
 
   it("fails closed on non-string input", async () => {
-    const { redactFeedback } = await import(
-      "../../src/tools/capability-registry/redact"
-    );
+    const { redactFeedback } =
+      await import("../../src/tools/capability-registry/redact");
     expect(redactFeedback(undefined, 2000)).toBeUndefined();
     expect(redactFeedback(42 as any, 2000)).toBeUndefined();
   });

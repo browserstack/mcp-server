@@ -35,7 +35,13 @@ describe("a capability served from a named host", () => {
     const { resolveBaseUrl } =
       await import("../../src/tools/capability-registry/config.js");
     expect(
-      await resolveBaseUrl("mobiledevicecontrol", CONFIG, SOURCE, undefined, "hub"),
+      await resolveBaseUrl(
+        "mobiledevicecontrol",
+        CONFIG,
+        SOURCE,
+        undefined,
+        "hub",
+      ),
     ).toBe("https://hub-cloud.browserstack.com");
   });
 
@@ -66,7 +72,13 @@ describe("a capability served from a named host", () => {
     const { resolveBaseUrl } =
       await import("../../src/tools/capability-registry/config.js");
     expect(
-      await resolveBaseUrl("mobiledevicecontrol", CONFIG, SOURCE, undefined, "hub"),
+      await resolveBaseUrl(
+        "mobiledevicecontrol",
+        CONFIG,
+        SOURCE,
+        undefined,
+        "hub",
+      ),
     ).toBe("https://hub-preprod.example");
     expect(await resolveBaseUrl("mobiledevicecontrol", CONFIG, SOURCE)).toBe(
       "https://api-cloud.browserstack.com",
@@ -81,7 +93,13 @@ describe("a capability served from a named host", () => {
     const { resolveBaseUrl } =
       await import("../../src/tools/capability-registry/config.js");
     expect(
-      await resolveBaseUrl("mobiledevicecontrol", CONFIG, SOURCE, undefined, "hub"),
+      await resolveBaseUrl(
+        "mobiledevicecontrol",
+        CONFIG,
+        SOURCE,
+        undefined,
+        "hub",
+      ),
     ).toBe("https://hub-cloud.browserstack.com");
   });
 
@@ -91,7 +109,13 @@ describe("a capability served from a named host", () => {
     const { resolveBaseUrl } =
       await import("../../src/tools/capability-registry/config.js");
     await expect(
-      resolveBaseUrl("mobiledevicecontrol", CONFIG, SOURCE, undefined, "terminal"),
+      resolveBaseUrl(
+        "mobiledevicecontrol",
+        CONFIG,
+        SOURCE,
+        undefined,
+        "terminal",
+      ),
     ).rejects.toThrow(/'terminal' host.*does not declare.*hub/s);
   });
 
@@ -112,7 +136,13 @@ describe("a capability served from a named host", () => {
     const { resolveBaseUrl } =
       await import("../../src/tools/capability-registry/config.js");
     expect(
-      await resolveBaseUrl("mobiledevicecontrol", CONFIG, SOURCE, undefined, "hub"),
+      await resolveBaseUrl(
+        "mobiledevicecontrol",
+        CONFIG,
+        SOURCE,
+        undefined,
+        "hub",
+      ),
     ).toBe("https://hub-preprod.example");
   });
 });

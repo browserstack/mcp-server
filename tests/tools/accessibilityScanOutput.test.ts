@@ -308,7 +308,9 @@ describe("fetchAccessibilityIssues sources", () => {
   });
 
   it("startAccessibilityScan hands a still-generating export over to fetchAccessibilityIssues", async () => {
-    m.getReportLink.mockRejectedValueOnce(new (ExportPendingError as any)("t:7", 45_000));
+    m.getReportLink.mockRejectedValueOnce(
+      new (ExportPendingError as any)("t:7", 45_000),
+    );
 
     const result = await handlers.startAccessibilityScan(
       { name: "run", pageURL: "https://site.example" },
@@ -319,7 +321,9 @@ describe("fetchAccessibilityIssues sources", () => {
     const body = text(result);
     expect(body).toMatch(/completed/);
     expect(body).toMatch(/still being generated/);
-    expect(body).toContain('scanId: "scan-42", scanRunId: "run-7" and exportTaskId: "t:7"');
+    expect(body).toContain(
+      'scanId: "scan-42", scanRunId: "run-7" and exportTaskId: "t:7"',
+    );
   });
 
   it.each([
@@ -567,7 +571,9 @@ describe("fetchAccessibilityIssues and App Accessibility builds", () => {
       await handlers.fetchAccessibilityIssues({ buildId: BUILD_ID }, context),
     );
 
-    const block = body.slice(body.indexOf("«UNTRUSTED accessibility scan results"));
+    const block = body.slice(
+      body.indexOf("«UNTRUSTED accessibility scan results"),
+    );
     expect(block).toContain('"rules"');
     expect(block).toContain("Give the button a contentDescription.");
     expect(block).toContain('"screens"');
@@ -710,7 +716,9 @@ describe("fetchAccessibilityIssues and App Accessibility manual reports", () => 
     vi.clearAllMocks();
     m.reportStatus.mockResolvedValue("complete");
     m.appReportIssues.mockResolvedValue({
-      records: [{ issue_type: "Touch Target Size & Spacing", severity: "serious" }],
+      records: [
+        { issue_type: "Touch Target Size & Spacing", severity: "serious" },
+      ],
       page_length: 1,
       total_issues: 144,
       next_page: 140,
@@ -733,7 +741,13 @@ describe("fetchAccessibilityIssues and App Accessibility manual reports", () => 
 
   it("gives the dashboard's count when the issues come without its duplicates", async () => {
     m.appReportIssues.mockResolvedValue({
-      records: [{ rule_id: "touch-target-size-and-spacing", severity: "serious", screen: "Screen 1" }],
+      records: [
+        {
+          rule_id: "touch-target-size-and-spacing",
+          severity: "serious",
+          screen: "Screen 1",
+        },
+      ],
       page_length: 1,
       total_issues: 97,
       next_page: 140,
@@ -758,7 +772,12 @@ describe("fetchAccessibilityIssues and App Accessibility manual reports", () => 
       screens: { "Screen 1": "https://assets.example/s1.jpeg" },
     });
 
-    const body = text(await handlers.fetchAccessibilityIssues({ appReportId: REPORT_ID }, CONTEXT));
+    const body = text(
+      await handlers.fetchAccessibilityIssues(
+        { appReportId: REPORT_ID },
+        CONTEXT,
+      ),
+    );
 
     expect(body).toContain(
       "Retrieved 1 accessibility issues (Total: 97) from the App Accessibility manual report below (7 screens scanned)",
@@ -772,9 +791,18 @@ describe("fetchAccessibilityIssues and App Accessibility manual reports", () => 
 
   it("says how many screens it read when the report has more than it reads", async () => {
     const base = await m.appReportIssues();
-    m.appReportIssues.mockResolvedValue({ ...base, scan_count: 1200, screens_read: 1000 });
+    m.appReportIssues.mockResolvedValue({
+      ...base,
+      scan_count: 1200,
+      screens_read: 1000,
+    });
 
-    const body = text(await handlers.fetchAccessibilityIssues({ appReportId: REPORT_ID }, CONTEXT));
+    const body = text(
+      await handlers.fetchAccessibilityIssues(
+        { appReportId: REPORT_ID },
+        CONTEXT,
+      ),
+    );
 
     expect(body).toContain(
       "Only the first 1000 of the report's 1200 scanned screens were read; the total counts the issues on those. The dashboard report has them all.",
@@ -798,7 +826,9 @@ describe("fetchAccessibilityIssues and App Accessibility manual reports", () => 
     );
     const block = body.indexOf("«UNTRUSTED App Accessibility manual report");
     expect(block).toBeGreaterThan(-1);
-    expect(body.indexOf('"name": "Checkout walkthrough"')).toBeGreaterThan(block);
+    expect(body.indexOf('"name": "Checkout walkthrough"')).toBeGreaterThan(
+      block,
+    );
     expect(body.indexOf(`"dashboard_link": "${LINK}"`)).toBeGreaterThan(block);
     expect(body).toContain(
       `Use fetchAccessibilityIssues with appReportId: "${REPORT_ID}" and cursor: 140`,
@@ -806,11 +836,18 @@ describe("fetchAccessibilityIssues and App Accessibility manual reports", () => 
   });
 
   it("resolves a manual report's dashboard link", async () => {
-    m.sourceFromReportUrl.mockResolvedValue({ kind: "appReport", reportId: REPORT_ID });
+    m.sourceFromReportUrl.mockResolvedValue({
+      kind: "appReport",
+      reportId: REPORT_ID,
+    });
 
-    const body = text(await handlers.fetchAccessibilityIssues({ reportUrl: LINK }, CONTEXT));
+    const body = text(
+      await handlers.fetchAccessibilityIssues({ reportUrl: LINK }, CONTEXT),
+    );
 
-    expect(body).toContain(`Resolved the report link to App Accessibility manual report ${REPORT_ID}.`);
+    expect(body).toContain(
+      `Resolved the report link to App Accessibility manual report ${REPORT_ID}.`,
+    );
   });
 
   it("refuses two sources at once, naming the manual report id among them", async () => {
@@ -828,9 +865,20 @@ describe("fetchAccessibilityIssues and App Accessibility manual reports", () => 
 describe("what a web report's answer says about its issues", () => {
   let handlers: Record<string, (...args: any[]) => any>;
   const REPORT = {
-    records: [{ issue_type: "image-alt", severity: "critical", needs_review: "unreviewed" }],
+    records: [
+      {
+        issue_type: "image-alt",
+        severity: "critical",
+        needs_review: "unreviewed",
+      },
+    ],
     rules: {
-      "image-alt": { name: "Images must have alternative text", description: "d", wcag: "SC 1.1.1", how_to_fix: "Add alt" },
+      "image-alt": {
+        name: "Images must have alternative text",
+        description: "d",
+        wcag: "SC 1.1.1",
+        how_to_fix: "Add alt",
+      },
     },
     summary: {
       by_severity: { critical: 1, serious: 3, moderate: 1 },
@@ -857,7 +905,9 @@ describe("what a web report's answer says about its issues", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    m.startScan.mockResolvedValue({ data: { id: "scan-42", scanRunId: "run-7" } });
+    m.startScan.mockResolvedValue({
+      data: { id: "scan-42", scanRunId: "run-7" },
+    });
     m.waitUntilComplete.mockResolvedValue("completed");
     m.getReportLink.mockResolvedValue("https://csv");
     m.reportStatus.mockResolvedValue(undefined);
@@ -867,39 +917,68 @@ describe("what a web report's answer says about its issues", () => {
 
   it("counts the whole report, says what needs review means, and gives the rules once", async () => {
     const body = text(
-      await handlers.fetchAccessibilityIssues({ scanId: "scan-42", scanRunId: "run-7" }, CONTEXT),
+      await handlers.fetchAccessibilityIssues(
+        { scanId: "scan-42", scanRunId: "run-7" },
+        CONTEXT,
+      ),
     );
 
     expect(body).toContain(
       "Summary of the 5 issues: 1 critical, 3 serious, 1 moderate; 1 needs review (a person has to confirm it); 1 is a best practice, not a WCAG failure.",
     );
     expect(body).toMatch(/By rule: color-contrast 3, image-alt 1, region 1\./);
-    expect(body).toMatch(/By page: https:\/\/shop\.example\/ 3, https:\/\/shop\.example\/cart 2\./);
-    expect(body).toContain("needs_review is one the engine could not decide, so a person confirms it");
+    expect(body).toMatch(
+      /By page: https:\/\/shop\.example\/ 3, https:\/\/shop\.example\/cart 2\./,
+    );
+    expect(body).toContain(
+      "needs_review is one the engine could not decide, so a person confirms it",
+    );
     // A best-practice issue has no needs_review either, so the note must not call it a failure.
-    expect(body).toContain("An issue with no needs_review, whose rule is not a best practice (best_practice under rules), is a confirmed WCAG failure.");
-    expect(body).not.toContain("Issues without needs_review are confirmed failures.");
+    expect(body).toContain(
+      "An issue with no needs_review, whose rule is not a best practice (best_practice under rules), is a confirmed WCAG failure.",
+    );
+    expect(body).not.toContain(
+      "Issues without needs_review are confirmed failures.",
+    );
     expect(body).toContain('"rules"');
     expect(body).toContain('"needs_review":"unreviewed"');
   });
 
   it("words the counts for several issues, and leaves out a count that is zero", async () => {
-    m.parse.mockResolvedValue({ ...REPORT, total_issues: 527, summary: { ...REPORT.summary, needs_review: 161, best_practice: 0 } });
+    m.parse.mockResolvedValue({
+      ...REPORT,
+      total_issues: 527,
+      summary: { ...REPORT.summary, needs_review: 161, best_practice: 0 },
+    });
 
     const body = text(
-      await handlers.fetchAccessibilityIssues({ scanId: "scan-42", scanRunId: "run-7" }, CONTEXT),
+      await handlers.fetchAccessibilityIssues(
+        { scanId: "scan-42", scanRunId: "run-7" },
+        CONTEXT,
+      ),
     );
 
-    expect(body).toContain("Summary of the 527 issues: 1 critical, 3 serious, 1 moderate; 161 need review (a person has to confirm them).");
+    expect(body).toContain(
+      "Summary of the 527 issues: 1 critical, 3 serious, 1 moderate; 161 need review (a person has to confirm them).",
+    );
     expect(body).not.toMatch(/is a best practice, not|are best practices, not/);
   });
 
   it("names the 10 pages with most issues, and counts the rest", async () => {
-    const by_page = Array.from({ length: 12 }, (_, i) => ({ url: `https://shop.example/p${i}`, count: 12 - i }));
-    m.parse.mockResolvedValue({ ...REPORT, summary: { ...REPORT.summary, by_page } });
+    const by_page = Array.from({ length: 12 }, (_, i) => ({
+      url: `https://shop.example/p${i}`,
+      count: 12 - i,
+    }));
+    m.parse.mockResolvedValue({
+      ...REPORT,
+      summary: { ...REPORT.summary, by_page },
+    });
 
     const body = text(
-      await handlers.fetchAccessibilityIssues({ scanId: "scan-42", scanRunId: "run-7" }, CONTEXT),
+      await handlers.fetchAccessibilityIssues(
+        { scanId: "scan-42", scanRunId: "run-7" },
+        CONTEXT,
+      ),
     );
 
     expect(body).toContain("https://shop.example/p9 3, and 2 more pages.");
@@ -908,16 +987,24 @@ describe("what a web report's answer says about its issues", () => {
 
   it("gives the same overview in a scan's answer", async () => {
     const body = text(
-      await handlers.startAccessibilityScan({ name: "home", pageURL: "https://site.example" }, CONTEXT),
+      await handlers.startAccessibilityScan(
+        { name: "home", pageURL: "https://site.example" },
+        CONTEXT,
+      ),
     );
 
-    expect(body).toContain("Summary of the 5 issues: 1 critical, 3 serious, 1 moderate;");
+    expect(body).toContain(
+      "Summary of the 5 issues: 1 critical, 3 serious, 1 moderate;",
+    );
     expect(body).toMatch(/By page: https:\/\/shop\.example\/ 3/);
   });
 
   it("gives the whole report's counts on its first page only", async () => {
     const body = text(
-      await handlers.fetchAccessibilityIssues({ scanId: "scan-42", scanRunId: "run-7", cursor: 90 }, CONTEXT),
+      await handlers.fetchAccessibilityIssues(
+        { scanId: "scan-42", scanRunId: "run-7", cursor: 90 },
+        CONTEXT,
+      ),
     );
 
     expect(body).not.toContain("Summary of the 5 issues");
@@ -926,11 +1013,19 @@ describe("what a web report's answer says about its issues", () => {
 
   it("says the CSV holds every issue, for an agent that needs them all at once", async () => {
     for (const result of [
-      await handlers.fetchAccessibilityIssues({ scanId: "scan-42", scanRunId: "run-7" }, CONTEXT),
-      await handlers.startAccessibilityScan({ name: "home", pageURL: "https://site.example" }, CONTEXT),
+      await handlers.fetchAccessibilityIssues(
+        { scanId: "scan-42", scanRunId: "run-7" },
+        CONTEXT,
+      ),
+      await handlers.startAccessibilityScan(
+        { name: "home", pageURL: "https://site.example" },
+        CONTEXT,
+      ),
     ]) {
       const body = text(result);
-      expect(body).toMatch(/full list of issues is a CSV.*every issue is needed at once/s);
+      expect(body).toMatch(
+        /full list of issues is a CSV.*every issue is needed at once/s,
+      );
       expect(body.match(/following link: (\S+)/)?.[1]).toBe("https://csv");
     }
   });
@@ -941,7 +1036,10 @@ describe("what a web report's answer says about its issues", () => {
     m.dashboardLink.mockResolvedValue(LINK);
 
     const body = text(
-      await handlers.startAccessibilityScan({ name: "Home page", pageURL: "https://site.example" }, CONTEXT),
+      await handlers.startAccessibilityScan(
+        { name: "Home page", pageURL: "https://site.example" },
+        CONTEXT,
+      ),
     );
 
     expect(m.dashboardLink).toHaveBeenCalledWith("scan-42");
@@ -953,7 +1051,10 @@ describe("what a web report's answer says about its issues", () => {
     m.dashboardLink.mockResolvedValue(undefined);
 
     const body = text(
-      await handlers.startAccessibilityScan({ name: "Home page", pageURL: "https://site.example" }, CONTEXT),
+      await handlers.startAccessibilityScan(
+        { name: "Home page", pageURL: "https://site.example" },
+        CONTEXT,
+      ),
     );
 
     expect(body).not.toMatch(/scan-details|site-scanner/);
@@ -961,12 +1062,18 @@ describe("what a web report's answer says about its issues", () => {
   });
 
   it("links the scan's page when its CSV export is still being generated", async () => {
-    const LINK = "https://accessibility.browserstack.com/site-scanner/projects/Home%20page/builds?thBuildId=abc";
+    const LINK =
+      "https://accessibility.browserstack.com/site-scanner/projects/Home%20page/builds?thBuildId=abc";
     m.dashboardLink.mockResolvedValue(LINK);
-    m.getReportLink.mockRejectedValueOnce(new (ExportPendingError as any)("t:7", 45_000));
+    m.getReportLink.mockRejectedValueOnce(
+      new (ExportPendingError as any)("t:7", 45_000),
+    );
 
     const body = text(
-      await handlers.startAccessibilityScan({ name: "Home page", pageURL: "https://site.example" }, CONTEXT),
+      await handlers.startAccessibilityScan(
+        { name: "Home page", pageURL: "https://site.example" },
+        CONTEXT,
+      ),
     );
 
     expect(body).toMatch(/still being generated/);
@@ -975,7 +1082,8 @@ describe("what a web report's answer says about its issues", () => {
   });
 
   it("links a failed scan's page too, with its ids", async () => {
-    const LINK = "https://accessibility.browserstack.com/site-scanner/projects/Home%20page/builds?thBuildId=abc";
+    const LINK =
+      "https://accessibility.browserstack.com/site-scanner/projects/Home%20page/builds?thBuildId=abc";
     m.waitUntilComplete.mockResolvedValue("failed");
     m.dashboardLink.mockResolvedValue(LINK);
 

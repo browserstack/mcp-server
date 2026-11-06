@@ -320,7 +320,7 @@ describe("tfaRcaTurnTool", () => {
     // The full PR objects must NOT be serialized into `message`: that field is
     // @Size(max = 5000) server-side and is validated before any append, so
     // inlining them is what produced opaque 400s.
-    expect(body.message).not.toContain("\"link\"");
+    expect(body.message).not.toContain('"link"');
     expect(body.message).not.toContain("Tcma poc");
     // A bounded marker still names the PRs in the trusted message body.
     expect(body.message).toContain("browserstack/misc-services#6044");
@@ -523,7 +523,9 @@ describe("tfaRcaTurnTool", () => {
     expect(get.mock.calls[0][0].url).not.toContain(DEFAULT_O11Y_HOST);
 
     // ...while path templating is unchanged under the override (regression).
-    expect(post.mock.calls[0][0].url).toContain("/ext/v1/testRuns/tr-ov/rcaChat");
+    expect(post.mock.calls[0][0].url).toContain(
+      "/ext/v1/testRuns/tr-ov/rcaChat",
+    );
     expect(get.mock.calls[0][0].url).toContain(
       "/ext/v1/testRuns/tr-ov/rcaChat/u-ov",
     );
@@ -571,7 +573,9 @@ describe("getTfaTurnResultTool", () => {
     expect(get.mock.calls[0][0].url).toBe(
       `${DEFAULT_O11Y_BASE_URL}/ext/v1/testRuns/tr-1/rcaChat/u-1`,
     );
-    expect(JSON.parse(result.content[0].text as string).status).toBe("RESOLVED");
+    expect(JSON.parse(result.content[0].text as string).status).toBe(
+      "RESOLVED",
+    );
   });
 
   it("RESOLVED → same trimmed glimpse contract as tfaRcaTurn", async () => {
@@ -899,9 +903,8 @@ describe("tfaRcaTurn timing constants sanity", () => {
     );
   });
   it("o11y base resolver defaults to the rengg-tfa host", async () => {
-    const { getO11yBaseUrl } = await import(
-      "../../src/tools/tfa-rca-utils/constants"
-    );
+    const { getO11yBaseUrl } =
+      await import("../../src/tools/tfa-rca-utils/constants");
     expect(getO11yBaseUrl()).toBe(DEFAULT_O11Y_BASE_URL);
   });
 });

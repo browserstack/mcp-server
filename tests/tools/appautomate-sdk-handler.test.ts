@@ -79,9 +79,12 @@ describe("setupBrowserStackAppAutomateTests and App Accessibility", () => {
 
 // Nightwatch and Cucumber (Ruby) are set up without a browserstack.yml, and this setup does
 // not turn App Accessibility on for them, so the guidance for it would only mislead.
-vi.mock("../../src/tools/appautomate-utils/native-execution/appautomate.js", () => ({
-  uploadApp: vi.fn(async () => "bs://app-id"),
-}));
+vi.mock(
+  "../../src/tools/appautomate-utils/native-execution/appautomate.js",
+  () => ({
+    uploadApp: vi.fn(async () => "bs://app-id"),
+  }),
+);
 
 describe.each([
   ["nightwatch", "nodejs", "Nightwatch"],
@@ -90,12 +93,19 @@ describe.each([
   it("says the checks are not set up rather than giving guidance for a config it did not write", async () => {
     const body = text(
       await setupAppAutomateHandler(
-        { ...PYTEST, detectedTestingFramework: testingFramework, detectedLanguage: language, accessibility: true },
+        {
+          ...PYTEST,
+          detectedTestingFramework: testingFramework,
+          detectedLanguage: language,
+          accessibility: true,
+        },
         CONFIG,
       ),
     );
 
-    expect(body).toContain(`App Accessibility checks are not set up for ${label}`);
+    expect(body).toContain(
+      `App Accessibility checks are not set up for ${label}`,
+    );
     expect(body).not.toContain("osVersion");
     expect(body).not.toContain("testhub id");
   });

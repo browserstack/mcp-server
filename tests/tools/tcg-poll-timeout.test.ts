@@ -31,12 +31,12 @@ describe("TCG polling hard timeout", () => {
     );
     // Make the inter-poll sleep resolve immediately so the loop advances
     // without waiting real seconds.
-    setTimeoutSpy = vi
-      .spyOn(global, "setTimeout")
-      .mockImplementation(((fn: () => void) => {
-        fn();
-        return 0 as unknown as NodeJS.Timeout;
-      }) as unknown as typeof setTimeout);
+    setTimeoutSpy = vi.spyOn(global, "setTimeout").mockImplementation(((
+      fn: () => void,
+    ) => {
+      fn();
+      return 0 as unknown as NodeJS.Timeout;
+    }) as unknown as typeof setTimeout);
   });
 
   afterEach(() => {
@@ -82,8 +82,8 @@ describe("TCG polling hard timeout", () => {
       },
     });
 
-    await expect(
-      pollTestCaseDetails("trace-xyz", mockConfig),
-    ).resolves.toEqual({ "tc-1": { steps: ["s1"], preconditions: "p1" } });
+    await expect(pollTestCaseDetails("trace-xyz", mockConfig)).resolves.toEqual(
+      { "tc-1": { steps: ["s1"], preconditions: "p1" } },
+    );
   });
 });

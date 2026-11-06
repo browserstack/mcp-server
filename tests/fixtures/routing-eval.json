@@ -80,9 +80,7 @@
       "capability": "list_test_results_for_test_case",
       "product": "tm",
       "q": "what happened when we executed this one case inside that run",
-      "also_accept": [
-        "list_test_results_for_test_case_by_integer_id"
-      ],
+      "also_accept": ["list_test_results_for_test_case_by_integer_id"],
       "trap": "VERSION SIBLING: the v1 and v2 reads are semantically identical (same entity, same scoping, near-identical intent) and the index gives a caller no steer between them. Either answer is correct; picking one over the other is not a model error."
     },
     {
@@ -150,9 +148,7 @@
       "capability": "get_test_case_histories",
       "product": "tm",
       "q": "who changed this case, and when",
-      "also_accept": [
-        "list_test_case_histories"
-      ],
+      "also_accept": ["list_test_case_histories"],
       "trap": "VERSION SIBLING: v1 says \"who changed it, when, which fields moved\"; v2 says \"what changed on a test case, when, and who changed it\". Indistinguishable. Either is correct."
     },
     {

@@ -129,10 +129,9 @@ export async function mapHashedToTra(
   hashedBuildId: string,
   original: unknown,
   config: BrowserStackConfig,
-): Promise<string> {
+): Promise<ResolvedTraBuild> {
   try {
-    return (await resolveTraBuildIdFromHashed(hashedBuildId, config))
-      .traBuildId;
+    return await resolveTraBuildIdFromHashed(hashedBuildId, config);
   } catch (error) {
     if (error instanceof TraBuildNotFoundError && !error.unknownToAutomate) {
       throw error;

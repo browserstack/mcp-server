@@ -7,7 +7,9 @@ vi.mock("../../src/lib/apiClient", () => ({
 }));
 
 vi.mock("../../src/lib/tm-base-url", () => ({
-  getTMBaseURL: vi.fn().mockResolvedValue("https://test-management.browserstack.com"),
+  getTMBaseURL: vi
+    .fn()
+    .mockResolvedValue("https://test-management.browserstack.com"),
 }));
 
 vi.mock("../../src/logger", () => ({
@@ -104,8 +106,12 @@ describe("updateTestRun — endpoint dispatch", () => {
 
   it("updates both metadata and test cases when both are provided", async () => {
     (apiClient.patch as any)
-      .mockResolvedValueOnce({ data: { success: true, testrun: { name: "New" } } })
-      .mockResolvedValueOnce({ data: { success: true, async: true, unique_id: "z" } });
+      .mockResolvedValueOnce({
+        data: { success: true, testrun: { name: "New" } },
+      })
+      .mockResolvedValueOnce({
+        data: { success: true, async: true, unique_id: "z" },
+      });
 
     const result = await updateTestRun(
       {
@@ -122,8 +128,12 @@ describe("updateTestRun — endpoint dispatch", () => {
     expect(result.isError).toBeFalsy();
     expect(apiClient.patch).toHaveBeenCalledTimes(2);
     const urls = (apiClient.patch as any).mock.calls.map((c: any) => c[0].url);
-    expect(urls.some((u: string) => /\/test-runs\/TR-1\/update$/.test(u))).toBe(true);
-    expect(urls.some((u: string) => /\/test-runs\/TR-1\/test-cases$/.test(u))).toBe(true);
+    expect(urls.some((u: string) => /\/test-runs\/TR-1\/update$/.test(u))).toBe(
+      true,
+    );
+    expect(
+      urls.some((u: string) => /\/test-runs\/TR-1\/test-cases$/.test(u)),
+    ).toBe(true);
     const combined = (result.content ?? []).map((c: any) => c.text).join("\n");
     expect(combined).toContain("Successfully updated test run TR-1");
     expect(combined).toContain("added 1");

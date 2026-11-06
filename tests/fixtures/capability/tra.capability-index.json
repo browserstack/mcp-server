@@ -113,13 +113,7 @@
           }
         ],
         "intent": "For one project and time window, return a per-build-name breakdown of run counts by display status ('for each distinct build name, how many runs passed/failed') - used to pick the noteworthy builds for the summary.",
-        "returns": [
-          "count",
-          "passed",
-          "failed",
-          "skipped",
-          "unknown"
-        ],
+        "returns": ["count", "passed", "failed", "skipped", "unknown"],
         "guidance": [
           "The body is a top-level MAP keyed by build name, each value `{count, passed, failed, skipped, unknown}`. There is no wrapper.",
           "Only parent builds are counted, and builds whose usage quota status is 'locked' are excluded, so totals can be lower than the raw run count.",
@@ -213,10 +207,7 @@
           }
         ],
         "intent": "Build the one-shot payload for the daily/periodic summary email: for a set of projects and a time window, per-project build counts, top failed builds, failed-test summary and failure-category breakdown, with the top failed build best-effort enriched with AI RCA, self-healing and test-authoring summaries.",
-        "returns": [
-          "filterQueries",
-          "projects"
-        ],
+        "returns": ["filterQueries", "projects"],
         "guidance": [
           "Despite the '/v2' path this is NOT another version of list_build_summaries_by_ids: that returns a flat array of build summaries, this returns the aggregated OverallDailySummary object `{filterQueries, projects:[...]}` and does its own build selection across the projects.",
           "Heavy call: several aggregations plus three best-effort enrichment passes. The AI RCA / self-healing / authoring summary fields on the top failed build are swallowed on error, so they may be silently absent - do not treat a missing enrichment field as a failure.",
@@ -251,9 +242,7 @@
           }
         ],
         "intent": "Check whether public 'anyone with the link' sharing is currently turned on for a custom dashboard.",
-        "returns": [
-          "publicLink"
-        ],
+        "returns": ["publicLink"],
         "guidance": [
           "The whole body is just `{publicLink: <bool>}`. A dashboard that has never been shared reads `false` (the default), which means sharing is off, not that the dashboard is missing.",
           "The dashboard lookup is permission-aware: a dashboard the caller cannot see comes back 404 DASHBOARD_NOT_FOUND rather than a setting."
@@ -291,9 +280,7 @@
           }
         ],
         "intent": "Check whether public link sharing is on for a project's report pages such as build insights.",
-        "returns": [
-          "publicLink"
-        ],
+        "returns": ["publicLink"],
         "guidance": [
           "The whole body is just `{publicLink: <bool>}`. When the project has no token row yet the value is `false` (the default) \u2014 sharing off, not an error.",
           "`projectId` is resolved as a TestHub project id, not the observability project id; an id that does not resolve is 404 PROJECT_NOT_FOUND."
@@ -365,11 +352,7 @@
           }
         ],
         "intent": "Typeahead/value source for the filter builder inside a quality profile: return matching build names, build tags, test tags, folder paths, failure categories or alerts so a caller can pick which builds a gate applies to.",
-        "returns": [
-          "data",
-          "afterKey",
-          "query"
-        ],
+        "returns": ["data", "afterKey", "query"],
         "responses": {
           "200": {
             "$response": "QualityProfileFilterValues"
@@ -397,11 +380,7 @@
           }
         ],
         "intent": "Return a project's quality-gate configuration over the public (access-key) API: whether gates are enabled, whether the gate overrides build status, and the profiles attached to the project. Use this from CI/integrations authenticated with a username+access-key.",
-        "returns": [
-          "enabled",
-          "shouldOverrideBuildStatus",
-          "qualityProfiles"
-        ],
+        "returns": ["enabled", "shouldOverrideBuildStatus", "qualityProfiles"],
         "responses": {
           "200": {
             "$response": "QualityGateSettings"
@@ -507,11 +486,7 @@
           }
         ],
         "intent": "The readiness-aware quality-gate summary for a build: return the per-profile results, or instead a status message when the build is still pending, the auto-analyser is running, or an evaluation state is cached. This is the endpoint to poll after triggering a recalculation.",
-        "returns": [
-          "qgResult",
-          "message",
-          "state"
-        ],
+        "returns": ["qgResult", "message", "state"],
         "responses": {
           "200": {
             "$response": "BuildQualityGateSummary"
@@ -540,12 +515,7 @@
           }
         ],
         "intent": "Return the per-quality-profile results for a build as a flat list: each profile with its name, uuid and per-status rule counts \u2014 the quality gate breakdown on the build page.",
-        "returns": [
-          "uuid",
-          "name",
-          "status",
-          "statusStats"
-        ],
+        "returns": ["uuid", "name", "status", "statusStats"],
         "responses": {
           "200": {
             "$response": "BuildQualityProfileResults"
@@ -579,10 +549,7 @@
           }
         ],
         "intent": "Drill into a single quality profile's result for a build: the individual rules, their thresholds and rendered conditions, and each rule's pass/fail outcome \u2014 for the quality-gate detail drawer.",
-        "returns": [
-          "rules",
-          "ruleStatus"
-        ],
+        "returns": ["rules", "ruleStatus"],
         "responses": {
           "200": {
             "$response": "BuildQualityProfileResultDetail"
@@ -631,10 +598,7 @@
           }
         ],
         "intent": "Get the flakiness card for a project's Testing Trends page - the percentage and count of flaky tests over the window plus the sparkline series, to track whether suite flakiness is improving.",
-        "returns": [
-          "data",
-          "insights"
-        ],
+        "returns": ["data", "insights"],
         "responses": {
           "200": {
             "$response": "PercentTimelineCardResponse"
@@ -694,10 +658,7 @@
           }
         ],
         "intent": "Get the always-failing card for a project - the percentage and count of consistently broken (permanently red) tests over the window plus the sparkline series, to see whether they are growing.",
-        "returns": [
-          "data",
-          "insights"
-        ],
+        "returns": ["data", "insights"],
         "responses": {
           "200": {
             "$response": "PercentTimelineCardResponse"
@@ -755,10 +716,7 @@
           }
         ],
         "intent": "Get the new-failures card for a project - the percentage and count of tests failing for the first time in the window plus the series, the 'what did we just break' regression signal.",
-        "returns": [
-          "data",
-          "insights"
-        ],
+        "returns": ["data", "insights"],
         "responses": {
           "200": {
             "$response": "PercentTimelineCardResponse"
@@ -815,10 +773,7 @@
           }
         ],
         "intent": "Get the test-suite growth card for a project - how the number of unique test cases changed over the window, with the timeline series, i.e. whether the suite is actually growing.",
-        "returns": [
-          "data",
-          "insights"
-        ],
+        "returns": ["data", "insights"],
         "responses": {
           "200": {
             "$response": "PercentTimelineCardResponse"
@@ -876,10 +831,7 @@
           }
         ],
         "intent": "Get the test-execution volume card for a project - how many tests ran over the window, bucketed over time, to correlate suite growth or CI changes with other trends.",
-        "returns": [
-          "data",
-          "insights"
-        ],
+        "returns": ["data", "insights"],
         "responses": {
           "200": {
             "$response": "PercentTimelineCardResponse"
@@ -937,9 +889,7 @@
           }
         ],
         "intent": "Break a project's failures down by failure category over time, so a team can see which classes of failure (defect types) are trending up and their share of the total.",
-        "returns": [
-          "data"
-        ],
+        "returns": ["data"],
         "responses": {
           "200": {
             "$response": "FailureCategoriesResponse"
@@ -997,10 +947,7 @@
           }
         ],
         "intent": "Get the cross-browser-testing coverage breakdown for a project - the window's executions aggregated by browser, OS and device and grouped into primary/secondary platform buckets with counts and percentages.",
-        "returns": [
-          "data",
-          "drillDownData"
-        ],
+        "returns": ["data", "drillDownData"],
         "responses": {
           "200": {
             "$response": "CbtResponse"
@@ -1060,9 +1007,7 @@
           }
         ],
         "intent": "Get how often builds ran over a period - run counts per build name (or for one build name) - so a team can see CI cadence and gaps.",
-        "returns": [
-          "data"
-        ],
+        "returns": ["data"],
         "responses": {
           "200": {
             "$response": "BuildFrequencyResponse"
@@ -1109,9 +1054,7 @@
           }
         ],
         "intent": "List the distinct build names seen in a project within the plan's retention window - the source of the build-name values every other Testing Trends card filters by.",
-        "returns": [
-          "data"
-        ],
+        "returns": ["data"],
         "responses": {
           "200": {
             "$response": "BuildNamesResponse"
@@ -1178,10 +1121,7 @@
           }
         ],
         "intent": "Get the stability leaderboard for a project's Testing Trends page - pass-rate / stability scoring per build name over the window, to rank the least reliable suites.",
-        "returns": [
-          "data",
-          "pagingParam"
-        ],
+        "returns": ["data", "pagingParam"],
         "responses": {
           "200": {
             "$response": "StabilityLeaderboardResponse"
@@ -1240,10 +1180,7 @@
           }
         ],
         "intent": "Get the project-wide stability-over-time series for the Testing Trends stability chart - across all builds, or for one build selected by build name.",
-        "returns": [
-          "median",
-          "data"
-        ],
+        "returns": ["median", "data"],
         "responses": {
           "200": {
             "$response": "StabilityChartResponse"
@@ -1303,10 +1240,7 @@
           }
         ],
         "intent": "Get the stability-over-time series for one specific build, addressed by its identifier in the path - what the UI calls when a stability leaderboard row is expanded.",
-        "returns": [
-          "median",
-          "data"
-        ],
+        "returns": ["median", "data"],
         "responses": {
           "200": {
             "$response": "StabilityChartResponse"
@@ -1369,10 +1303,7 @@
           }
         ],
         "intent": "Get the performance leaderboard for a project's Testing Trends page - per-build execution-duration metrics over the window, to find which suites are slowing down.",
-        "returns": [
-          "data",
-          "pagingParam"
-        ],
+        "returns": ["data", "pagingParam"],
         "responses": {
           "200": {
             "$response": "PerformanceLeaderboardResponse"
@@ -1430,10 +1361,7 @@
           }
         ],
         "intent": "Get the project-wide duration-over-time series for the Testing Trends performance chart - across all builds, or for one build selected by build name.",
-        "returns": [
-          "barData",
-          "lineData"
-        ],
+        "returns": ["barData", "lineData"],
         "responses": {
           "200": {
             "$response": "PerformanceChartResponse"
@@ -1493,10 +1421,7 @@
           }
         ],
         "intent": "Get the duration-over-time series for one specific build, addressed by its identifier in the path - what the UI calls when a performance leaderboard row is expanded.",
-        "returns": [
-          "barData",
-          "lineData"
-        ],
+        "returns": ["barData", "lineData"],
         "responses": {
           "200": {
             "$response": "PerformanceChartResponse"
@@ -1545,11 +1470,7 @@
           }
         ],
         "intent": "List a project's most recent builds - one entry per build with its summary (name, number, status, counts) - the run picker / recent-runs list on the Testing Trends page.",
-        "returns": [
-          "data",
-          "pagingParams",
-          "currentQGOverrideStatus"
-        ],
+        "returns": ["data", "pagingParams", "currentQGOverrideStatus"],
         "responses": {
           "200": {
             "$response": "RecentRunsResponse"
@@ -1578,9 +1499,7 @@
         "mode": "read",
         "entity": "webhook",
         "intent": "List the group's TCM/TO projects for the webhook editor's project picker \u2014 a paginated, searchable, sortable list that marks the projects already linked to a given webhook.",
-        "returns": [
-          "projectMapping"
-        ],
+        "returns": ["projectMapping"],
         "query": [
           {
             "name": "page",
@@ -1696,9 +1615,7 @@
             "json_path": "/webhook_url"
           }
         ],
-        "returns": [
-          "messageId"
-        ],
+        "returns": ["messageId"],
         "responses": {
           "200": {
             "$response": "RcaRetriggerResponse"
@@ -1819,11 +1736,7 @@
             "type": "string",
             "required": true,
             "description": "Scope of the similarity search. Required \u2014 a missing/invalid value is a 400.",
-            "values": [
-              "CURRENT_BUILD",
-              "LAST_10_BUILDS",
-              "LAST_10_DAYS"
-            ]
+            "values": ["CURRENT_BUILD", "LAST_10_BUILDS", "LAST_10_DAYS"]
           },
           {
             "name": "testRunId",
@@ -1842,11 +1755,7 @@
             ]
           }
         ],
-        "returns": [
-          "similar",
-          "current",
-          "message"
-        ],
+        "returns": ["similar", "current", "message"],
         "guidance": [
           "Send EITHER `testRunId` OR `clusterIds` (or both) \u2014 if neither is provided the call is a 400 (\"Either clusterIds or TestRunId is required\").",
           "403 (plan-feature-not-allowed) when the build is locked by plan fencing; this is a plan-fenced analyser feature.",
@@ -1925,12 +1834,7 @@
             "description": "Any extra query params not bound to a named FilterParamsV2 field are collected into a customParams map and forwarded. Unknown keys are not rejected."
           }
         ],
-        "returns": [
-          "count",
-          "meta",
-          "commentCount",
-          "autoUnmuteCount"
-        ],
+        "returns": ["count", "meta", "commentCount", "autoUnmuteCount"],
         "guidance": [
           "`count` is the always-failing test count and `meta` typically carries the total it is out of; `commentCount` is the number of comments on this tile.",
           "403 (plan-feature-not-allowed) when the build is plan-locked; build-not-found for an unknown UUID.",
@@ -2015,12 +1919,7 @@
             "description": "Build UUID."
           }
         ],
-        "returns": [
-          "attempts",
-          "summary",
-          "count",
-          "commentCount"
-        ],
+        "returns": ["attempts", "summary", "count", "commentCount"],
         "guidance": [
           "`attempts` is one entry per attempt (label, attemptNumber, totalAttempts and status counts); `summary` is the aggregate across attempts.",
           "The project's hooks visibility is resolved first and changes which test-run documents are counted \u2014 the same build can report different totals depending on hooks visibility.",
@@ -2082,11 +1981,7 @@
             "description": "Extra query params not bound to a named FilterParamsV2 field are collected into a customParams map and forwarded; unknown keys are not rejected."
           }
         ],
-        "returns": [
-          "data",
-          "keys",
-          "commentCount"
-        ],
+        "returns": ["data", "keys", "commentCount"],
         "guidance": [
           "The window is hard-coded to the ~10 most recent builds of the same build name \u2014 there is no page size or count parameter to widen it.",
           "`data` is a per-status series and `keys` the build labels/order along the x-axis; builds locked by plan fencing are flagged within the mapping.",
@@ -2137,9 +2032,7 @@
             "description": "Build serial number (the #N shown in the UI)."
           }
         ],
-        "returns": [
-          "buildId"
-        ],
+        "returns": ["buildId"],
         "guidance": [
           "All three query params are required.",
           "When no build matches you get a bare HTTP 404 with an EMPTY body (not a structured error object) \u2014 handle the status code, there is nothing to parse.",
@@ -2234,11 +2127,7 @@
             "description": "Build UUID."
           }
         ],
-        "returns": [
-          "retryData",
-          "count",
-          "commentCount"
-        ],
+        "returns": ["retryData", "count", "commentCount"],
         "guidance": [
           "This is the flat/legacy shape, computed straight from the DB by build id + group id; `retryData` is a flat list of legs with no split-build grouping and there is no aggregate `summary`.",
           "For split or parent/child builds, or when you need the aggregate summary, use `get_split_build_rerun_stats` instead \u2014 its response shape is different and NOT a drop-in swap.",
@@ -2278,12 +2167,7 @@
             "description": "Build UUID."
           }
         ],
-        "returns": [
-          "retryData",
-          "count",
-          "commentCount",
-          "summary"
-        ],
+        "returns": ["retryData", "count", "commentCount", "summary"],
         "guidance": [
           "Use this for split or parent/child builds and project-scoped configuration \u2014 it resolves against the whole build object and the Observability project id.",
           "The response shape differs from `get_build_rerun_stats`: `retryData` is a list of GROUPS (each with `splits` and its own `summary` and build metadata) and there is a top-level aggregate `summary`. It is NOT a drop-in swap for the flat version.",
@@ -2447,10 +2331,7 @@
           }
         ],
         "intent": "Populate the build-listing filter bar for a project in one call \u2014 the static catalogue of selectable build filters (statuses, frameworks, build types, product sources, creation types) plus the caller's currently applied filter echoed back resolved.",
-        "returns": [
-          "applied",
-          "staticFilters"
-        ],
+        "returns": ["applied", "staticFilters"],
         "guidance": [
           "`staticFilters` carries the option lists: statusList, frameworkList, types, sources, creationType \u2014 each a list of {id, value, label} option objects. `applied` is your query resolved (user/team ids to names, date range, tags, branches).",
           "This is the PER-PROJECT filter bar (scoped by the path project) \u2014 it returns the catalogue for that project. For a cross-project, filter-narrowed facet list use the sidebar capabilities instead.",
@@ -2497,9 +2378,7 @@
           }
         ],
         "intent": "Type-ahead options for the 'Branch' filter on a project's build listing \u2014 git branch names seen in the project's builds, as {id, value, label} option objects.",
-        "returns": [
-          "data"
-        ],
+        "returns": ["data"],
         "guidance": [
           "Per-project, prefix-search only \u2014 it does not narrow by any other currently-applied filter. For branches present under a full applied filter across a project set, use list_sidebar_branch_filter_options.",
           "Each option's `id`/`value` IS the branch string; send that value straight back as the branch filter selection."
@@ -2544,9 +2423,7 @@
           }
         ],
         "intent": "Type-ahead options for the 'Build tag' filter on a project's build listing \u2014 matching build-tag values as {id, value, label} option objects.",
-        "returns": [
-          "data"
-        ],
+        "returns": ["data"],
         "guidance": [
           "Per-project, prefix-search only \u2014 no other applied filter narrows the result. This handler always does a real project lookup (there is no demo-sandbox short-circuit here).",
           "These are build-level tags. For test-execution tags, or for a tag list narrowed by an applied cross-project filter, use the sidebar tag facet."
@@ -2591,9 +2468,7 @@
           }
         ],
         "intent": "Type-ahead options for the 'Team' filter on a project's build listing \u2014 BrowserStack teams that have builds in the project, as {id, value, label} option objects.",
-        "returns": [
-          "data"
-        ],
+        "returns": ["data"],
         "guidance": [
           "Each option's `id` is the numeric team id (as a string) and `value`/`label` are the team name \u2014 send the id back as the team filter selection, not the name.",
           "Per-project only; it is not narrowed by any other applied filter."
@@ -2638,9 +2513,7 @@
           }
         ],
         "intent": "Type-ahead options for the 'User' (build owner) filter on a project's build listing \u2014 matching users as {id, value, label} option objects.",
-        "returns": [
-          "data"
-        ],
+        "returns": ["data"],
         "guidance": [
           "Each option's `id` is the numeric user id (as a string) and `value`/`label` are the user's name \u2014 send the id back as the user/owner filter selection.",
           "Per-project only; it is not narrowed by any other applied filter."
@@ -2742,10 +2615,7 @@
           }
         ],
         "intent": "Hydrate the build-listing sidebar filter panel across a set of projects \u2014 the caller's applied selection resolved into display objects (user/team ids to names, date range, tags, branches, statuses, build names) alongside the static option catalogue.",
-        "returns": [
-          "applied",
-          "staticFilters"
-        ],
+        "returns": ["applied", "staticFilters"],
         "guidance": [
           "POST but purely read \u2014 the body is only a filter payload and nothing is written.",
           "`applied` (a SidebarFilter: the resolved build filter plus the `projects` it was scoped to) echoes your selection resolved; `staticFilters` is the option catalogue (statusList, frameworkList, types, sources, creationType).",
@@ -2799,9 +2669,7 @@
           }
         ],
         "intent": "Type-ahead options for the 'Branch' facet of the build-list sidebar \u2014 git branch names present in the builds matching the rest of the currently applied filter, optionally narrowed by a search string.",
-        "returns": [
-          "data"
-        ],
+        "returns": ["data"],
         "guidance": [
           "POST but read-only \u2014 the body is a filter, no state change.",
           "Unlike the per-project branch list, this narrows to branches that actually occur under the whole applied filter across `projects`, and returns BARE STRINGS in `data` (not {id,value,label} objects).",
@@ -2846,9 +2714,7 @@
           }
         ],
         "intent": "Type-ahead options for the 'Build name' facet of the build-list sidebar \u2014 the distinct build names present under the current filter/projects, optionally matched against a search string.",
-        "returns": [
-          "data"
-        ],
+        "returns": ["data"],
         "guidance": [
           "POST but read-only \u2014 body is a filter payload only.",
           "Returns BARE STRINGS in `data`. Distinct from the shipped list_build_names capability, which is a different (paged) listing \u2014 this one is the sidebar facet's aggregation.",
@@ -2888,10 +2754,7 @@
           }
         ],
         "intent": "Type-ahead options for the 'Run group' (build group) facet of the build-list sidebar \u2014 the first 100 run groups of the selected projects, name-searchable.",
-        "returns": [
-          "data",
-          "info"
-        ],
+        "returns": ["data", "info"],
         "guidance": [
           "POST but read-only. ONLY `projects` and `query` are read from the body \u2014 every other build-filter field is ignored here, so do not expect statuses/tags/dateRange to narrow the result.",
           "Pagination is hardcoded to page 1, page size 100 and CANNOT be driven from the request: you always get at most the first 100 run groups. `info` reports paging but there is no way to fetch page 2 through this endpoint \u2014 use the per-project build-groups listing if you need to page.",
@@ -2954,10 +2817,7 @@
             "description": "Substring filter over custom-field names."
           }
         ],
-        "returns": [
-          "data",
-          "info"
-        ],
+        "returns": ["data", "info"],
         "responses": {
           "200": {
             "$response": "WidgetCustomFieldFiltersResponse"
@@ -2999,10 +2859,7 @@
             "description": "User ids (Long) to resolve to names. Required key, but may be an empty array."
           }
         ],
-        "returns": [
-          "projects",
-          "users"
-        ],
+        "returns": ["projects", "users"],
         "responses": {
           "200": {
             "$response": "DashboardMetaResponse"
@@ -3038,10 +2895,7 @@
             "description": "Partial error string to search for. Matched against the errors search index."
           }
         ],
-        "returns": [
-          "errorClusterId",
-          "error"
-        ],
+        "returns": ["errorClusterId", "error"],
         "responses": {
           "200": {
             "$response": "UniqueErrorSearchResponse"
@@ -3077,10 +2931,7 @@
             "name": "source",
             "type": "string",
             "required": false,
-            "values": [
-              "TO",
-              "TCM"
-            ],
+            "values": ["TO", "TCM"],
             "description": "Product source. An INVALID value does not 4xx \u2014 it returns HTTP 200 with an `error` string and empty data."
           },
           {
@@ -3179,16 +3030,11 @@
             "type": "string",
             "required": false,
             "default": "TO",
-            "values": [
-              "TO",
-              "TCM"
-            ],
+            "values": ["TO", "TCM"],
             "description": "Product source to list. Defaults to TO."
           }
         ],
-        "returns": [
-          "data"
-        ],
+        "returns": ["data"],
         "responses": {
           "200": {
             "$response": "DashboardsListResponse"
@@ -3230,16 +3076,11 @@
             "type": "string",
             "required": false,
             "default": "TO",
-            "values": [
-              "TO",
-              "TCM"
-            ],
+            "values": ["TO", "TCM"],
             "description": "Product source. Defaults to TO."
           }
         ],
-        "returns": [
-          "data"
-        ],
+        "returns": ["data"],
         "responses": {
           "200": {
             "$response": "DashboardResponse"
@@ -3275,10 +3116,7 @@
             "type": "string",
             "required": false,
             "default": "TO",
-            "values": [
-              "TO",
-              "TCM"
-            ],
+            "values": ["TO", "TCM"],
             "description": "Product source for the new dashboard. Defaults to TO."
           }
         ],
@@ -3355,9 +3193,7 @@
             ]
           }
         ],
-        "returns": [
-          "data"
-        ],
+        "returns": ["data"],
         "responses": {
           "200": {
             "$response": "DashboardResponse"
@@ -3436,9 +3272,7 @@
             "description": "Replacement global filters (same shape as create)."
           }
         ],
-        "returns": [
-          "data"
-        ],
+        "returns": ["data"],
         "responses": {
           "200": {
             "$response": "DashboardResponse"
@@ -3506,9 +3340,7 @@
             "description": "Dashboard type for the copy."
           }
         ],
-        "returns": [
-          "data"
-        ],
+        "returns": ["data"],
         "responses": {
           "200": {
             "$response": "DashboardResponse"
@@ -3596,10 +3428,7 @@
             "description": "Opaque base64 cursor from the previous response's pagination.next_page (it encodes a page index, not a row offset). Omit for the first page. A malformed value is a 400 'Incorrect pagination params'."
           }
         ],
-        "returns": [
-          "projects",
-          "pagination"
-        ],
+        "returns": ["projects", "pagination"],
         "responses": {
           "200": {
             "$response": "ProjectListingExternalResponse"
@@ -3686,10 +3515,7 @@
             "description": "Quick-filter device type (string, not boolean, so a stale value degrades instead of erroring). Only applied when applyQuickFilters=true."
           }
         ],
-        "returns": [
-          "data",
-          "pagingParams"
-        ],
+        "returns": ["data", "pagingParams"],
         "responses": {
           "200": {
             "$response": "HomeUniqueBuildsResponse"
@@ -3716,9 +3542,7 @@
         "mode": "read",
         "entity": "project",
         "intent": "Get the user's last few visited items (dashboards, builds, views) for the Home page 'Recently viewed' strip.",
-        "returns": [
-          "data"
-        ],
+        "returns": ["data"],
         "responses": {
           "200": {
             "$response": "HomeRecentViewsResponse"
@@ -3743,10 +3567,7 @@
         "mode": "read",
         "entity": "project",
         "intent": "Get the Home page 'key takeaways' cards with the aggregate time-saved metric - stability, pass-rate, always-failing/flaky/new-failure counts and a single time-savings percentage, versus the previous 7-day window.",
-        "returns": [
-          "timeSavingsData",
-          "takeAwayData"
-        ],
+        "returns": ["timeSavingsData", "takeAwayData"],
         "responses": {
           "200": {
             "$response": "HomeTakeawaysResponse"
@@ -3771,10 +3592,7 @@
         "mode": "read",
         "entity": "project",
         "intent": "Get the Home page 'key takeaways' cards with the failure-noise breakdown - the same stability/pass-rate story plus per-category (flaky, always-failing, auto-analyzed, unique-error) failure counts and their percentage reductions.",
-        "returns": [
-          "timeSavingV2Metric",
-          "takeAwayData"
-        ],
+        "returns": ["timeSavingV2Metric", "takeAwayData"],
         "responses": {
           "200": {
             "$response": "HomeTakeawaysNoiseBreakdownResponse"
@@ -3892,10 +3710,7 @@
           {
             "name": "state",
             "type": "string",
-            "values": [
-              "active",
-              "closed"
-            ],
+            "values": ["active", "closed"],
             "description": "Build state; defaults to active."
           },
           {
@@ -4077,31 +3892,18 @@
           {
             "name": "isMuted",
             "type": "string",
-            "values": [
-              "all",
-              "true",
-              "false"
-            ],
+            "values": ["all", "true", "false"],
             "description": "Muted-test visibility. Accepts all / true (muted only) / false (unmuted only); the identifiers ALL / MUTED / UNMUTED are also accepted, case-insensitively."
           },
           {
             "name": "hooksVisibility",
             "type": "string",
-            "values": [
-              "all",
-              "failed",
-              "beforeFailed",
-              "none"
-            ],
+            "values": ["all", "failed", "beforeFailed", "none"],
             "description": "Applied hooks visibility. The response also returns the project's own default hooks visibility separately under `hooksVisibility`."
           }
         ],
         "intent": "Get the whole filter sidebar for the Suite Health test list: the currently applied filters resolved into display fields, the available static filter options (failure categories, OS/browser/device, sources, run-level options, etc.), and the project's default hooks visibility.",
-        "returns": [
-          "applied",
-          "staticFilters",
-          "hooksVisibility"
-        ],
+        "returns": ["applied", "staticFilters", "hooksVisibility"],
         "guidance": [
           "This echoes back the filters you sent (resolved into {id,value,label} fields under `applied`) AND the catalogue of choosable options under `staticFilters` \u2014 send an empty query (just dateRange) to fetch the full option catalogue for building a filter UI.",
           "It degrades open: the run-level option lists inside `staticFilters` (typeOfRun, assignedTo, state, testPlan) are fetched from an upstream service under a timeout, and on timeout/failure (or when there is nothing) they come back null or [] rather than erroring. An empty or null run-level dropdown does not mean there are no options.",
@@ -4164,9 +3966,7 @@
           }
         ],
         "intent": "Type-ahead the branch filter on the Suite Health test list: get git branch names seen in the project within the date window that match a substring.",
-        "returns": [
-          "data"
-        ],
+        "returns": ["data"],
         "guidance": [
           "Suggestion list only \u2014 the Elasticsearch terms aggregation is capped at 100 branches, so it is not exhaustive; narrow with `query` rather than expecting the full set.",
           "The `query` match is applied twice: a wildcard ES match AND a case-sensitive literal `contains` filter on the returned values, so casing matters when narrowing.",
@@ -4229,9 +4029,7 @@
           }
         ],
         "intent": "Type-ahead the build-name filter on the Suite Health test list: get unique build names for the project in the date window that match a substring.",
-        "returns": [
-          "data"
-        ],
+        "returns": ["data"],
         "guidance": [
           "This route is the odd one out: it converts the request into a build-sidebar filter and resolves against the build-level index (BuildFilterServiceV2), NOT the test-level filter service the other type-aheads use \u2014 so its matching and result limits can differ from the branches/tags/hostNames suggestions.",
           "Because it runs through the build path it honours `includeManualRuns`, which the other suggestion routes ignore.",
@@ -4293,9 +4091,7 @@
           }
         ],
         "intent": "Type-ahead the build-tag filter on the Suite Health test list: get build tags used in the project within the date window that match a substring.",
-        "returns": [
-          "data"
-        ],
+        "returns": ["data"],
         "guidance": [
           "Suggestion list only \u2014 the terms aggregation is capped at 10 results, so it is not exhaustive; narrow with `query`.",
           "The `query` narrowing is a case-sensitive literal `contains` on top of the wildcard match, so casing matters.",
@@ -4353,9 +4149,7 @@
           }
         ],
         "intent": "Type-ahead the host-name (machine/agent) filter on the Suite Health test list: get host names seen in the project within the date window that match a substring.",
-        "returns": [
-          "data"
-        ],
+        "returns": ["data"],
         "guidance": [
           "Suggestion list only \u2014 the terms aggregation is capped at 10 results.",
           "Unlike the other type-aheads this route does NOT accept `isManuallyOverridden` (that filter is not applied here), and it does not apply a client-side literal `contains` filter \u2014 it relies purely on the wildcard ES match.",
@@ -4417,9 +4211,7 @@
           }
         ],
         "intent": "Type-ahead the test-tag filter on the Suite Health test list: get test tags seen in the project within the date window that match a substring.",
-        "returns": [
-          "data"
-        ],
+        "returns": ["data"],
         "guidance": [
           "Suggestion list only \u2014 the terms aggregation is capped at 10 results.",
           "The `query` narrowing is a case-sensitive literal `contains` on top of the wildcard match, so casing matters.",
@@ -4558,22 +4350,13 @@
           {
             "name": "isMuted",
             "type": "string",
-            "values": [
-              "all",
-              "true",
-              "false"
-            ],
+            "values": ["all", "true", "false"],
             "description": "Muted-test visibility (ALL / MUTED / UNMUTED identifiers also accepted, case-insensitively)."
           },
           {
             "name": "hooksVisibility",
             "type": "string",
-            "values": [
-              "all",
-              "failed",
-              "beforeFailed",
-              "none"
-            ],
+            "values": ["all", "failed", "beforeFailed", "none"],
             "description": "Hooks visibility scope."
           },
           {
@@ -4583,11 +4366,7 @@
           }
         ],
         "intent": "Get the Suite Health page chart data in one call: time-bucketed failures-over-executions, average duration, and average failure-rate series for the project's tests over a window, filtered by the full Suite Health filter set.",
-        "returns": [
-          "failureChart",
-          "durationChart",
-          "failureRateChart"
-        ],
+        "returns": ["failureChart", "durationChart", "failureRateChart"],
         "guidance": [
           "Response is a top-level map of three charts \u2014 `failureChart`, `durationChart`, `failureRateChart` \u2014 each an SPChart with a `data` map of named series (arrays of {x,t,y,pointRange} points) and an `insights` summary. There is no `data` envelope wrapper.",
           "Series keys inside `data`: failureChart carries `totalExecutions` and `totalFailures`; durationChart carries `averageDuration`; failureRateChart carries `averageFailureRates`.",
@@ -4635,11 +4414,7 @@
             "name": "isMuted",
             "type": "string",
             "required": true,
-            "values": [
-              "ALL",
-              "MUTED",
-              "UNMUTED"
-            ],
+            "values": ["ALL", "MUTED", "UNMUTED"],
             "description": "REQUIRED muted-test visibility, as the enum constant ALL / MUTED / UNMUTED (case-sensitive). all/true/false -> 400 'Invalid request payload'."
           },
           {
@@ -4659,10 +4434,7 @@
           }
         ],
         "intent": "Get the identifying header info for one test in the Test Health detail view \u2014 its name and the environment (OS/browser/device) combinations it ran on \u2014 for the selected window.",
-        "returns": [
-          "name",
-          "combinations"
-        ],
+        "returns": ["name", "combinations"],
         "guidance": [
           "Response is a flat object `{name, combinations}` with NO data wrapper. `name` is the test's display name (empty string when the hash matches nothing in the window, still 200), and `combinations` is the list of OS/browser/device environments it ran on.",
           "isMuted is REQUIRED and binds straight to the MutedTestsVisibility enum by constant name: send ALL, MUTED or UNMUTED. The listing's all/true/false spellings fail conversion and return a generic 400 'Invalid request payload'.",
@@ -4709,11 +4481,7 @@
             "name": "isMuted",
             "type": "string",
             "required": true,
-            "values": [
-              "ALL",
-              "MUTED",
-              "UNMUTED"
-            ],
+            "values": ["ALL", "MUTED", "UNMUTED"],
             "description": "REQUIRED muted-test visibility, as the enum constant ALL / MUTED / UNMUTED (case-sensitive). all/true/false -> 400 'Invalid request payload'."
           },
           {
@@ -4739,20 +4507,13 @@
           {
             "name": "orderKey",
             "type": "string",
-            "values": [
-              "reliability",
-              "average",
-              "totalFailures"
-            ],
+            "values": ["reliability", "average", "totalFailures"],
             "description": "Sort key for the returned rows. Unrecognised/absent falls back to reliability."
           },
           {
             "name": "orderValue",
             "type": "string",
-            "values": [
-              "asc",
-              "desc"
-            ],
+            "values": ["asc", "desc"],
             "description": "Sort direction. Unrecognised/absent falls back to descending."
           }
         ],
@@ -4804,11 +4565,7 @@
             "description": "The test run's UUID (not its integer id and not the TR-NNN identifier). A missing or foreign UUID collapses into an empty 500 with no body."
           }
         ],
-        "returns": [
-          "status",
-          "appLogQuery",
-          "logs"
-        ],
+        "returns": ["status", "appLogQuery", "logs"],
         "responses": {
           "200": {
             "description": "Parsed app logs. `status` is 'success', or 'failure' with an empty `logs` list (still HTTP 200) when Loki reports a non-success status.",
@@ -4844,10 +4601,7 @@
             "description": "The test run's UUID (not its integer id and not the TR-NNN identifier)."
           }
         ],
-        "returns": [
-          "status",
-          "data"
-        ],
+        "returns": ["status", "data"],
         "responses": {
           "200": {
             "description": "Loki's native query_range JSON body, relayed verbatim as an opaque JSON document (top-level `status` and `data.result[]` streams). This is NOT an app model \u2014 the shape is Loki's, not the service's.",
@@ -4881,11 +4635,7 @@
             "description": "The test run's integer id."
           }
         ],
-        "returns": [
-          "testCode",
-          "testMetadata",
-          "hooksCode"
-        ],
+        "returns": ["testCode", "testMetadata", "hooksCode"],
         "responses": {
           "200": {
             "description": "A MAP keyed by hook test-run id (numeric string keys), each value a TestDetailResponse for that hook. An empty object means no hooks matched.",
@@ -4981,11 +4731,7 @@
             "description": "The session's HASHED id (not a numeric id)."
           }
         ],
-        "returns": [
-          "networkLogs",
-          "status_code",
-          "message"
-        ],
+        "returns": ["networkLogs", "status_code", "message"],
         "responses": {
           "200": {
             "description": "The network-log URL envelope. `networkLogs` is the HAR file URL, `status_code` is the upstream fetch status, `message` any upstream message.",
@@ -5130,11 +4876,7 @@
           "testMetadata here is the internal test-meta object and is shaped differently from the flatter meta returned by the baseline/similar-error map reads; read its keys from this response rather than assuming they match.",
           "An unknown or non-existent testRunId returns HTTP 500 'Internal System Exception', not 404: do not pass a user-supplied number straight in; resolve the test run id from the build's test-run listing first (a 'run number' the user quotes is almost always a build serial or CI run id, never a testRunId)."
         ],
-        "returns": [
-          "testCode",
-          "testMetadata",
-          "hooksCode"
-        ],
+        "returns": ["testCode", "testMetadata", "hooksCode"],
         "responses": {
           "200": {
             "$response": "TestRunDetailResponse"
@@ -5173,11 +4915,7 @@
           "The look-back window is hardcoded to 30 days before this run's start time \u2014 an older last-good run will not appear, so an empty result does not prove the test has never passed.",
           "Each map value is { testCode, testMetadata, hooksCode } - hooksCode is present but null on this route, and testCode is null when no code was captured. Read the passing run's numeric id from the map key."
         ],
-        "returns": [
-          "<test_run_id> (map key)",
-          "testCode",
-          "testMetadata"
-        ],
+        "returns": ["<test_run_id> (map key)", "testCode", "testMetadata"],
         "responses": {
           "200": {
             "$response": "TestRunDetailMapResponse"
@@ -5304,11 +5042,7 @@
           "projectId is a REQUIRED query param; the cluster is taken from the {clusterId} path segment via data binding, so do not duplicate it as a query param.",
           "The affected-run scan also accepts the wider GetSPError filter set (test tags, statuses, devices/os/browsers, folders, users, etc.) as query params bound onto the filter object \u2014 use them to narrow which affected runs come back."
         ],
-        "returns": [
-          "<test_run_id> (map key)",
-          "testCode",
-          "testMetadata"
-        ],
+        "returns": ["<test_run_id> (map key)", "testCode", "testMetadata"],
         "responses": {
           "200": {
             "$response": "TestRunDetailMapResponse"
@@ -5366,10 +5100,7 @@
           {
             "name": "order",
             "type": "string",
-            "values": [
-              "asc",
-              "desc"
-            ],
+            "values": ["asc", "desc"],
             "description": "Sort direction. Required alongside sort \u2014 the two are read together."
           },
           {
@@ -5437,22 +5168,13 @@
           {
             "name": "hooks_visibility",
             "type": "string",
-            "values": [
-              "all",
-              "failed",
-              "beforeFailed",
-              "none"
-            ],
+            "values": ["all", "failed", "beforeFailed", "none"],
             "description": "Which hooks to include in the tree. Defaults to failed."
           },
           {
             "name": "is_muted",
             "type": "string",
-            "values": [
-              "all",
-              "true",
-              "false"
-            ],
+            "values": ["all", "true", "false"],
             "description": "Muted-tests visibility: all, true (only muted), false (only unmuted). Also accepts ALL/MUTED/UNMUTED. An unrecognised value is rejected."
           }
         ],
@@ -5530,10 +5252,7 @@
           "Pagination is a numeric cursor: pass the previous response's next_cursor back as cursor; a null next_cursor means the last page.",
           "The build is resolved by (uuid, group); an unknown uuid for the caller's group is BUILD_NOT_FOUND."
         ],
-        "returns": [
-          "test_runs",
-          "next_cursor"
-        ],
+        "returns": ["test_runs", "next_cursor"],
         "responses": {
           "200": {
             "$response": "BuildTestRunsWithAttachmentsResponse"
@@ -5676,9 +5395,7 @@
           "Reversible: an unlink route removes the association, so this is a write, not a destructive op. Send the issue KEY in `name` (not in `url`).",
           "Read-back: the link is written to the test run's search document and appears as details.pm_tool_details[] ({id,name,url,type,status}) in list_build_test_runs \u2014 the returned id is that entry's id."
         ],
-        "returns": [
-          "id"
-        ],
+        "returns": ["id"],
         "responses": {
           "200": {
             "$response": "LinkBugToTestRunResponse"
@@ -5783,10 +5500,7 @@
           "Pagination is Elasticsearch search_after: pass the prior page's cursor back as `searchAfter`. Note the underlying query fetches up to 10,000 hits, so on very large builds narrow with filters rather than relying on paging alone.",
           "The ES indices queried are chosen from the build, so very old builds may resolve to different indices; results are limited to the latest run per test unless you pass explicit testRunIds."
         ],
-        "returns": [
-          "testRuns",
-          "pagingParams"
-        ],
+        "returns": ["testRuns", "pagingParams"],
         "responses": {
           "200": {
             "$response": "FlatTestRunListingResponse"
@@ -5944,10 +5658,7 @@
           }
         ],
         "intent": "Drill into one AI failure theme or workflow of a build and list the flat, paginated test runs behind it. Takes a theme or workflow id only \u2014 to fetch an explicit set of test-run ids instead, use list_build_ai_failure_cluster_test_runs, which accepts testRunIds.",
-        "returns": [
-          "testRuns",
-          "pagingParams"
-        ],
+        "returns": ["testRuns", "pagingParams"],
         "guidance": [
           "Public endpoint: authenticate with your BrowserStack username + access key.",
           "Send buildFailureThemeId OR buildFailureWorkflowId (integer ids from get_build_ai_failures). One of them is REQUIRED: with neither, the TestHub lookup 400s 'At least one of build_failure_theme_id or build_failure_workflow_id must be provided' (there is no whole-build mode).",
@@ -5993,9 +5704,7 @@
           }
         ],
         "intent": "List the automation sessions currently queued for a user and product, each with session/build/project name, resolved capabilities, why it is queued and how long it has waited.",
-        "returns": [
-          "sessions"
-        ],
+        "returns": ["sessions"],
         "guidance": [
           "Both userId and product are required (400 otherwise).",
           "userId comes from the query, so it is NOT scoped to the caller; only the build/project name enrichment is group-scoped (names resolve to null for builds outside your group).",
@@ -6171,11 +5880,7 @@
           }
         ],
         "intent": "Public API: get the test source code captured for an Automate session, one entry per test executed in that session, so external tooling (e.g. AI agents) can read the code behind a session.",
-        "returns": [
-          "session_id",
-          "build_uuid",
-          "tests"
-        ],
+        "returns": ["session_id", "build_uuid", "tests"],
         "guidance": [
           "Public endpoint: authenticate with your BrowserStack username + access key.",
           "Cross-group safe: the resolved build's group is re-checked against the caller's group and a mismatch is reported as SESSION_NOT_FOUND (not a distinct 403).",
@@ -6446,16 +6151,10 @@
             "type": "string",
             "required": false,
             "description": "Only the value 'enabled' (case-insensitive) is honoured: it restricts the listing to enabled checks. ANY other value is silently ignored and all checks are returned \u2014 this is not a general-purpose filter.",
-            "values": [
-              "enabled"
-            ]
+            "values": ["enabled"]
           }
         ],
-        "returns": [
-          "repoName",
-          "ownerName",
-          "checks"
-        ],
+        "returns": ["repoName", "ownerName", "checks"],
         "responses": {
           "200": {
             "$response": "CheckConfigurationResponse"
@@ -6517,10 +6216,7 @@
                 "name": "checkType",
                 "type": "string",
                 "required": true,
-                "values": [
-                  "QG_STATUS",
-                  "BUILD_STATUS"
-                ],
+                "values": ["QG_STATUS", "BUILD_STATUS"],
                 "description": "What the check reports: QG_STATUS (quality-gate status) or BUILD_STATUS (build status). Mandatory."
               },
               {
@@ -6586,11 +6282,7 @@
             ]
           }
         ],
-        "returns": [
-          "repoName",
-          "ownerName",
-          "checks"
-        ],
+        "returns": ["repoName", "ownerName", "checks"],
         "responses": {
           "201": {
             "$response": "CheckConfigurationResponse"
@@ -6657,10 +6349,7 @@
             "name": "checkType",
             "type": "string",
             "required": true,
-            "values": [
-              "QG_STATUS",
-              "BUILD_STATUS"
-            ],
+            "values": ["QG_STATUS", "BUILD_STATUS"],
             "description": "QG_STATUS or BUILD_STATUS. Mandatory."
           },
           {
@@ -6897,10 +6586,7 @@
             "type": "integer",
             "required": false,
             "json_path": "/level",
-            "values": [
-              1,
-              2
-            ],
+            "values": [1, 2],
             "description": "New visibility (1 = private, 2 = public). Omit to keep the stored level."
           }
         ],
@@ -7028,10 +6714,7 @@
             "type": "integer",
             "required": true,
             "json_path": "/level",
-            "values": [
-              1,
-              2
-            ],
+            "values": [1, 2],
             "description": "Visibility: 1 = private, 2 = shared with the org. Required; any other value is rejected with 'level must be 1 (private) or 2 (shared)'."
           }
         ],
@@ -7120,10 +6803,7 @@
             "type": "integer",
             "required": true,
             "json_path": "/level",
-            "values": [
-              1,
-              2
-            ],
+            "values": [1, 2],
             "description": "Visibility: 1 = private, 2 = shared. Required; other values are a 400."
           }
         ],
@@ -7180,16 +6860,11 @@
             "type": "string",
             "required": false,
             "default": "TO",
-            "values": [
-              "TO",
-              "TCM"
-            ],
+            "values": ["TO", "TCM"],
             "description": "Which dashboard surface to resolve the project against. TO = Test Observability, TCM = Test Management."
           }
         ],
-        "returns": [
-          "data"
-        ],
+        "returns": ["data"],
         "responses": {
           "200": {
             "description": "Dashboard views the caller can see, as a flat list under `data` (no success flag on this route).",
@@ -7237,10 +6912,7 @@
             "type": "string",
             "required": false,
             "default": "TO",
-            "values": [
-              "TO",
-              "TCM"
-            ],
+            "values": ["TO", "TCM"],
             "description": "Which surface the dashboard belongs to. TO = Test Observability, TCM = Test Management."
           },
           {
@@ -7353,9 +7025,7 @@
             ]
           }
         ],
-        "returns": [
-          "data"
-        ],
+        "returns": ["data"],
         "responses": {
           "200": {
             "$response": "DashboardViewResponse"
@@ -7401,10 +7071,7 @@
             "type": "string",
             "required": false,
             "default": "TO",
-            "values": [
-              "TO",
-              "TCM"
-            ],
+            "values": ["TO", "TCM"],
             "description": "TO or TCM. Also disambiguates which view the `default` alias resolves to."
           },
           {
@@ -7426,9 +7093,7 @@
             "description": "Alternative project selector. Supply exactly one of the three."
           }
         ],
-        "returns": [
-          "data"
-        ],
+        "returns": ["data"],
         "responses": {
           "200": {
             "$response": "DashboardViewResponse"
@@ -7522,9 +7187,7 @@
             "description": "Replacement widget layout (array of Widgets objects \u2014 same shape as create)."
           }
         ],
-        "returns": [
-          "data"
-        ],
+        "returns": ["data"],
         "responses": {
           "200": {
             "$response": "DashboardViewResponse"
@@ -7597,9 +7260,7 @@
             "description": "Name for the NEW cloned dashboard, 1-100 chars, unique within the project. This is the only field of the body that is used \u2014 level, filters and widgets are copied verbatim from the source, not taken from the body."
           }
         ],
-        "returns": [
-          "data"
-        ],
+        "returns": ["data"],
         "responses": {
           "200": {
             "$response": "DashboardViewResponse"
@@ -7654,10 +7315,7 @@
             "description": "Alternative project selector. Supply exactly one of the three."
           }
         ],
-        "returns": [
-          "name",
-          "key"
-        ],
+        "returns": ["name", "key"],
         "responses": {
           "200": {
             "description": "Static catalogue of addable widget types, returned as a BARE JSON ARRAY (no envelope).",
@@ -7724,12 +7382,7 @@
             "description": "Alternative project selector. Supply exactly one of the three."
           }
         ],
-        "returns": [
-          "id",
-          "label",
-          "type",
-          "fieldType"
-        ],
+        "returns": ["id", "label", "type", "fieldType"],
         "responses": {
           "200": {
             "description": "Custom-field filters for the project, as a BARE JSON ARRAY (no envelope).",
@@ -7789,10 +7442,7 @@
             "type": "string",
             "required": false,
             "default": "TO",
-            "values": [
-              "TO",
-              "TCM"
-            ],
+            "values": ["TO", "TCM"],
             "description": "TO or TCM. With source=TCM the request is forced to includeManualAndAutomated=true."
           },
           {
@@ -8022,11 +7672,7 @@
             "description": "Saved test-case type ids to validate."
           }
         ],
-        "returns": [
-          "filterMatches",
-          "ignoredFiltersCount",
-          "isMismatched"
-        ],
+        "returns": ["filterMatches", "ignoredFiltersCount", "isMismatched"],
         "responses": {
           "200": {
             "$response": "IgnoredFilterValuesResponse"
@@ -8117,10 +7763,7 @@
             "name": "source",
             "type": "string",
             "required": true,
-            "values": [
-              "TO",
-              "TCM"
-            ],
+            "values": ["TO", "TCM"],
             "description": "REQUIRED on this route (unlike the controller default): omitting it 400s with '`source` is required'. With source=TCM, TCM build widgets are forced to include both manual and automated runs."
           },
           {
@@ -8212,9 +7855,7 @@
             "description": "Grid layout of the widget (not needed to compute data)."
           }
         ],
-        "returns": [
-          "(widget-type-specific)"
-        ],
+        "returns": ["(widget-type-specific)"],
         "responses": {
           "200": {
             "$response": "WidgetDataResponse"
@@ -8252,10 +7893,7 @@
             "name": "source",
             "type": "string",
             "default": "TO",
-            "values": [
-              "TO",
-              "TCM"
-            ],
+            "values": ["TO", "TCM"],
             "description": "Report source. Defaults to TO (the end-user builder). TCM is the Test-Management-mirror source and is normally set by the sync path, not here."
           }
         ],
@@ -8272,10 +7910,7 @@
             "type": "integer",
             "minimum": 1,
             "maximum": 2,
-            "values": [
-              1,
-              2
-            ],
+            "values": [1, 2],
             "description": "Visibility: 1 = private, 2 = group. Omit and the report is created with no level set."
           },
           {
@@ -8424,9 +8059,7 @@
           }
         ],
         "intent": "Create a new saved report \u2014 its name, visibility level, global filters and the list of report widgets \u2014 and get back the persisted record.",
-        "returns": [
-          "data"
-        ],
+        "returns": ["data"],
         "guidance": [
           "Name must be unique for the given (type, level); a clash is rejected.",
           "Whether the saved widgets come from reports[] or widgets[] depends on type: a report-type value persists reports[], anything else (including the default 'Dashboard') persists widgets[] \u2014 send the wrong list for the type and the report saves with no widgets.",
@@ -8464,17 +8097,12 @@
             "name": "source",
             "type": "string",
             "default": "TO",
-            "values": [
-              "TO",
-              "TCM"
-            ],
+            "values": ["TO", "TCM"],
             "description": "Which report source to list. TO = end-user reports (default); TCM = reports mirrored from Test Management."
           }
         ],
         "intent": "List the reports visible to you \u2014 your own plus group-level public ones \u2014 for the Reports landing page, with each report's name, level, type, filters and widget config.",
-        "returns": [
-          "data"
-        ],
+        "returns": ["data"],
         "guidance": [
           "Requires the custom-dashboard plan feature; without it the call is refused (feature inaccessible) rather than returning an empty list.",
           "This is the report-typed view of the shared report/dashboard store, so dashboard-only filter rewriting is skipped.",
@@ -8513,9 +8141,7 @@
           }
         ],
         "intent": "Load one saved report's full definition \u2014 name, level, filters and widget/report configuration \u2014 to render or edit it.",
-        "returns": [
-          "data"
-        ],
+        "returns": ["data"],
         "guidance": [
           "Scoped to your own group; a report id belonging to another group reads as not found (DASHBOARD_NOT_FOUND).",
           "The dashboard-only filter rewrites and the automation-state widget transform are deliberately skipped for reports, so you read back the raw saved definition.",
@@ -8567,10 +8193,7 @@
             "type": "integer",
             "minimum": 1,
             "maximum": 2,
-            "values": [
-              1,
-              2
-            ],
+            "values": [1, 2],
             "description": "Visibility 1 = private, 2 = group."
           },
           {
@@ -8623,9 +8246,7 @@
           }
         ],
         "intent": "Update an existing saved report in place \u2014 rename, change visibility level, change global filters, or replace its widget set.",
-        "returns": [
-          "data"
-        ],
+        "returns": ["data"],
         "guidance": [
           "No version history \u2014 the previous name, filters and widgets are overwritten with no way to restore them (there is no undo).",
           "Name uniqueness is re-checked only when the name, type or level changes.",
@@ -8683,10 +8304,7 @@
             "type": "integer",
             "minimum": 1,
             "maximum": 2,
-            "values": [
-              1,
-              2
-            ],
+            "values": [1, 2],
             "description": "Visibility for the copy: 1 = private, 2 = group."
           },
           {
@@ -8702,9 +8320,7 @@
           }
         ],
         "intent": "Duplicate an existing report under a new name \u2014 'Make a copy' in the Reports UI \u2014 copying the source report's saved filters and widgets.",
-        "returns": [
-          "data"
-        ],
+        "returns": ["data"],
         "guidance": [
           "The copy takes its filters and widgets from the SOURCE report, not from your body \u2014 the body essentially only supplies the new name and level. A filters/widgets payload here is ignored.",
           "Give a name that is unique for the report's (type, level), or the clone is rejected.",
@@ -8765,10 +8381,7 @@
             "name": "source",
             "type": "string",
             "default": "TO",
-            "values": [
-              "TO",
-              "TCM"
-            ],
+            "values": ["TO", "TCM"],
             "description": "Bound but not used for dataset computation."
           }
         ],
@@ -8819,11 +8432,7 @@
           }
         ],
         "intent": "Run a report widget's query and get its paginated result rows \u2014 the actual table data behind a tabular test-runs report tile.",
-        "returns": [
-          "data",
-          "summary",
-          "sourceFencingFlags"
-        ],
+        "returns": ["data", "summary", "sourceFencingFlags"],
         "guidance": [
           "`config` keys are UPPER_SNAKE WidgetsConfig sections (@JsonProperty): send config.DATASETS.value = [{name, filters:{projects:[<project id>]}}] at minimum. A lowercase `datasets` key is silently dropped, the handler dereferences a null DATASETS and returns 500 'Error while fetching report data'. The path {id} is ignored but must still be a UUID (any placeholder UUID works).",
           "Only reportType TABULAR_TEST_RUNS is implemented; any other type returns a 200 with a null body rather than erroring.",
@@ -8879,10 +8488,7 @@
           {
             "name": "source",
             "type": "string",
-            "values": [
-              "TO",
-              "TCM"
-            ],
+            "values": ["TO", "TCM"],
             "description": "Bound but not used for tiles."
           }
         ],
@@ -8913,10 +8519,7 @@
           }
         ],
         "intent": "Get the summary stat tiles (aggregate KPI numbers) for a report widget \u2014 the headline figures shown above the report table.",
-        "returns": [
-          "data",
-          "sourceFencingFlags"
-        ],
+        "returns": ["data", "sourceFencingFlags"],
         "guidance": [
           "`config` keys are UPPER_SNAKE WidgetsConfig sections (@JsonProperty): send config.DATASETS.value = [{name, filters:{projects:[<project id>]}}] at minimum. A lowercase `datasets` key is silently dropped, the handler dereferences a null DATASETS and returns 500 'Error while fetching report data'. The path {id} is ignored but must still be a UUID (any placeholder UUID works).",
           "Same body as the dataset call but returns aggregates instead of rows; only TABULAR_TEST_RUNS is implemented, other types return a 200 with a null body.",
@@ -8974,10 +8577,7 @@
           }
         ],
         "intent": "List the custom-field / column definitions usable as report columns and filters, optionally narrowed to given projects \u2014 feeds the report builder's column picker and resolves stored field ids back to display names.",
-        "returns": [
-          "customFields",
-          "info"
-        ],
+        "returns": ["customFields", "info"],
         "guidance": [
           "per_page defaults to 300 (the upstream max) because the picker is meant to load the whole list in one call; requests above 300 are clamped upstream, not rejected.",
           "project_ids are observability project ids and are converted to TestHub project ids for you; omit them for the whole group.",
@@ -9101,11 +8701,7 @@
           }
         ],
         "intent": "List a project's builds that match a report's build-level filter set \u2014 used to populate the build picker / static build scope when building a report against a fixed set of builds.",
-        "returns": [
-          "data",
-          "summary",
-          "sourceFencingFlags"
-        ],
+        "returns": ["data", "summary", "sourceFencingFlags"],
         "guidance": [
           "The path segment is the project's normalised NAME, not its id.",
           "status is treated as a build DISPLAY status here (the filter object is shared with the stability/performance request): explicit buildStatuses wins; otherwise status values that map to a build display status are back-filled and non-matching values are ignored.",
@@ -9146,10 +8742,7 @@
             "name": "source",
             "type": "string",
             "default": "TO",
-            "values": [
-              "TO",
-              "TCM"
-            ],
+            "values": ["TO", "TCM"],
             "description": "Data source fence. Defaults to TO (Test Observability); TCM narrows to test-management data."
           },
           {
@@ -9169,11 +8762,7 @@
           }
         ],
         "intent": "Get the headline stats for one test case in the tabular test-runs report - its reliability (failure ratio), average duration, and failed/total occurrence counts over the filtered window - for the detail drawer.",
-        "returns": [
-          "reliability",
-          "duration",
-          "failureOccurrence"
-        ],
+        "returns": ["reliability", "duration", "failureOccurrence"],
         "responses": {
           "200": {
             "description": "Headline stats for the test, or an empty object when the test has no matching runs in the window.",
@@ -9230,10 +8819,7 @@
             "name": "source",
             "type": "string",
             "default": "TO",
-            "values": [
-              "TO",
-              "TCM"
-            ],
+            "values": ["TO", "TCM"],
             "description": "Data source fence, default TO."
           },
           {
@@ -9253,10 +8839,7 @@
           }
         ],
         "intent": "List the individual test runs behind one row of the tabular test-runs report - every execution of that test case in the window, with status, duration, build and settings-version detail - for the drill-down view.",
-        "returns": [
-          "data",
-          "summary"
-        ],
+        "returns": ["data", "summary"],
         "responses": {
           "200": {
             "description": "The runs for this test, plus a pagination summary. An empty result returns an object with null data and summary.",
@@ -9301,10 +8884,7 @@
             "name": "source",
             "type": "string",
             "default": "TO",
-            "values": [
-              "TO",
-              "TCM"
-            ],
+            "values": ["TO", "TCM"],
             "description": "Data source fence, default TO."
           },
           {
@@ -9324,10 +8904,7 @@
           }
         ],
         "intent": "Get the per-run trend series for one test case in the tabular test-runs report - duration per execution plus each point's workflow status and colour, keyed by build - to draw the test's history chart.",
-        "returns": [
-          "keys",
-          "data"
-        ],
+        "returns": ["keys", "data"],
         "responses": {
           "200": {
             "description": "Trend series for the test.",
@@ -9384,10 +8961,7 @@
             "name": "source",
             "type": "string",
             "default": "TO",
-            "values": [
-              "TO",
-              "TCM"
-            ],
+            "values": ["TO", "TCM"],
             "description": "Data source fence, default TO."
           }
         ],
@@ -9396,9 +8970,7 @@
             "name": "reportType",
             "type": "string",
             "required": true,
-            "values": [
-              "TABULAR_TEST_RUNS"
-            ],
+            "values": ["TABULAR_TEST_RUNS"],
             "description": "Report type. Required (missing/null reportType is a 400 'Report type is required'). Only TABULAR_TEST_RUNS is implemented; any other value falls through the switch and returns a null body with 200."
           },
           {
@@ -9437,10 +9009,7 @@
           }
         ],
         "intent": "Run a configured report and return its paginated table - post the full report definition (datasets, segments, global filters) and get back the tabular test-runs result set.",
-        "returns": [
-          "data",
-          "summary"
-        ],
+        "returns": ["data", "summary"],
         "responses": {
           "200": {
             "description": "The report table page. Null body when reportType is not TABULAR_TEST_RUNS; an object with null data when the definition yields nothing or all datasets conflict.",
@@ -9490,10 +9059,7 @@
             "name": "source",
             "type": "string",
             "default": "TO",
-            "values": [
-              "TO",
-              "TCM"
-            ],
+            "values": ["TO", "TCM"],
             "description": "Data source fence, default TO."
           }
         ],
@@ -9502,9 +9068,7 @@
             "name": "reportType",
             "type": "string",
             "required": true,
-            "values": [
-              "TABULAR_TEST_RUNS"
-            ],
+            "values": ["TABULAR_TEST_RUNS"],
             "description": "Required (missing is a 400). Only TABULAR_TEST_RUNS is implemented; other types return a null body with 200."
           },
           {
@@ -9537,10 +9101,7 @@
           }
         ],
         "intent": "Get the summary stat tiles that sit above a report's table (totals and aggregates for the same report definition) so the header cards can load independently of the paginated rows.",
-        "returns": [
-          "data",
-          "sourceFencingFlags"
-        ],
+        "returns": ["data", "sourceFencingFlags"],
         "responses": {
           "200": {
             "description": "Stat tiles for the report. When all datasets conflict, or no stats are returned, `data` is empty and only the source-fencing flags are populated.",
@@ -9617,9 +9178,7 @@
           }
         ],
         "intent": "Look up the available values for a single widget filter key (build status, users, teams, frameworks, build tags, build name, branches, ...) as a flat list for a widget configuration dropdown.",
-        "returns": [
-          "data"
-        ],
+        "returns": ["data"],
         "responses": {
           "200": {
             "description": "Flat list of filter values for the key.",
@@ -9674,10 +9233,7 @@
             "name": "source",
             "type": "string",
             "default": "TO",
-            "values": [
-              "TO",
-              "TCM"
-            ],
+            "values": ["TO", "TCM"],
             "description": "Data source fence, default TO. TCM forces manual+automated inclusion."
           }
         ],
@@ -9854,10 +9410,7 @@
             "name": "source",
             "type": "string",
             "default": "TO",
-            "values": [
-              "TO",
-              "TCM"
-            ],
+            "values": ["TO", "TCM"],
             "description": "Data source fence, default TO."
           },
           {
@@ -9909,9 +9462,7 @@
           }
         ],
         "intent": "Compute the data for one widget on a multi-project (org-level) dashboard, from the widget definition plus the global filters and time window supplied in the body.",
-        "returns": [
-          "(widget-type-specific)"
-        ],
+        "returns": ["(widget-type-specific)"],
         "responses": {
           "200": {
             "description": "Widget data. The shape is polymorphic per widget type (line chart, stat card, distribution, table, ...), so it is not a single fixed envelope.",
@@ -10006,10 +9557,7 @@
             "name": "source",
             "type": "string",
             "default": "TO",
-            "values": [
-              "TO",
-              "TCM"
-            ],
+            "values": ["TO", "TCM"],
             "description": "Data source fence, default TO."
           },
           {
@@ -10107,10 +9655,7 @@
           }
         ],
         "intent": "Get the top-level parallel-queue summary for the signed-in user's group: plan test-execution usage plus current parallels-in-use and queued sessions for the requested product.",
-        "returns": [
-          "summary",
-          "testExecutionsUsage"
-        ],
+        "returns": ["summary", "testExecutionsUsage"],
         "responses": {
           "200": {
             "description": "Group-level queue summary; `summary` present only when a product was supplied.",
@@ -10147,10 +9692,7 @@
           }
         ],
         "intent": "Break the group's parallel-session usage down by team and member - parallels used vs allowed, queued vs queue limit, with per-pool breakdowns - so an admin can see who is consuming the plan's concurrency.",
-        "returns": [
-          "summary",
-          "teams"
-        ],
+        "returns": ["summary", "teams"],
         "responses": {
           "200": {
             "description": "Per-team and per-member concurrency usage, plus a group summary.",
@@ -10193,17 +9735,12 @@
             "name": "product",
             "type": "string",
             "required": true,
-            "values": [
-              "automate",
-              "app-automate"
-            ],
+            "values": ["automate", "app-automate"],
             "description": "Product to query. Required and non-empty, else 400. Any value other than 'automate' is treated as App Automate."
           }
         ],
         "intent": "Show which builds a given user currently has running for Automate or App Automate, with their projects and how long the oldest has been going - the drill-down from the parallel-queue view to who is holding the parallels.",
-        "returns": [
-          "data"
-        ],
+        "returns": ["data"],
         "responses": {
           "200": {
             "description": "The user's currently-running builds.",
@@ -10259,10 +9796,7 @@
           }
         ],
         "intent": "Count test executions reported to Observability in a time window for a user or group, split into total tests and tests that ran on BrowserStack infrastructure - the raw numbers behind usage/consumption reporting.",
-        "returns": [
-          "totalTestCount",
-          "browserstackTestCount"
-        ],
+        "returns": ["totalTestCount", "browserstackTestCount"],
         "responses": {
           "200": {
             "description": "Execution counts for the window. When BOTH userId and groupId are missing, the body is instead the plain string 'Missing userId or groupId' with a 200.",
@@ -10341,10 +9875,7 @@
           }
         ],
         "intent": "Get the group's mobile device-tier entitlement picture for a product - per tier, the devices in it, the device/parallel limits and how much of each is in use - for the device-tier/queue capacity view.",
-        "returns": [
-          "tierInfo",
-          "devices"
-        ],
+        "returns": ["tierInfo", "devices"],
         "responses": {
           "200": {
             "description": "Aggregated tier usage and device list for the product.",
@@ -10432,11 +9963,7 @@
           }
         ],
         "intent": "Global search across the product: given a free-text query and an entity type, return matching entities (builds, tests, projects) for the search bar or quick overlay, paginated and enriched with user names.",
-        "returns": [
-          "response",
-          "pagingParams",
-          "totalCount"
-        ],
+        "returns": ["response", "pagingParams", "totalCount"],
         "responses": {
           "200": {
             "description": "Search results. `pagingParams` and `totalCount` are present only when overlay is off.",
@@ -10585,10 +10112,7 @@
             "description": "PR body. Optional \u2014 a default is generated. Control characters are stripped (newlines/tabs kept)."
           }
         ],
-        "returns": [
-          "healingPrId",
-          "status"
-        ],
+        "returns": ["healingPrId", "status"],
         "guidance": [
           "Asynchronous: returns HTTP 202 with only `{healingPrId, status:\"IN_PROGRESS\"}`. The PR is NOT open yet \u2014 there is no prUrl in this response. Capture healingPrId and poll get_self_healing_pr_status for the outcome and the PR URL.",
           "The job id lives only in Redis with a short TTL and is not listed anywhere, so if you lose it or stop polling in time it is gone \u2014 store it from this response immediately.",
@@ -10704,10 +10228,7 @@
                 "name": "type",
                 "type": "string",
                 "required": true,
-                "values": [
-                  "xpath",
-                  "cssPath"
-                ],
+                "values": ["xpath", "cssPath"],
                 "description": "Locator strategy; must be exactly 'xpath' or 'cssPath'."
               },
               {
@@ -10722,10 +10243,7 @@
             "name": "verdict",
             "type": "string",
             "required": true,
-            "values": [
-              "accurate",
-              "inaccurate"
-            ],
+            "values": ["accurate", "inaccurate"],
             "description": "The review outcome; must be exactly 'accurate' or 'inaccurate'."
           },
           {
@@ -10868,11 +10386,7 @@
             "description": "Build UUID."
           }
         ],
-        "returns": [
-          "testSummary",
-          "locatorSummary",
-          "buildSummary"
-        ],
+        "returns": ["testSummary", "locatorSummary", "buildSummary"],
         "guidance": [
           "Numbers come from search aggregations over the build's runs: testSummary (totalTests, healedTests, percentHealedTests), locatorSummary (totalLocators, healedLocators, percentHealedLocators) and buildSummary (totalBuild, healedBuilds, percentHealedBuilds) - buildSummary can be null.",
           "Refused with FORBIDDEN_OPERATION / plan-feature-not-allowed when the build is locked by plan quota \u2014 you get an error, not zeroes.",
@@ -10978,11 +10492,7 @@
             "description": "Target build UUID. Empty/missing \u2192 build-not-found."
           }
         ],
-        "returns": [
-          "status",
-          "message",
-          "sourceFencingFlags"
-        ],
+        "returns": ["status", "message", "sourceFencingFlags"],
         "guidance": [
           "Same build-comparison plan gate as the aggregation \u2014 refused when the plan lacks the feature.",
           "For an incompatible-source pair it returns `sourceFencingFlags` and NO availability payload (status/message null); otherwise status/message describe whether the comparison is available. Check the flags first.",
@@ -11028,11 +10538,7 @@
             "description": "Target build UUID to resolve. Empty/missing \u2192 build-not-found."
           }
         ],
-        "returns": [
-          "base",
-          "target",
-          "sourceFencingFlags"
-        ],
+        "returns": ["base", "target", "sourceFencingFlags"],
         "guidance": [
           "Returns `{base, target}` where each is the resolved top-level PARENT build UUID. Feed these into the other comparison calls.",
           "NOT plan-gated (unlike the other four comparison endpoints) \u2014 works even without the build-comparison feature.",
@@ -11104,11 +10610,7 @@
             "description": "Standard V2 test filters bound from the query string, applied before matching."
           }
         ],
-        "returns": [
-          "bucketName",
-          "groups",
-          "sourceFencingFlags"
-        ],
+        "returns": ["bucketName", "groups", "sourceFencingFlags"],
         "guidance": [
           "Plan-gated on the build-comparison feature.",
           "Returns `{bucketName, groups}` where each group bundles a file/browser/device/os and its `scopes`, each scope holding base/target element pairs. A cross-source pair returns an empty `groups` with `sourceFencingFlags` set rather than an error.",
@@ -11154,11 +10656,7 @@
             "description": "Target build UUID. Empty/missing \u2192 build-not-found."
           }
         ],
-        "returns": [
-          "base",
-          "target",
-          "sourceFencingFlags"
-        ],
+        "returns": ["base", "target", "sourceFencingFlags"],
         "guidance": [
           "Returns `{base, target}`, each a full build summary object. A cross-source pair returns the envelope with `sourceFencingFlags` set and base/target null.",
           "NOT explicitly plan-gated (unlike aggregation/list/checkComparison), but it DOES apply the same unsupported-build rejection and source-fencing behaviour.",
@@ -11468,16 +10966,7 @@
             "name": "sources",
             "type": "array",
             "description": "Product-source filter.",
-            "values": [
-              "TO",
-              "AUT",
-              "AA",
-              "ATS",
-              "TM",
-              "LCNC",
-              "ALLY",
-              "LTS"
-            ]
+            "values": ["TO", "AUT", "AA", "ATS", "TM", "LCNC", "ALLY", "LTS"]
           },
           {
             "name": "failureCategories",
@@ -11551,13 +11040,7 @@
             "name": "isMuted",
             "type": "string",
             "description": "Muted-tests visibility. Unmuted is the default; an unrecognised value is a 400 (IllegalArgumentException).",
-            "values": [
-              "all",
-              "muted",
-              "unmuted",
-              "true",
-              "false"
-            ]
+            "values": ["all", "muted", "unmuted", "true", "false"]
           },
           {
             "name": "allBuilds",
@@ -11568,18 +11051,12 @@
             "name": "orderKey",
             "type": "string",
             "description": "Sort column. Ignored (forced to errorCount) for free / non-pro accounts.",
-            "values": [
-              "errorCount",
-              "testCount"
-            ]
+            "values": ["errorCount", "testCount"]
           },
           {
             "name": "orderValue",
             "type": "string",
-            "values": [
-              "asc",
-              "desc"
-            ]
+            "values": ["asc", "desc"]
           },
           {
             "name": "pageNumber",
@@ -11668,13 +11145,7 @@
           {
             "name": "isMuted",
             "type": "string",
-            "values": [
-              "all",
-              "muted",
-              "unmuted",
-              "true",
-              "false"
-            ]
+            "values": ["all", "muted", "unmuted", "true", "false"]
           },
           {
             "name": "browser",
@@ -11692,11 +11163,7 @@
             "description": "Optional single-value device narrowing (pro accounts only)."
           }
         ],
-        "returns": [
-          "name",
-          "error",
-          "combinations"
-        ],
+        "returns": ["name", "error", "combinations"],
         "responses": {
           "200": {
             "$response": "UniqueErrorSummaryResponse"
@@ -11767,19 +11234,10 @@
           {
             "name": "isMuted",
             "type": "string",
-            "values": [
-              "all",
-              "muted",
-              "unmuted",
-              "true",
-              "false"
-            ]
+            "values": ["all", "muted", "unmuted", "true", "false"]
           }
         ],
-        "returns": [
-          "errorCount",
-          "chartData"
-        ],
+        "returns": ["errorCount", "chartData"],
         "responses": {
           "200": {
             "$response": "UniqueErrorOccurrenceCountResponse"
@@ -11849,19 +11307,10 @@
           {
             "name": "isMuted",
             "type": "string",
-            "values": [
-              "all",
-              "muted",
-              "unmuted",
-              "true",
-              "false"
-            ]
+            "values": ["all", "muted", "unmuted", "true", "false"]
           }
         ],
-        "returns": [
-          "data",
-          "keys"
-        ],
+        "returns": ["data", "keys"],
         "responses": {
           "200": {
             "$response": "UniqueErrorBuildTrendResponse"
@@ -11936,19 +11385,10 @@
           {
             "name": "isMuted",
             "type": "string",
-            "values": [
-              "all",
-              "muted",
-              "unmuted",
-              "true",
-              "false"
-            ]
+            "values": ["all", "muted", "unmuted", "true", "false"]
           }
         ],
-        "returns": [
-          "pagingParams",
-          "builds"
-        ],
+        "returns": ["pagingParams", "builds"],
         "responses": {
           "200": {
             "$response": "UniqueErrorBuildsResponse"
@@ -12019,22 +11459,10 @@
           {
             "name": "isMuted",
             "type": "string",
-            "values": [
-              "all",
-              "muted",
-              "unmuted",
-              "true",
-              "false"
-            ]
+            "values": ["all", "muted", "unmuted", "true", "false"]
           }
         ],
-        "returns": [
-          "browser",
-          "os",
-          "chartData",
-          "totalFailure",
-          "errorCount"
-        ],
+        "returns": ["browser", "os", "chartData", "totalFailure", "errorCount"],
         "responses": {
           "200": {
             "$response": "UniqueErrorPlatformBreakdownResponse"
@@ -12103,22 +11531,13 @@
           {
             "name": "isMuted",
             "type": "string",
-            "values": [
-              "all",
-              "muted",
-              "unmuted",
-              "true",
-              "false"
-            ]
+            "values": ["all", "muted", "unmuted", "true", "false"]
           },
           {
             "name": "orderValue",
             "type": "string",
             "description": "Sorts the returned tests by occurrence count.",
-            "values": [
-              "asc",
-              "desc"
-            ]
+            "values": ["asc", "desc"]
           }
         ],
         "returns": [
@@ -12193,16 +11612,7 @@
           {
             "name": "sources",
             "type": "array",
-            "values": [
-              "TO",
-              "AUT",
-              "AA",
-              "ATS",
-              "TM",
-              "LCNC",
-              "ALLY",
-              "LTS"
-            ]
+            "values": ["TO", "AUT", "AA", "ATS", "TM", "LCNC", "ALLY", "LTS"]
           },
           {
             "name": "failureCategories",
@@ -12257,11 +11667,7 @@
             "type": "boolean"
           }
         ],
-        "returns": [
-          "uniqueErrorChart",
-          "uniqueTestChart",
-          "impactedTestChart"
-        ],
+        "returns": ["uniqueErrorChart", "uniqueTestChart", "impactedTestChart"],
         "responses": {
           "200": {
             "$response": "UniqueErrorTimelineChartsResponse"
@@ -12321,16 +11727,7 @@
           {
             "name": "sources",
             "type": "array",
-            "values": [
-              "TO",
-              "AUT",
-              "AA",
-              "ATS",
-              "TM",
-              "LCNC",
-              "ALLY",
-              "LTS"
-            ]
+            "values": ["TO", "AUT", "AA", "ATS", "TM", "LCNC", "ALLY", "LTS"]
           },
           {
             "name": "failureCategories",
@@ -12387,20 +11784,10 @@
           {
             "name": "isMuted",
             "type": "string",
-            "values": [
-              "all",
-              "muted",
-              "unmuted",
-              "true",
-              "false"
-            ]
+            "values": ["all", "muted", "unmuted", "true", "false"]
           }
         ],
-        "returns": [
-          "applied",
-          "staticFilters",
-          "hooksVisibility"
-        ],
+        "returns": ["applied", "staticFilters", "hooksVisibility"],
         "responses": {
           "200": {
             "$response": "UniqueErrorFiltersResponse"
@@ -12464,9 +11851,7 @@
             "description": "Whether manual (Test Management) runs are considered. Defaults to true on this endpoint (unlike build-names, which forces it false)."
           }
         ],
-        "returns": [
-          "data"
-        ],
+        "returns": ["data"],
         "responses": {
           "200": {
             "$response": "FieldSearchResponse__w3_sp_error"
@@ -12530,9 +11915,7 @@
             "description": "IGNORED / silently forced to false on this endpoint \u2014 manual (Test Management) runs never appear in build-name suggestions whatever you send."
           }
         ],
-        "returns": [
-          "data"
-        ],
+        "returns": ["data"],
         "responses": {
           "200": {
             "$response": "FieldSearchResponse__w3_sp_error"
@@ -12596,9 +11979,7 @@
             "description": "Defaults to true; this endpoint does NOT force it false (only build-names does)."
           }
         ],
-        "returns": [
-          "data"
-        ],
+        "returns": ["data"],
         "responses": {
           "200": {
             "$response": "FieldSearchResponse__w3_sp_error"
@@ -12661,9 +12042,7 @@
             "description": "Defaults to true. Despite an in-code 'force automated runs only' comment, this handler does NOT set it false \u2014 only build-names does."
           }
         ],
-        "returns": [
-          "data"
-        ],
+        "returns": ["data"],
         "responses": {
           "200": {
             "$response": "FieldSearchResponse__w3_sp_error"
@@ -12727,9 +12106,7 @@
             "description": "Defaults to true. Despite an in-code 'force automated runs only' comment, this handler does NOT set it false \u2014 only build-names does."
           }
         ],
-        "returns": [
-          "data"
-        ],
+        "returns": ["data"],
         "responses": {
           "200": {
             "$response": "FieldSearchResponse__w3_sp_error"
@@ -12786,12 +12163,7 @@
           }
         ],
         "intent": "Kick off AI root-cause analysis for all failed tests of a build in one go (the 'Analyse all failures' action) \u2014 optionally narrowed by the test-listing filters and capped by a limit.",
-        "returns": [
-          "state",
-          "buildUuid",
-          "bulkRcaUuid",
-          "trialQuota"
-        ],
+        "returns": ["state", "buildUuid", "bulkRcaUuid", "trialQuota"],
         "responses": {
           "200": {
             "$response": "BulkTestRcaResponse"
@@ -13023,10 +12395,7 @@
           }
         ],
         "intent": "List a project's run groups (build groups) with paging and name search \u2014 the source of run-group ids for linking, closing, editing or deleting; can also fetch a specific set by ids.",
-        "returns": [
-          "data",
-          "info"
-        ],
+        "returns": ["data", "info"],
         "responses": {
           "200": {
             "$response": "BuildGroupListResponse"
@@ -13081,11 +12450,7 @@
           }
         ],
         "intent": "Create a new run group (build group) in a project so builds can be grouped for a release or test cycle.",
-        "returns": [
-          "success",
-          "data",
-          "message"
-        ],
+        "returns": ["success", "data", "message"],
         "responses": {
           "200": {
             "$response": "BuildGroupOperationResponse"
@@ -13159,10 +12524,7 @@
           }
         ],
         "intent": "List the accessibility-scanned tests of one build for the build's Accessibility tab \u2014 per test: name, file, status, OS/browser, a11y score, page/component counts and a critical/serious/moderate/minor issue breakdown, with paging.",
-        "returns": [
-          "testCases",
-          "pagingParams"
-        ],
+        "returns": ["testCases", "pagingParams"],
         "responses": {
           "200": {
             "$response": "AccessibilityTestRunsResponse"
@@ -13474,10 +12836,7 @@
           "Asynchronous: the body carries only messageId (a UUID) \u2014 poll the RCA conversation/turn-status read for the outcome; the RCA itself is delivered elsewhere (the polled read, or the webhook when supplied). trialQuota.used appears only for trial tenants.",
           "This is the external mirror of the session-auth internal retrigger; authenticate with the customer's BrowserStack username + access key."
         ],
-        "returns": [
-          "messageId",
-          "trialQuota"
-        ],
+        "returns": ["messageId", "trialQuota"],
         "responses": {
           "200": {
             "description": "Retrigger accepted; poll the returned messageId.",
@@ -13546,12 +12905,7 @@
           }
         ],
         "intent": "List the individual legs (child builds) of a split / parallel build with their ids and uuids, so you can offer a leg switcher or aggregate stats across the whole split run.",
-        "returns": [
-          "id",
-          "name",
-          "builds",
-          "pagingParams"
-        ],
+        "returns": ["id", "name", "builds", "pagingParams"],
         "responses": {
           "200": {
             "$response": "SplitBuildLegsResponse"
@@ -13652,13 +13006,7 @@
           }
         ],
         "intent": "Get the stability tile for a build \u2014 the share of tests that ran cleanly versus flaky / always-failing / new-failure noise, with a percentile insight versus recent builds \u2014 for the build insights page.",
-        "returns": [
-          "data",
-          "keys",
-          "overview",
-          "median",
-          "commentCount"
-        ],
+        "returns": ["data", "keys", "overview", "median", "commentCount"],
         "responses": {
           "200": {
             "$response": "BuildStabilityTileResponse"
@@ -13754,9 +13102,7 @@
           }
         ],
         "intent": "Get the build's execution timeline \u2014 per-status series (passed / failed / pending=running) over the build's lifetime \u2014 for the timeline visualisation on the build page.",
-        "returns": [
-          "data"
-        ],
+        "returns": ["data"],
         "responses": {
           "200": {
             "$response": "BuildTimelineStatsResponse"
@@ -13870,12 +13216,7 @@
           }
         ],
         "intent": "Get the failure-category (defect) breakdown for a build \u2014 how many failures fall into each issue type/category, how many have AI RCA available, and the comment count \u2014 for the 'Failure Categories' panel.",
-        "returns": [
-          "data",
-          "aiRcaStats",
-          "commentCount",
-          "message"
-        ],
+        "returns": ["data", "aiRcaStats", "commentCount", "message"],
         "responses": {
           "200": {
             "$response": "BuildFailureCategoryStatsResponse"
@@ -13967,9 +13308,7 @@
           }
         ],
         "intent": "Get the distinct filter values available for one build's test listing (browsers, OSes, tags, issue types, statuses, plus static history/flaky options) so the UI can render the filter dropdowns.",
-        "returns": [
-          "filters"
-        ],
+        "returns": ["filters"],
         "responses": {
           "200": {
             "$response": "BuildFilterValuesResponse"
@@ -14013,12 +13352,7 @@
           }
         ],
         "intent": "Get the flaky-tests tile for a build \u2014 how many of the build's tests were detected as flaky (with a 'out of total' meta) plus the tile's comment count.",
-        "returns": [
-          "count",
-          "meta",
-          "commentCount",
-          "autoUnmuteCount"
-        ],
+        "returns": ["count", "meta", "commentCount", "autoUnmuteCount"],
         "responses": {
           "200": {
             "$response": "SingleMetricSummaryResponse__w4_build2"
@@ -14145,12 +13479,7 @@
           }
         ],
         "intent": "Get the muted-tests tile for a build \u2014 how many of the build's tests are muted (with a 'out of total' meta) plus the tile's comment count.",
-        "returns": [
-          "count",
-          "meta",
-          "commentCount",
-          "autoUnmuteCount"
-        ],
+        "returns": ["count", "meta", "commentCount", "autoUnmuteCount"],
         "responses": {
           "200": {
             "$response": "SingleMetricSummaryResponse__w4_build2"
@@ -14196,12 +13525,7 @@
           }
         ],
         "intent": "Get the new-failures tile for a build \u2014 how many tests failed in this build that were not failing before \u2014 plus the tile's comment count.",
-        "returns": [
-          "count",
-          "meta",
-          "commentCount",
-          "autoUnmuteCount"
-        ],
+        "returns": ["count", "meta", "commentCount", "autoUnmuteCount"],
         "responses": {
           "200": {
             "$response": "SingleMetricSummaryResponse__w4_build2"
@@ -14478,12 +13802,7 @@
           }
         ],
         "intent": "List a project's builds over the public REST API with status, counts and a deep link back to the TRA UI \u2014 filterable like the UI build listing (names, users, teams, tags, branches, frameworks, statuses, date range) and cursor-paginated.",
-        "returns": [
-          "id",
-          "name",
-          "builds",
-          "pagination"
-        ],
+        "returns": ["id", "name", "builds", "pagination"],
         "guidance": [
           "Cursor pagination only: read `pagination.has_next` and pass `pagination.next_page` back as `next_page` (snake_case keys). There is NO caller-settable page size; walk the cursor until `has_next` is false.",
           "The item shape is feature-flagged per group: with the 'new build listing' flag on, `status_stats` holds workflow-status counts and items add `is_manually_overridden`; otherwise v1 status counts. Same keys otherwise.",
@@ -14592,10 +13911,7 @@
           {
             "name": "sortOrder",
             "type": "string",
-            "values": [
-              "Asc",
-              "Desc"
-            ],
+            "values": ["Asc", "Desc"],
             "description": "Sort direction on the build ordering."
           },
           {
@@ -14674,9 +13990,7 @@
           }
         ],
         "intent": "Show which of the group's builds are currently queued/running on a specific device+OS combination, with the number of parallel sessions each consumes \u2014 used to explain why a device tier is saturated.",
-        "returns": [
-          "data"
-        ],
+        "returns": ["data"],
         "guidance": [
           "All four query params (product, os, osVersion, device) are REQUIRED \u2014 any missing/empty one is a 400.",
           "Only counts test runs in `pending` status for the caller's group; a build with no pending runs on that device+OS will not appear.",
@@ -14738,9 +14052,7 @@
             ]
           }
         ],
-        "returns": [
-          "data"
-        ],
+        "returns": ["data"],
         "responses": {
           "200": {
             "$response": "SidebarUserFilterResponse"
@@ -14802,9 +14114,7 @@
             ]
           }
         ],
-        "returns": [
-          "data"
-        ],
+        "returns": ["data"],
         "responses": {
           "200": {
             "$response": "SidebarSearchResponse"
@@ -14865,9 +14175,7 @@
             ]
           }
         ],
-        "returns": [
-          "data"
-        ],
+        "returns": ["data"],
         "responses": {
           "200": {
             "$response": "SidebarTeamFilterResponse"
@@ -14956,9 +14264,7 @@
             ]
           }
         ],
-        "returns": [
-          "data"
-        ],
+        "returns": ["data"],
         "responses": {
           "200": {
             "$response": "HomeUserFilterOptionsResponse"
@@ -15040,10 +14346,7 @@
             "description": "Composite-aggregation paging cursor. Pass back the `afterKey` from the previous response to get the next page."
           }
         ],
-        "returns": [
-          "data",
-          "afterKey"
-        ],
+        "returns": ["data", "afterKey"],
         "responses": {
           "200": {
             "$response": "WebhookFilterOptionsResponse"
@@ -15117,10 +14420,7 @@
             "description": "Composite-aggregation paging cursor. Pass back the `afterKey` from the previous response for the next page."
           }
         ],
-        "returns": [
-          "data",
-          "afterKey"
-        ],
+        "returns": ["data", "afterKey"],
         "responses": {
           "200": {
             "$response": "WebhookFilterOptionsResponse"
@@ -15295,10 +14595,7 @@
           }
         ],
         "intent": "Get just the count of non-SDK builds in a project \u2014 a cheap, all-time yes/no signal for whether to show SDK-onboarding prompts.",
-        "returns": [
-          "project_id",
-          "non_sdk_build_count"
-        ],
+        "returns": ["project_id", "non_sdk_build_count"],
         "guidance": [
           "The 200 body is a JSON STRING, not a JSON object: the payload {\"project_id\":..,\"non_sdk_build_count\":..} is serialised to a string and returned as-is, so you must JSON-parse the response body a second time before reading the fields.",
           "Unbounded in time \u2014 unlike get_project_non_sdk_summary there is no date range, so this counts every non-SDK build ever (excluding deleted/archived builds).",
@@ -15589,10 +14886,7 @@
           }
         ],
         "intent": "Rename a project \u2014 use this to change a project's display name (and, as a side effect, its URL slug).",
-        "returns": [
-          "message",
-          "normalisedName"
-        ],
+        "returns": ["message", "normalisedName"],
         "guidance": [
           "Renaming CHANGES THE URL SLUG: the new normalised name becomes the project's slug, so existing links and any saved normalisedName keyed on the old name stop resolving. There is no automatic redirect \u2014 update stored slugs from the returned normalisedName.",
           "No true undo: to reverse it you must rename back to the old name, and links broken in the meantime are not restored \u2014 treat it as a write with no history.",
@@ -15667,9 +14961,7 @@
           }
         ],
         "intent": "Bulk-assign a failure category / issue type to a list of test runs (the 'mark failure reason' action on the failure-analysis screens) and get back how many rows were updated.",
-        "returns": [
-          "updatedCount"
-        ],
+        "returns": ["updatedCount"],
         "guidance": [
           "Despite the action's project-scoped path and 'updateProject'-style naming, this updates TEST RUNS \u2014 it does not modify the project itself.",
           "Each item's wire keys are testRunId and issueTypeId; a body using id/issueType (the shape some callers assume) silently fails to bind those fields. Send exactly testRunId and issueTypeId.",
@@ -15739,10 +15031,7 @@
           }
         ],
         "intent": "Populate the build-list sidebar project picker: a page of lightweight project records for the group ordered by most recent build activity, with optional name search and the ability to exclude the already-selected project ids from the page.",
-        "returns": [
-          "data",
-          "pagingParams"
-        ],
+        "returns": ["data", "pagingParams"],
         "guidance": [
           "POST but READ-ONLY \u2014 the body is only search/paging/selection state; nothing is mutated.",
           "hasNext is inferred from 'the page came back non-empty', so the last full page still reports has_next=true and next_page = pageNumber+1; the empty page after it is how you learn you are past the end. Stop when data is empty, not when has_next flips.",
@@ -15829,10 +15118,7 @@
           }
         ],
         "intent": "Get a paginated, optionally name-searched list of the group's projects in lightweight form (id, name, normalised name, TestHub id) for pickers and listing pages that do not need per-project metrics.",
-        "returns": [
-          "projectLiteList",
-          "pagingParams"
-        ],
+        "returns": ["projectLiteList", "pagingParams"],
         "guidance": [
           "PREFERRED route to resolve a project by name: pass `search` with the user's words; the exact match is usually on the first page. The row carries the TRA `id` (for integer-id routes), `normalisedName` (for name routes) and `thProjectId` (TestHub/TM id, NOT accepted by TRA routes).",
           "searchAfter is an OFFSET, not a cursor \u2014 the name is misleading. Page by reading pagingParams.searchAfter back into the next request; hasNext is computed by over-fetching one row.",
@@ -15935,10 +15221,7 @@
           }
         ],
         "intent": "Back the Projects landing page: the same paginated project list as the lite paginated variant but enriched with per-project build aggregates (build counts/status roll-ups, stability) from Elasticsearch, so each project card can show its health at a glance.",
-        "returns": [
-          "projectWithAggregates",
-          "pagingParams"
-        ],
+        "returns": ["projectWithAggregates", "pagingParams"],
         "guidance": [
           "Heavier than list_projects_lite_paginated because it runs an aggregate pass over builds for the page \u2014 use it only when you need the per-project numbers.",
           "Same paging quirks as the lite paginated route: searchAfter is an offset (not a cursor), page size is hardcoded at 100, hasNext is computed by over-fetching one row, and the offset is forced to 0 in demo-sandbox.",
@@ -16098,11 +15381,7 @@
             "name": "isMuted",
             "type": "string",
             "description": "Muted-tests visibility. One of the three tokens below; anything else is treated as ALL.",
-            "values": [
-              "all",
-              "true",
-              "false"
-            ]
+            "values": ["all", "true", "false"]
           },
           {
             "name": "orderKey",
@@ -16112,10 +15391,7 @@
           {
             "name": "orderValue",
             "type": "string",
-            "values": [
-              "asc",
-              "desc"
-            ]
+            "values": ["asc", "desc"]
           },
           {
             "name": "pageNumber",
@@ -16268,11 +15544,7 @@
           {
             "name": "isMuted",
             "type": "string",
-            "values": [
-              "all",
-              "true",
-              "false"
-            ]
+            "values": ["all", "true", "false"]
           },
           {
             "name": "hooksVisibility",
@@ -16292,10 +15564,7 @@
           {
             "name": "orderValue",
             "type": "string",
-            "values": [
-              "asc",
-              "desc"
-            ]
+            "values": ["asc", "desc"]
           },
           {
             "name": "pageNumber",
@@ -16369,11 +15638,7 @@
             "type": "string",
             "required": true,
             "description": "REQUIRED muted-test visibility, as the enum constant ALL / MUTED / UNMUTED (case-sensitive). all/true/false -> 400 'Invalid request payload'.",
-            "values": [
-              "ALL",
-              "MUTED",
-              "UNMUTED"
-            ]
+            "values": ["ALL", "MUTED", "UNMUTED"]
           },
           {
             "name": "browser",
@@ -16406,11 +15671,7 @@
             "description": "Restrict to a single build name."
           }
         ],
-        "returns": [
-          "reliability",
-          "duration",
-          "failureOccurrence"
-        ],
+        "returns": ["reliability", "duration", "failureOccurrence"],
         "guidance": [
           "isMuted is REQUIRED and binds straight to the MutedTestsVisibility enum by constant name: send ALL, MUTED or UNMUTED. The listing's all/true/false spellings fail conversion and return a generic 400 'Invalid request payload'.",
           "reliability is a failure percentage (higher = worse); duration is the average run duration; failureOccurrence carries {failed, total} raw counts.",
@@ -16485,18 +15746,10 @@
           {
             "name": "isMuted",
             "type": "string",
-            "values": [
-              "all",
-              "true",
-              "false"
-            ]
+            "values": ["all", "true", "false"]
           }
         ],
-        "returns": [
-          "reliability",
-          "duration",
-          "failureOccurrence"
-        ],
+        "returns": ["reliability", "duration", "failureOccurrence"],
         "guidance": [
           "stabilityHash comes from the PATH and overrides any value in the query string.",
           "Failure count uses the workflow-status aggregation when new build listing is enabled for the group, otherwise the raw status count \u2014 so it can differ from the legacy get_test_health_stats for the same test and window.",
@@ -16550,11 +15803,7 @@
             "type": "string",
             "required": true,
             "description": "REQUIRED muted-test visibility, as the enum constant ALL / MUTED / UNMUTED (case-sensitive). all/true/false -> 400 'Invalid request payload'.",
-            "values": [
-              "ALL",
-              "MUTED",
-              "UNMUTED"
-            ]
+            "values": ["ALL", "MUTED", "UNMUTED"]
           },
           {
             "name": "lowerBound",
@@ -16594,10 +15843,7 @@
             "description": "ACCEPTED but IGNORED \u2014 the controller never forwards it to the service, so it has no effect."
           }
         ],
-        "returns": [
-          "keys",
-          "data"
-        ],
+        "returns": ["keys", "data"],
         "guidance": [
           "Response is {keys, data}: keys is the parallel array of startedAt epochs, data is the points. Each point is MINIMAL \u2014 {color, y (duration), id (test-run id), buildId (serial id), buildName}. There are NO smart-tag flags and no workflow status here; use get_suite_health_trend for those.",
           "allBuilds and isFlaky are accepted by the endpoint but silently dropped (never passed to the service) \u2014 do not rely on them to filter.",
@@ -16670,11 +15916,7 @@
           {
             "name": "isMuted",
             "type": "string",
-            "values": [
-              "all",
-              "true",
-              "false"
-            ]
+            "values": ["all", "true", "false"]
           },
           {
             "name": "isAutomationLatest",
@@ -16682,10 +15924,7 @@
             "description": "When true, only the most recent run per build is kept in the series."
           }
         ],
-        "returns": [
-          "keys",
-          "data"
-        ],
+        "returns": ["keys", "data"],
         "guidance": [
           "Response is {keys, data}: keys is the parallel array of startedAt epochs; data points are RICH \u2014 {color, workflowStatus, y (duration), id (test-run id), buildId (serial id), buildName, isFlaky, isAlwaysFailing, isNewlyFailed, isPerformanceAnomaly, flakyReason, creationType}. Null-valued fields are omitted (JsonInclude NON_NULL).",
           "Unlike get_test_health_trend, this carries the smart-tag flags and workflow status \u2014 prefer it when you need them.",
@@ -16749,17 +15988,10 @@
           {
             "name": "isMuted",
             "type": "string",
-            "values": [
-              "all",
-              "true",
-              "false"
-            ]
+            "values": ["all", "true", "false"]
           }
         ],
-        "returns": [
-          "name",
-          "combinations"
-        ],
+        "returns": ["name", "combinations"],
         "guidance": [
           "Returns {name, combinations}. name is the test's display name from a sample run \u2014 an empty string \"\" when no run matches the window (not null, not an error).",
           "combinations lists the platform combos the test ran on, each {os, browser} where browser also nests its device. Combos whose browser and device are both non-displayable are filtered out, so the list can be shorter than the raw platform set.",
@@ -16823,16 +16055,10 @@
           {
             "name": "isMuted",
             "type": "string",
-            "values": [
-              "all",
-              "true",
-              "false"
-            ]
+            "values": ["all", "true", "false"]
           }
         ],
-        "returns": [
-          "[]"
-        ],
+        "returns": ["[]"],
         "guidance": [
           "The 200 body is a BARE JSON ARRAY (no wrapping object), one row per OS/browser/device combination, sorted by reliability descending.",
           "Each row's id is the composite \"<browser>-<platform>\" string, and carries reliability (failure %), duration (average), totalFailures {failed,total}, plus os / browser / browserDevice objects for display.",
@@ -16916,11 +16142,7 @@
           {
             "name": "isMuted",
             "type": "string",
-            "values": [
-              "all",
-              "true",
-              "false"
-            ]
+            "values": ["all", "true", "false"]
           },
           {
             "name": "isAutomationLatest",
@@ -16928,10 +16150,7 @@
             "description": "When true, keeps only the latest run per build within the page."
           }
         ],
-        "returns": [
-          "pagingParams",
-          "builds"
-        ],
+        "returns": ["pagingParams", "builds"],
         "guidance": [
           "Cursor-paged, NOT page-numbered: 20 runs per page, newest-first. To get the next (older) page, pass the pagingParams.start from the previous response as the `start` query param.",
           "The offset field inside pagingParams is a fixed placeholder (always 20) kept only for the FE contract \u2014 the backend does not read it; drive paging with start.",
@@ -17091,11 +16310,7 @@
           "This is the server-parsed counterpart of get_test_run_network_log_url; prefer the URL read when you only need the pointer or the file may be large.",
           "In non-prod a Redis key can make it return mocked network logs."
         ],
-        "returns": [
-          "log",
-          "responseOrigin",
-          "meta"
-        ],
+        "returns": ["log", "responseOrigin", "meta"],
         "responses": {
           "200": {
             "description": "Parsed network logs, or null when the run has no BrowserStack integration.",
@@ -17257,10 +16472,7 @@
           "A missing/unknown test run surfaces here as a 500 (an internal null-pointer), NOT a typed TEST_RUN_NOT_FOUND \u2014 do not read the 500 as an outage.",
           "Use this as a UI hint: a tab's presence implies the corresponding data read is worth calling for this run, its absence that the run has nothing for it."
         ],
-        "returns": [
-          "label",
-          "value"
-        ],
+        "returns": ["label", "value"],
         "responses": {
           "200": {
             "description": "Ordered list of tabs to render.",
@@ -17325,10 +16537,7 @@
           "In the demo sandbox the offset is forced to 0, so paging is effectively disabled there.",
           "The linked cases are under `testCases`; `pagingParams` carries hasNext, searchAfter and nextRoot for the next call."
         ],
-        "returns": [
-          "pagingParams",
-          "testCases"
-        ],
+        "returns": ["pagingParams", "testCases"],
         "responses": {
           "200": {
             "description": "A page of linked test cases plus the cursor for the next page.",
@@ -17396,14 +16605,7 @@
           "TEST_RUN_NOT_FOUND / BUILD_NOT_FOUND on bad ids; a retention-locked build is refused with FORBIDDEN_OPERATION.",
           "`code`, `language` and `type` are populated only when the source was captured; often only `filename` is set. `testRunId` comes back null - keep the id you asked with."
         ],
-        "returns": [
-          "language",
-          "code",
-          "filename",
-          "url",
-          "testRunId",
-          "type"
-        ],
+        "returns": ["language", "code", "filename", "url", "testRunId", "type"],
         "responses": {
           "200": {
             "description": "Test-code descriptor for the run.",
@@ -17913,11 +17115,7 @@
           "The response is a log-structure object with only the keys that exist: `TEST_FAILURE` (failure backtrace), `TEST_LOG` (an array of screenshot URLs \u2014 fetch each from storage yourself; they are not proxied through this API), and `BROWSERSTACK_ERROR`. An attempt with no captured evidence throws `IllegalArgumentException(\"retry doesn't exist\")` rather than returning an empty object, so treat that error as 'no screenshot data', not a missing run.",
           "Reads through the group-scoped repository factory, so a run in another group behaves as absent."
         ],
-        "returns": [
-          "TEST_FAILURE",
-          "TEST_LOG",
-          "BROWSERSTACK_ERROR"
-        ],
+        "returns": ["TEST_FAILURE", "TEST_LOG", "BROWSERSTACK_ERROR"],
         "responses": {
           "200": {
             "$response": "TestRunRetryLogsResponse"
@@ -17965,11 +17163,7 @@
           "Each row's `url` is a direct attachment/log URL fetched from storage, not through this API. `attachmentsCount` and `screenshotsCount` are per-test-run totals.",
           "Path variable is named buildId but is bound to the build UUID string \u2014 sending a numeric id yields BUILD_NOT_FOUND."
         ],
-        "returns": [
-          "data",
-          "cursorInfo",
-          "totalAttachments"
-        ],
+        "returns": ["data", "cursorInfo", "totalAttachments"],
         "responses": {
           "200": {
             "$response": "TestRunSdkLogsListResponse"
@@ -18519,9 +17713,7 @@
           "Counts are aggregated over the PARENT build id, so a re-run chain (a build and its re-runs) is counted as one build, not per re-run.",
           "`isDifferentPlatformsUsed` is true when the run count for that test hash spanned more than one platform."
         ],
-        "returns": [
-          "data"
-        ],
+        "returns": ["data"],
         "responses": {
           "200": {
             "$response": "TestRunCountListResponse"
@@ -18569,13 +17761,7 @@
           }
         ],
         "intent": "Get the 'Top unique errors' insight panel for a build \u2014 the most frequent error clusters with their test-run counts, respecting the active listing filters.",
-        "returns": [
-          "overview",
-          "data",
-          "ready",
-          "commentCount",
-          "message"
-        ],
+        "returns": ["overview", "data", "ready", "commentCount", "message"],
         "responses": {
           "200": {
             "$response": "BuildTopErrorStatsResponse"
@@ -18629,9 +17815,7 @@
           }
         ],
         "intent": "Re-run the quality-gate evaluation for a build (e.g. after profile rules or a status override changed) \u2014 use after quality-gate inputs change to refresh the build's gate result.",
-        "returns": [
-          "message"
-        ],
+        "returns": ["message"],
         "responses": {
           "200": {
             "$response": "BuildQualityGateRecalcAckResponse"
@@ -18707,9 +17891,7 @@
           }
         ],
         "intent": "Resolve a build UUID from human/CI-facing identifiers \u2014 project name (or TestHub project id) + build name + serial id for automation builds, or a TCM test-run id for manual/TCM runs \u2014 so a caller can deep-link to a build without already knowing its uuid.",
-        "returns": [
-          "uuid"
-        ],
+        "returns": ["uuid"],
         "responses": {
           "200": {
             "$response": "ResolvedBuildUuidResponse"
@@ -18790,10 +17972,7 @@
           }
         ],
         "intent": "List a page of unique build runs for the build sidebar/list rail, matching a large filter body, with bidirectional cursor paging and optional centring on a deep-linked build.",
-        "returns": [
-          "data",
-          "pagingParams"
-        ],
+        "returns": ["data", "pagingParams"],
         "responses": {
           "200": {
             "$response": "SidebarBuildRunsResponse"
@@ -18832,10 +18011,7 @@
             "name": "requestType",
             "type": "string",
             "required": true,
-            "values": [
-              "FIRST",
-              "POLL"
-            ],
+            "values": ["FIRST", "POLL"],
             "description": "FIRST for the initial request, POLL for follow-ups. An unknown value raises a 400 'Invalid request_type'. Missing \u2192 error."
           },
           {
@@ -18843,11 +18019,7 @@
             "type": "array",
             "required": true,
             "description": "Requested formats: richHtml, basicHtml and/or plainText (case-sensitive). Other values render nothing -> 400 'Build Report request format is invalid'.",
-            "values": [
-              "richHtml",
-              "basicHtml",
-              "plainText"
-            ]
+            "values": ["richHtml", "basicHtml", "plainText"]
           },
           {
             "name": "buildUuid",
@@ -18983,9 +18155,7 @@
           }
         ],
         "intent": "Get the trend context for a build for an automated failure agent \u2014 this build plus up to N earlier runs of the same build name, newest first, each with number, status, timings and a pass/fail/skip plus defect-type count summary.",
-        "returns": [
-          "builds"
-        ],
+        "returns": ["builds"],
         "responses": {
           "200": {
             "$response": "BuildHistoryWithDefectCountsResponse"
@@ -19064,10 +18234,7 @@
           }
         ],
         "intent": "List a build's AI-failure test runs as a flat, cursor-paginated list with full details \u2014 fetch an explicit set of test-run ids, drill into one failure theme or workflow cluster, or omit both to span the whole build.",
-        "returns": [
-          "testRuns",
-          "pagingParams"
-        ],
+        "returns": ["testRuns", "pagingParams"],
         "guidance": [
           "ONE route, three modes chosen by which query params you send: testRunIds -> fetch exactly those runs (skips the theme/workflow lookup); buildFailureThemeId OR buildFailureWorkflowId -> drill into one cluster (ids from get_build_ai_failures); neither -> the whole build.",
           "testRunIds is comma-separated integer ids, capped at 200; more returns 400 naming testRunIds.",
@@ -19650,10 +18817,7 @@
           },
           "ruleStatus": {
             "type": "string",
-            "enum": [
-              "pass",
-              "fail"
-            ],
+            "enum": ["pass", "fail"],
             "description": "'pass' = profile passes only when all rules hold; 'fail' = profile fails when any rule holds."
           },
           "rules": {
@@ -19672,12 +18836,7 @@
           },
           "hooksVisibility": {
             "type": "string",
-            "enum": [
-              "all",
-              "failed",
-              "beforeFailed",
-              "none"
-            ]
+            "enum": ["all", "failed", "beforeFailed", "none"]
           },
           "userId": {
             "type": "integer"
@@ -19805,11 +18964,7 @@
         "properties": {
           "type": {
             "type": "string",
-            "enum": [
-              "number",
-              "percentage",
-              "string"
-            ]
+            "enum": ["number", "percentage", "string"]
           },
           "value": {
             "type": "string",
@@ -21791,10 +20946,7 @@
           "status": {
             "type": "string",
             "description": "'success', or 'failure' (with empty logs) when Loki reported a non-success status.",
-            "values": [
-              "success",
-              "failure"
-            ]
+            "values": ["success", "failure"]
           },
           "appLogQuery": {
             "type": "object",
@@ -22511,10 +21663,7 @@
           "checkType": {
             "type": "string",
             "description": "QG_STATUS or BUILD_STATUS, copied from the matched check configuration.",
-            "enum": [
-              "QG_STATUS",
-              "BUILD_STATUS"
-            ]
+            "enum": ["QG_STATUS", "BUILD_STATUS"]
           },
           "retryCount": {
             "type": "integer",
@@ -22602,10 +21751,7 @@
           },
           "checkType": {
             "type": "string",
-            "enum": [
-              "QG_STATUS",
-              "BUILD_STATUS"
-            ]
+            "enum": ["QG_STATUS", "BUILD_STATUS"]
           },
           "commitCheck": {
             "type": "boolean"
@@ -22646,10 +21792,7 @@
           },
           "checkType": {
             "type": "string",
-            "enum": [
-              "QG_STATUS",
-              "BUILD_STATUS"
-            ]
+            "enum": ["QG_STATUS", "BUILD_STATUS"]
           },
           "splitRepos": {
             "type": "boolean"
@@ -22712,10 +21855,7 @@
           "level": {
             "type": "integer",
             "description": "1 = private, 2 = public/shared.",
-            "enum": [
-              1,
-              2
-            ]
+            "enum": [1, 2]
           },
           "name": {
             "type": "string"
@@ -24631,10 +23771,7 @@
           "state": {
             "type": "string",
             "description": "Computed from isClosed.",
-            "enum": [
-              "ACTIVE",
-              "CLOSED"
-            ]
+            "enum": ["ACTIVE", "CLOSED"]
           }
         }
       },
@@ -24959,11 +24096,7 @@
                 "properties": {
                   "type": {
                     "type": "string",
-                    "values": [
-                      "positive",
-                      "negative",
-                      "default"
-                    ]
+                    "values": ["positive", "negative", "default"]
                   },
                   "text": {
                     "type": "string"
@@ -26988,10 +26121,7 @@
             },
             "ruleStatus": {
               "type": "string",
-              "enum": [
-                "pass",
-                "fail"
-              ]
+              "enum": ["pass", "fail"]
             }
           }
         }
@@ -30092,9 +29222,7 @@
           "notification preferences"
         ],
         "id_convention": "A notifier id is a plain integer, discovered from the project's recipient list (there is no prefixed identifier). The per-alert and per-build-name mapping ids used when toggling a single subscription are also plain integers, found by reading one notifier's configuration first.",
-        "parents": [
-          "project"
-        ],
+        "parents": ["project"],
         "relations": [
           {
             "entity": "project",
@@ -30165,10 +29293,7 @@
           "badge key"
         ],
         "id_convention": "A public-link token is an opaque server-generated string, discovered only by calling the get-token operation for a dashboard or project (there is no list). A status-badge key is a signed JWT minted on demand. Dashboards are addressed by UUID; projects by their TestHub project id.",
-        "parents": [
-          "project",
-          "dashboard"
-        ],
+        "parents": ["project", "dashboard"],
         "relations": [
           {
             "entity": "dashboard",
@@ -30217,9 +29342,7 @@
           "build quality gate"
         ],
         "id_convention": "A quality profile is addressed by its UUID (path `profile_id`/`profileUuid`); a project by its normalised name; a build by its UUID. There are no integer ids on these routes. The one built-in default profile has a fixed UUID and behaves specially.",
-        "parents": [
-          "project"
-        ],
+        "parents": ["project"],
         "relations": [
           {
             "entity": "project",
@@ -30285,9 +29408,7 @@
           "build frequency"
         ],
         "id_convention": "Not addressed by its own id. Scoped by the project's normalised name in the path and narrowed by build name. Chart and leaderboard rows are addressed by build name as the identifier, or by the literal \"all\" for the project-wide series.",
-        "parents": [
-          "project"
-        ],
+        "parents": ["project"],
         "relations": [
           {
             "entity": "build",
@@ -30343,10 +29464,7 @@
           "outbound notification"
         ],
         "id_convention": "Addressed by the rule's UUID; there is no prefixed display id. Discover the UUID from a list call \u2014 it is not the integer database id.",
-        "parents": [
-          "project",
-          "group"
-        ],
+        "parents": ["project", "group"],
         "relations": [
           {
             "entity": "project",
@@ -30402,11 +29520,7 @@
           "ai token"
         ],
         "id_convention": "No single id. RCA is addressed by the test-run integer id or the build uuid; code-fix preferences by a plain integer id discovered through the get-preference call; RCA conversation turns by a UUID message id.",
-        "parents": [
-          "test_run",
-          "build",
-          "project"
-        ],
+        "parents": ["test_run", "build", "project"],
         "relations": [
           {
             "entity": "test_run",
@@ -30470,9 +29584,7 @@
           "build run id"
         ],
         "id_convention": "Addressed by build UUID (an opaque string) on most routes. A few reads take the internal NUMERIC build id instead (e.g. the AI failure summary), and the two are not interchangeable. A build can also be located by its human coordinates (project normalised name + build normalised name + build serial number), which resolve to the UUID. There is no prefixed display identifier. A build ALSO carries a CI run id (`buildRunId`, a string set by the CI/upload client), which is NOT the serial number (#N): users often say \"run <number>\" meaning buildRunId. Resolve a bare run number with search_entities (entity=\"Build\", days<=90): each hit carries both `buildRunId` and `serialId` plus the project; get_build_id_from_build_coordinates only understands the serial.",
-        "parents": [
-          "project"
-        ],
+        "parents": ["project"],
         "relations": [
           {
             "entity": "test_run",
@@ -30571,9 +29683,7 @@
           "run group filter"
         ],
         "id_convention": "Not an addressable record \u2014 there is no filter id. A filter view is fetched by scope: one project by its normalised name (a URL-safe slug, discovered from a project read/list), or a set of integer project ids sent in a POST filter body.",
-        "parents": [
-          "project"
-        ],
+        "parents": ["project"],
         "relations": [
           {
             "entity": "build",
@@ -30750,9 +29860,7 @@
           "unique test"
         ],
         "id_convention": "Identified by an opaque stabilityHash string, not a numeric id. The hash is discovered from the Suite Health test listing; the same hash addresses every Test Health detail read.",
-        "parents": [
-          "project"
-        ],
+        "parents": ["project"],
         "relations": [
           {
             "entity": "build",
@@ -30811,9 +29919,7 @@
           "test run logs"
         ],
         "id_convention": "Not its own id. Most tabs are addressed by the parent test run's INTEGER id (testRunId); session-scoped log tabs by the session's HASHED string id; the app-log stream by the test run's UUID. Discover these from a test-run / session read.",
-        "parents": [
-          "test_run"
-        ],
+        "parents": ["test_run"],
         "relations": [
           {
             "entity": "test_run",
@@ -30873,9 +29979,7 @@
           "automated test"
         ],
         "id_convention": "Most routes take the INTEGER test run id (Long). A few public routes are scoped by the parent BUILD's UUID instead (a string). Discover run ids from a build's test-run listing rather than guessing them; the TR-NNN prefixed identifier some surfaces show is for display, not for these numeric paths.",
-        "parents": [
-          "build"
-        ],
+        "parents": ["build"],
         "relations": [
           {
             "entity": "build",
@@ -30943,9 +30047,7 @@
           "rca theme"
         ],
         "id_convention": "The build is addressed by its build UUID (an opaque string) in the path. Individual clusters are identified by an integer buildFailureThemeId or buildFailureWorkflowId, which are discovered from the build AI-failures read, not guessable.",
-        "parents": [
-          "build"
-        ],
+        "parents": ["build"],
         "relations": [
           {
             "entity": "build",
@@ -30990,9 +30092,7 @@
           "queued session"
         ],
         "id_convention": "Most session reads take the session's hashed id, an opaque alphanumeric string (not a numeric id). The stop control takes that hashed id in the body. One list read is the exception: it takes the NUMERIC build id even though its slot looks like a session id.",
-        "parents": [
-          "build"
-        ],
+        "parents": ["build"],
         "relations": [
           {
             "entity": "build",
@@ -31127,9 +30227,7 @@
           "build insights dashboard"
         ],
         "id_convention": "UUID. Custom views' UUIDs are discovered from the list capability. On READS only, three built-in views are also addressable by alias: `default` resolves to the TCM view for source=TCM and to the TO 'testing trends' view for source=TO, and `automation-trend` resolves to the automation-trend view. Writes (update/delete/clone-source) require the raw UUID; the aliases are rejected there.",
-        "parents": [
-          "project"
-        ],
+        "parents": ["project"],
         "relations": [],
         "capabilities": [
           "check_dashboard_widget_ignored_filters",
@@ -31228,9 +30326,7 @@
           "tabular test runs report"
         ],
         "id_convention": "No stored id: the report is defined by the definition sent in the request body. Per-test detail is keyed by a test's globalTestHash (a string hash identifying one test case across runs), taken from a report-table row.",
-        "parents": [
-          "project"
-        ],
+        "parents": ["project"],
         "relations": [
           {
             "entity": "test_run",
@@ -31269,9 +30365,7 @@
           "dashboard chart"
         ],
         "id_convention": "Addressed on these routes by a widget-type enum plus the definition in the body, not by a stored widget id. The dashboard id in the address is not read on the data and drill-down calls.",
-        "parents": [
-          "dashboard"
-        ],
+        "parents": ["dashboard"],
         "relations": [
           {
             "entity": "dashboard",
@@ -31367,9 +30461,7 @@
         "id_convention": "No stored entity; each result carries its own numeric id and a type discriminator.",
         "parents": [],
         "relations": [],
-        "capabilities": [
-          "search_entities"
-        ],
+        "capabilities": ["search_entities"],
         "key_facts": [
           "Search covers a fixed set of entity types and rejects any other value; the accepted values are case-sensitive (Build, BuildTestCaseExecutionResult, Project, All).",
           "The query must be at least three characters and not blank, or the request is rejected.",
@@ -31396,9 +30488,7 @@
           "healing verdict"
         ],
         "id_convention": "A build is addressed by its build UUID (^[a-zA-Z0-9-]{1,64}$). A healing-PR job is a random UUID (8-4-4-4-12 hex) returned by create_self_healing_pr; it is NOT discoverable through any list call and lives only in Redis with a short TTL, so capture it from the create response.",
-        "parents": [
-          "build"
-        ],
+        "parents": ["build"],
         "relations": [
           {
             "entity": "build",
@@ -31442,9 +30532,7 @@
           "base vs target"
         ],
         "id_convention": "Not a stored entity with its own id: a comparison is identified by the pair of build UUIDs passed as the `base` and `target` query params. Comparison is always done at the top-level parent build, so a re-run/child UUID should be normalised first via resolve_build_comparison_parent_uuids.",
-        "parents": [
-          "build"
-        ],
+        "parents": ["build"],
         "relations": [
           {
             "entity": "build",
@@ -31482,10 +30570,7 @@
           "annotation"
         ],
         "id_convention": "A comment id is a random UUID string generated on create and returned in the create response. A comment belongs to a thread identified by threadId (also a UUID; a new top-level comment starts its own thread). There is no list-by-id call: ids are discovered through the build/test comment reads.",
-        "parents": [
-          "project",
-          "build"
-        ],
+        "parents": ["project", "build"],
         "relations": [
           {
             "entity": "build",
@@ -31534,9 +30619,7 @@
           "clustered failure"
         ],
         "id_convention": "Numeric cluster id (errorClusterId), a plain integer discovered from the unique-errors list (each row's `id`, returned as a numeric string). Every detail view takes it in the path as errorId / clusterId.",
-        "parents": [
-          "project"
-        ],
+        "parents": ["project"],
         "relations": [
           {
             "entity": "test_run",
@@ -31590,9 +30673,7 @@
           "why did this test fail"
         ],
         "id_convention": "No id of its own in paths: an RCA is addressed by the integer test-run id it belongs to (one RCA per test run). The stored row does carry an integer id and a bulkRcaId (UUID) linking runs analysed together in one bulk request.",
-        "parents": [
-          "test_run"
-        ],
+        "parents": ["test_run"],
         "relations": [
           {
             "entity": "test_run",
@@ -31632,9 +30713,7 @@
           "build set"
         ],
         "id_convention": "Plain integer build-group id, discovered from the group listing. Note: the project id in these paths is the TestHub project id, not the observability project id.",
-        "parents": [
-          "project"
-        ],
+        "parents": ["project"],
         "relations": [
           {
             "entity": "build",
@@ -31673,10 +30752,7 @@
           "a11y report"
         ],
         "id_convention": "No id of its own: build-level a11y is addressed by the build UUID; test-run-level a11y is addressed by the TestHub build-test-case-execution-result (btcer) id, a plain integer. Plan/trial reads take no id and use the session's group/user.",
-        "parents": [
-          "build",
-          "test_run"
-        ],
+        "parents": ["build", "test_run"],
         "relations": [
           {
             "entity": "build",

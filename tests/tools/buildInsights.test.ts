@@ -1,3 +1,4 @@
+import { HttpError } from "../../src/lib/error";
 import { describe, it, expect, vi, beforeEach, Mock } from "vitest";
 import { fetchBuildInsightsTool } from "../../src/tools/build-insights";
 import { fetchFromBrowserStackAPI } from "../../src/lib/utils";
@@ -156,19 +157,30 @@ describe("fetchBuildInsightsTool", () => {
       mockConfig,
     );
 
-    expect(result.content[0].text).toContain('"sessions": "none: results were uploaded');
+    expect(result.content[0].text).toContain(
+      '"sessions": "none: results were uploaded',
+    );
     expect(result.content[0].text).not.toContain("hashed_id");
   });
 
   it("SUCCESS: maps an Automate hashed id to its TRA build and retries", async () => {
     (fetchFromBrowserStackAPI as Mock)
-      .mockRejectedValueOnce(new Error(`Failed to fetch from x/${HASHED_ID}: 404 Not Found`))
+      .mockRejectedValueOnce(
+        new HttpError(
+          `Failed to fetch from x/${HASHED_ID}: 404 Not Found`,
+          404,
+        ),
+      )
       .mockResolvedValueOnce({})
       .mockResolvedValueOnce({ name: "Mapped Build" })
       .mockResolvedValueOnce({});
-    (mapHashedToTra as Mock).mockResolvedValue(
-      "jlcb5jo8xakocnjyll3n10b1rx5sqnrprh3y6zsp",
-    );
+    (mapHashedToTra as Mock).mockResolvedValue({
+      traBuildId: "jlcb5jo8xakocnjyll3n10b1rx5sqnrprh3y6zsp",
+      hashedBuildId: HASHED_ID,
+      sessionType: "app-automate",
+      projectName: "P",
+      buildName: "B",
+    });
 
     const result = await fetchBuildInsightsTool(
       { buildId: HASHED_ID },
@@ -180,12 +192,13 @@ describe("fetchBuildInsightsTool", () => {
       '"tra_build_id": "jlcb5jo8xakocnjyll3n10b1rx5sqnrprh3y6zsp"',
     );
     expect(result.content[0].text).toContain(`"hashed_id": "${HASHED_ID}"`);
+    expect(result.content[0].text).toContain('"session_type": "app-automate"');
     expect(resolveHashedBuildId).not.toHaveBeenCalled();
   });
 
   it("FAIL: keeps the 404 and adds the reason when a hashed id has no TRA build", async () => {
     (fetchFromBrowserStackAPI as Mock).mockRejectedValue(
-      new Error(`Failed to fetch from x/${HASHED_ID}: 404 Not Found`),
+      new HttpError(`Failed to fetch from x/${HASHED_ID}: 404 Not Found`, 404),
     );
     (mapHashedToTra as Mock).mockRejectedValue(
       new Error("automate build has no TRA build"),

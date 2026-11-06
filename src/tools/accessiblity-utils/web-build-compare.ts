@@ -243,9 +243,27 @@ export async function compareWebBuilds(
       ? reportFetcher.reportStatus({ kind: "build", buildId: other.buildId })
       : undefined,
   ]);
-  // The older build is "before": by start, whichever was passed as compareWith.
+  // The older build is "before", whichever was passed as compareWith: by start, or by build
+  // number when a start is missing and both are runs of one build name and project. With
+  // neither, the order passed is kept, and said.
   const started = (b: WebBuild) => Date.parse(b.startedAt ?? "");
-  const reversed = other !== undefined && started(other) > started(self);
+  let reversed = false;
+  let orderUnknown = false;
+  if (other) {
+    const [otherAt, selfAt] = [started(other), started(self)];
+    if (!Number.isNaN(otherAt) && !Number.isNaN(selfAt)) {
+      reversed = otherAt > selfAt;
+    } else if (
+      typeof other.buildNumber === "number" &&
+      typeof self.buildNumber === "number" &&
+      other.name === self.name &&
+      other.projectName === self.projectName
+    ) {
+      reversed = other.buildNumber > self.buildNumber;
+    } else {
+      orderUnknown = true;
+    }
+  }
   let before = reversed ? self : other;
   const after = reversed ? other! : self;
   const pair = (b: WebBuild | undefined): Record<string, WebBuild> =>
@@ -275,6 +293,11 @@ export async function compareWebBuilds(
     `Compared Automated Tests builds: before ${webBuildRef(base)}, after ${webBuildRef(after)}.`,
     ...(reversed
       ? ["compareWith was the newer build, so it is used as 'after'."]
+      : []),
+    ...(orderUnknown
+      ? [
+          "The builds' start times could not be read, so compareWith was taken as the earlier build. If it is the newer one, swap them: new and fixed issues are then the other way around.",
+        ]
       : []),
     ...lines,
     webBuildsData({ before: base, after }),

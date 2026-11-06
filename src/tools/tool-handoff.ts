@@ -69,10 +69,6 @@ export const PLAN_WRITES_VIA_CAPABILITIES =
   " Creating a test plan or sub-plan, and linking or unlinking test runs, are not " +
   "available as tools here: use the capability functions (they ask you to confirm first).";
 
-/**
- * A TRA build id comes from listBuildId. It is not the Automate hashed id in the
- * Automate dashboard link: both are 40 characters, but only the TRA id works here.
- */
 export const NEEDS_BUILD_ID = needsIdFrom("a TRA build id", "listBuildId");
 
 /**

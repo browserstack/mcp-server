@@ -42,7 +42,6 @@ function buildLookupError(error: unknown): CallToolResult {
   };
 }
 
-// Finds a build preferring the caller's own runs, then anyone's.
 export async function getBuildIdTool(
   args: BuildIdArgs,
   config: BrowserStackConfig,
@@ -55,7 +54,6 @@ export async function getBuildIdTool(
   }
 }
 
-// Finds a build across all users.
 export async function listBuildIdTool(
   args: BuildIdArgs,
   config: BrowserStackConfig,
@@ -133,7 +131,6 @@ export async function listTestIdsTool(
         includeFailureDetail,
       );
     } catch (error) {
-      // An Automate hashed id is not a TRA build: map it, then retry once.
       if (!isNotFound(error) || !isHashedBuildId(buildId)) throw error;
       const mapped = await mapHashedToTra(buildId, error, config);
       note = `Automate build ${buildId} maps to TRA build ${mapped}.`;

@@ -14,7 +14,6 @@ const ERROR_SUMMARY_MAX = 200;
 // Safety bound on pagination; hitting it is logged, never silent.
 const MAX_PAGES = 100;
 
-/** A dropped connection ("fetch failed") is retried once; HTTP errors are not. */
 async function fetchWithRetry(
   url: string,
   init: RequestInit,

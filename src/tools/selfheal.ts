@@ -290,7 +290,6 @@ export async function fetchSelfHealSelectorTool(
     try {
       report = await fetchSelfHealingReportByBuild(buildUuid!, effectiveConfig);
     } catch (error) {
-      // An Automate hashed id is not a TRA build: map it, then retry once.
       const notFound =
         error instanceof Error && /\b404\b|Not Found/i.test(error.message);
       if (!notFound || !isHashedBuildId(buildUuid!)) throw error;

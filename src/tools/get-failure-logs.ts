@@ -42,7 +42,6 @@ function fitsSessionType(logType: LogType, sessionType: SessionType): boolean {
   return types.includes(logType);
 }
 
-// The closest log of the other product, so a mismatched request still returns evidence.
 const EQUIVALENT_LOG_TYPE: Partial<Record<LogType, LogType>> = {
   [AutomateLogType.SessionLogs]: AppAutomateLogType.AppiumLogs,
   [AutomateLogType.ConsoleLogs]: AppAutomateLogType.DeviceLogs,
@@ -85,7 +84,6 @@ export async function getFailureLogs(
   });
 
   let sessionType = args.sessionType;
-  // A TRA build id is not an App Automate build: ignore it and use the session's.
   let buildId =
     args.buildId && !isTraBuildId(args.buildId) ? args.buildId : undefined;
 
@@ -102,8 +100,6 @@ export async function getFailureLogs(
         "Use a session id from listSessions or listTestIds.",
     );
 
-  // A log type of the other product usually means the session type is wrong:
-  // ask the session itself before fitting the log types.
   if (requested.some((logType) => !fitsSessionType(logType, sessionType))) {
     const detected = await detectSession(args.sessionId, sessionType, config);
     if (!detected) throw notFound();
@@ -119,7 +115,6 @@ export async function getFailureLogs(
   if (sessionType === SessionType.AppAutomate && needsBuildId && !buildId) {
     buildId = await resolveAppAutomateBuildId(args.sessionId, config);
     if (!buildId) {
-      // Not an App Automate session: it may be an Automate one.
       const detected = await detectSession(
         args.sessionId,
         SessionType.Automate,
@@ -133,7 +128,6 @@ export async function getFailureLogs(
     }
   }
 
-  // Swap any remaining other-product log type for this product's equivalent.
   const validLogTypes: LogType[] = [];
   for (const logType of requested) {
     const fitted = fitsSessionType(logType, sessionType)

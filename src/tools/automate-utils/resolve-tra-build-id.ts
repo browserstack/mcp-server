@@ -17,9 +17,7 @@ export interface ResolvedTraBuild {
   buildName: string;
 }
 
-/** An Automate build that TRA cannot map back, with the reason as the message. */
 export class TraBuildNotFoundError extends Error {
-  /** Neither Automate nor App Automate knows the id: it may be a TRA id after all. */
   readonly unknownToAutomate: boolean;
 
   constructor(message: string, unknownToAutomate = false) {
@@ -29,7 +27,6 @@ export class TraBuildNotFoundError extends Error {
   }
 }
 
-/** Project and build name of an Automate / App Automate build, from its first session. */
 async function readAutomateBuild(
   hashedBuildId: string,
   sessionType: SessionType,
@@ -50,7 +47,6 @@ async function readAutomateBuild(
   let session = items[0]?.automation_session;
   if (!session) return {};
 
-  // The session detail always carries both names; read it if the list did not.
   if ((!session.project_name || !session.build_name) && session.hashed_id) {
     const detail = await apiClient.get({
       url: sessionDetailsUrl(sessionType, session.hashed_id),
@@ -65,12 +61,6 @@ async function readAutomateBuild(
   };
 }
 
-/**
- * Map an Automate / App Automate hashed build id to its TRA build id: read the
- * project and build name from one of its sessions, look up TRA's latest build
- * with that name, and confirm it is the same run by resolving its hashed id back.
- * Throws TraBuildNotFoundError with a user-facing reason when it cannot.
- */
 export async function resolveTraBuildIdFromHashed(
   hashedBuildId: string,
   config: BrowserStackConfig,
@@ -113,8 +103,6 @@ export async function resolveTraBuildIdFromHashed(
       sessionType,
     ).catch(() => undefined);
     if (confirmed?.hashedBuildId !== id) {
-      // Only the latest run is mapped: walking older runs costs many calls per
-      // lookup, and clients retry failed lookups.
       throw new TraBuildNotFoundError(
         `${sessionType} build "${id}" is not the latest TRA build named ` +
           `"${build.buildName}" in project "${build.projectName}". Call listBuildId with ` +
@@ -137,7 +125,6 @@ export async function resolveTraBuildIdFromHashed(
   );
 }
 
-/** TRA id for an Automate hashed id, or the original 404 with the reason added. */
 export async function mapHashedToTra(
   hashedBuildId: string,
   original: unknown,

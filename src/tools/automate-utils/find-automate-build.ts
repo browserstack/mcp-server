@@ -11,8 +11,7 @@ export interface AutomateBuildMatch {
   createdAt?: string;
 }
 
-// The builds route returns at most 100 per page, newest first. One page per
-// product: clients retry failed lookups.
+// One page per product: clients retry failed lookups.
 const PAGE_SIZE = 100;
 const MAX_PAGES = 1;
 
@@ -24,11 +23,6 @@ function buildsUrl(sessionType: SessionType): string {
 
 const normalise = (value: string) => value.trim().toLowerCase();
 
-/**
- * Automate and App Automate builds whose name matches exactly (case-insensitive),
- * newest first. Covers runs that never reported to TRA. Products that fail or
- * have no access are skipped.
- */
 export async function findAutomateBuildsByName(
   buildName: string,
   config: BrowserStackConfig,

@@ -25,7 +25,6 @@ export async function fetchBuildInsightsTool(
     try {
       fetched = await fetchInsightsData(traBuildId, config);
     } catch (error) {
-      // An Automate hashed id is not a TRA build: map it, then retry once.
       if (!isNotFound(error) || !isHashedBuildId(inputId)) throw error;
       traBuildId = await mapHashedToTra(inputId, error, config);
       fetched = await fetchInsightsData(traBuildId, config);

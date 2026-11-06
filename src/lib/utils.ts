@@ -34,7 +34,6 @@ export async function fetchFromBrowserStackAPI(
   const auth = Buffer.from(authString).toString("base64");
 
   const init = { headers: { Authorization: `Basic ${auth}` } };
-  // A dropped connection ("fetch failed") is retried once; HTTP errors are not.
   const res = await fetch(url, init).catch(() => fetch(url, init));
 
   if (!res.ok) {

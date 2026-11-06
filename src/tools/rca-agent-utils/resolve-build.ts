@@ -26,13 +26,10 @@ export interface BuildLookupInput {
 }
 
 export interface BuildLookupResult {
-  /** The id to pass on: a TRA build id, or an Automate hashed id when TRA has none. */
   buildId: string;
-  /** How the build was found, when it was not an exact SDK-name match. */
   note?: string;
 }
 
-/** The build could not be identified; the message says why and what to pass. */
 export class BuildLookupError extends Error {
   constructor(message: string) {
     super(message);
@@ -41,8 +38,7 @@ export class BuildLookupError extends Error {
 }
 
 const MAX_CANDIDATES = 5;
-// One page (the newest 10 builds) per search: clients retry failed lookups, so
-// a deeper walk would multiply requests on every wrong name.
+// One page per search: clients retry failed lookups.
 const BUILD_PAGES = 1;
 
 export interface ParsedBuildUrl {
@@ -62,11 +58,8 @@ function decodeSegment(segment: string): string {
   }
 }
 
-/**
- * Read a build out of a dashboard link (or a bare id):
- *  - TRA:      .../projects/<project>/builds/<build name>/<build number>
- *  - Automate: .../builds/<40-hex hashed id>[/sessions/<id>]
- */
+// TRA links: .../projects/<project>/builds/<name>/<number>
+// Automate links: .../builds/<hashed id>[/sessions/<id>]
 export function parseBuildUrl(input: string): ParsedBuildUrl | undefined {
   const raw = input.trim();
   if (isTraBuildId(raw)) return { traBuildId: raw };
@@ -172,7 +165,7 @@ async function resolveFromHashed(
     };
   } catch (error) {
     if (!(error instanceof TraBuildNotFoundError)) throw error;
-    // Unknown to Automate: possibly an older all-hex TRA id, so pass it through.
+    // Possibly an older all-hex TRA id.
     if (error.unknownToAutomate) return { buildId: hashedBuildId };
     return {
       buildId: hashedBuildId,
@@ -183,7 +176,6 @@ async function resolveFromHashed(
   }
 }
 
-/** Steps 2-4: the fallbacks after the exact SDK-name lookup missed. */
 async function resolveInProject(
   projectName: string,
   buildName: string | undefined,
@@ -209,7 +201,6 @@ async function resolveInProject(
     buildNumber === undefined || row.buildNumber === buildNumber;
 
   if (buildName) {
-    // The dashboard label, via the listing's own name filter.
     const byLabel = (
       await listProjectBuilds(project.id, config, {
         dashboardName: buildName,
@@ -240,7 +231,6 @@ async function resolveInProject(
       );
     }
 
-    // Neither name matched exactly: scan recent builds for a near match.
     const recent = await listProjectBuilds(project.id, config, {
       maxPages: BUILD_PAGES,
     });
@@ -306,13 +296,6 @@ async function resolveInProject(
   );
 }
 
-/**
- * Identify a TRA build from whatever the user has. Order, cheapest first:
- *  1. a dashboard link or bare id;
- *  2. the exact SDK-sent name via /builds/latest (optionally the caller's own);
- *  3. the dashboard label via the project build listing;
- *  4. a case-insensitive or partial match over recent builds, returned as candidates.
- */
 export async function resolveBuild(
   input: BuildLookupInput,
   config: BrowserStackConfig,
@@ -377,7 +360,6 @@ export async function resolveBuild(
   try {
     return await resolveInProject(projectName, buildName, buildNumber, config);
   } catch (error) {
-    // Build numbers are TRA's; a bare name may be an Automate run TRA never saw.
     if (
       !(error instanceof BuildLookupError) ||
       !buildName ||
@@ -389,10 +371,6 @@ export async function resolveBuild(
   }
 }
 
-/**
- * Last resort: an Automate / App Automate build with exactly this name. Returns
- * its TRA build id when it has one, otherwise the hashed id with a note.
- */
 async function searchAutomateBuilds(
   buildName: string,
   config: BrowserStackConfig,

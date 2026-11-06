@@ -120,7 +120,6 @@ export async function listSessionIdsTool(
     if (isTraBuildId(inputId)) {
       sessions = await fromTraBuild();
     } else {
-      // Probably an Automate hashed id: try the given product, then the other.
       for (const candidate of [
         args.sessionType,
         otherSessionType(args.sessionType),

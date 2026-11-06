@@ -3,16 +3,9 @@ import { getBrowserStackAuth } from "../../lib/get-auth.js";
 import { BrowserStackConfig } from "../../lib/types.js";
 import { getAutomationBaseUrl } from "./constants.js";
 
-/**
- * Thin wrappers over the public Test Reporting & Analytics (TRA) build routes.
- *
- * Two names exist for every TRA build, and each route matches only one of them:
- *  - `original_name` is what the SDK sent (browserstack.yml `buildName`). Only
- *    `/builds/latest` matches it.
- *  - `name` is the normalised label the dashboard shows, with dynamic parts
- *    stripped ("patc204-junit-105mb" is shown as "junit"). Only the project build
- *    listing's `unique_build_names` filter matches it.
- */
+// Each TRA build has two names: `original_name` (what the SDK sent; only
+// /builds/latest matches it) and `name` (the dashboard label; only the project
+// build listing's `unique_build_names` filter matches it).
 
 export interface TraBuildRow {
   buildId: string;
@@ -30,11 +23,9 @@ export interface TraProject {
   name: string;
 }
 
-// Builds older than this are not searched by the fallback lookups.
 export const BUILD_LOOKUP_WINDOW_DAYS = 365;
 
-// Project pages hold at most 10 rows and the list has no name filter; capped
-// low because clients retry failed lookups.
+// The project list has no name filter; kept low because clients retry failed lookups.
 const MAX_PROJECT_PAGES = 5;
 
 function authHeaders(config: BrowserStackConfig): Record<string, string> {
@@ -45,7 +36,6 @@ function authHeaders(config: BrowserStackConfig): Record<string, string> {
   };
 }
 
-/** Transport failures (no HTTP status) are retried once; HTTP errors are not. */
 async function getWithRetry(
   url: string,
   config: BrowserStackConfig,
@@ -69,15 +59,10 @@ function httpError(what: string, status: number, statusText: string): Error {
   return new Error(`Failed to ${what}: ${status} ${statusText}`.trim());
 }
 
-/** Normalise a name for comparison: case, surrounding space, and "+" for space. */
 export function normaliseName(value: string | undefined): string {
   return (value ?? "").replace(/\+/g, " ").trim().toLowerCase();
 }
 
-/**
- * Latest build whose SDK-sent name matches exactly. Returns undefined on 404 so
- * callers can fall back to the other lookups.
- */
 export async function fetchLatestBuildId(
   projectName: string,
   buildName: string,
@@ -107,10 +92,6 @@ export async function fetchLatestBuildId(
   return typeof buildId === "string" && buildId ? buildId : undefined;
 }
 
-/**
- * Find a TRA project by name. Returns the exact (case-insensitive) match, or the
- * projects whose names contain the term when there is none.
- */
 export async function findProject(
   projectName: string,
   config: BrowserStackConfig,
@@ -163,11 +144,6 @@ function toRow(raw: any): TraBuildRow | undefined {
   };
 }
 
-/**
- * A project's builds from the last BUILD_LOOKUP_WINDOW_DAYS, newest pages first.
- * `dashboardName` filters on the dashboard label (not the SDK-sent name). Stops
- * early once `stop` returns true for the rows collected so far.
- */
 export async function listProjectBuilds(
   projectId: number,
   config: BrowserStackConfig,
@@ -187,8 +163,7 @@ export async function listProjectBuilds(
     const params: Record<string, string | number> = {
       date_range: `${start},${end}`,
     };
-    // Comma-joined arrays are how the route binds lists, so a comma inside the
-    // name would split it; such names fall through to the unfiltered walk.
+    // The route splits list params on commas, so such names skip the filter.
     if (options.dashboardName && !options.dashboardName.includes(",")) {
       params.unique_build_names = options.dashboardName;
     }

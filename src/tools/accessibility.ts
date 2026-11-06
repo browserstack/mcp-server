@@ -37,8 +37,13 @@ import { elicitCredentialsIfSupported } from "../lib/elicit-credentials.js";
 import logger from "../logger.js";
 import { NEEDS_A11Y_CONFIG_ID, NEEDS_A11Y_SCAN_ID } from "./tool-handoff.js";
 import {
+  applyMemory,
+  leftOutMessages,
   memoryForReport,
   memoryMessages,
+  type FpMemory,
+  type LeftOut,
+  type MemoryIssue,
 } from "./accessiblity-utils/fp-memory.js";
 
 interface AuthCredentials {
@@ -946,6 +951,28 @@ function exportPendingMessages(
   ];
 }
 
+/** The memory read for a report, and how many issues each entry left out of it. */
+interface FpApplied {
+  memory?: FpMemory;
+  leftOut: LeftOut[];
+}
+
+/**
+ * The account's saved false positives for the report's rules: the issues they certainly
+ * cover are left out of every page and count, whether or not the agent thinks to ask for
+ * the memory. Records what it read and left out in `fp`, for the answer to say.
+ */
+function memoryLeaveOut(config: BrowserStackConfig, fp: FpApplied) {
+  return async <T extends MemoryIssue>(issues: T[]): Promise<Set<T>> => {
+    fp.memory = await memoryForReport(setupAuth(config), [
+      ...new Set(issues.map((issue) => issue.issue_type)),
+    ]);
+    const { covered, leftOut } = applyMemory(fp.memory, issues);
+    fp.leftOut = leftOut;
+    return covered;
+  };
+}
+
 async function fetchAccessibilityIssues(
   requested: RequestedSource,
   config: BrowserStackConfig,
@@ -1020,6 +1047,7 @@ async function fetchAccessibilityIssues(
   }
 
   const pageArg = pageUrl ? `, pageUrl: "${pageUrl}"` : "";
+  const fp: FpApplied = { leftOut: [] };
   let reportLink: string;
   try {
     reportLink = await reportFetcher.getReportLink(source, {
@@ -1051,13 +1079,8 @@ async function fetchAccessibilityIssues(
   } = await parseAccessibilityReportFromCSV(reportLink, {
     nextPage: cursor,
     pageUrl,
+    leaveOut: memoryLeaveOut(config, fp),
   });
-  // The memory for this page's rules comes with the issues, so it is applied whether or
-  // not the agent thinks to ask for it.
-  const memory = await memoryForReport(
-    setupAuth(config),
-    Object.keys(rules ?? {}),
-  );
 
   return createSuccessResponse([
     ...preface,
@@ -1067,9 +1090,11 @@ async function fetchAccessibilityIssues(
     // The whole report's counts, said on its first page.
     ...(cursor ? [] : webSummaryNote(summary, total_issues)),
     ...excludedIssuesNote(duplicate_issues, unlinked_duplicates, hidden_issues),
+    ...leftOutMessages(fp.leftOut),
     fullReportLine(reportLink),
     WEB_ISSUES_NOTE,
-    ...memoryMessages(memory),
+    // The rest of the memory for this page's rules, for the agent to apply with judgment.
+    ...memoryMessages(fp.memory, Object.keys(rules ?? {})),
     `Issues: ${wrapUntrusted("accessibility scan results", JSON.stringify({ issues: records, rules }))}`,
     closingMessage(next_page, remaining, source, stillProcessing, pageArg),
   ]);
@@ -1485,6 +1510,7 @@ function createScanSuccessResponse(
   dashboardLink: string | undefined,
   settings: ScanSettings = {},
   applied?: ScanSettings,
+  fp: FpApplied = { leftOut: [] },
 ): CallToolResult {
   const cursor = report.next_page;
   const messages = [
@@ -1499,7 +1525,10 @@ function createScanSuccessResponse(
       report.unlinked_duplicates,
       report.hidden_issues,
     ),
+    ...leftOutMessages(fp.leftOut),
     WEB_ISSUES_NOTE,
+    // The rest of the memory for this page's rules, for the agent to apply with judgment.
+    ...memoryMessages(fp.memory, Object.keys(report.rules ?? {})),
     `Scan results: ${wrapUntrusted("accessibility scan results", JSON.stringify({ issues: report.records, rules: report.rules }))}`,
   ];
 
@@ -1575,15 +1604,20 @@ async function runAccessibilityScan(
     throw error;
   }
 
+  const fp: FpApplied = { leftOut: [] };
+  const report = await parseAccessibilityReportFromCSV(reportLink, {
+    leaveOut: memoryLeaveOut(config, fp),
+  });
   return createScanSuccessResponse(
     name,
-    await parseAccessibilityReportFromCSV(reportLink),
+    report,
     scanId,
     scanRunId,
     reportLink,
     dashboardLink,
     settings,
     applied,
+    fp,
   );
 }
 

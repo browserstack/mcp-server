@@ -479,7 +479,7 @@
             "name": "pattern",
             "type": "object",
             "required": true,
-            "description": "What identifies the element and its kind. predicate is required; add what you observed.",
+            "description": "What identifies the element and its kind. predicate is required; add what you observed. Later fetchAccessibilityIssues answers leave out issues by tag, tags, tagPrefix and classes, never by predicate: set the ones that identify the element, and list in excludeTags any tag tagPrefix takes in that the root cause does not hold for.",
             "fields": [
               {
                 "name": "predicate",
@@ -492,8 +492,18 @@
                 "type": "string"
               },
               {
+                "name": "tags",
+                "type": "array",
+                "description": "The exact tags the root cause holds for, when it is a set rather than a prefix."
+              },
+              {
                 "name": "tagPrefix",
                 "type": "string"
+              },
+              {
+                "name": "excludeTags",
+                "type": "array",
+                "description": "Tags tagPrefix takes in that this entry does not cover; their issues are never left out."
               },
               {
                 "name": "isCustomElement",
@@ -979,7 +989,7 @@
         ],
         "key_facts": [
           "The memory belongs to the account: every user's agent reads it. An entry applies to the site it was saved on, or to all sites when global.",
-          "fetchAccessibilityIssues already brings the memory for the rules of the issues it answers with."
+          "fetchAccessibilityIssues leaves out the issues an entry names by its pattern's tag, tags, tagPrefix or classes, and brings the memory for the rules of the issues it answers with."
         ]
       }
     },

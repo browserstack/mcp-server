@@ -21,6 +21,8 @@ import {
   FP_FILING_GUIDE,
   READ_CAPABILITY,
   SUBMIT_CAPABILITY,
+  applyMemory,
+  leftOutMessages,
   memoryForReport,
   memoryMessages,
   memoryPayload,
@@ -137,6 +139,234 @@ describe("memoryMessages", () => {
     expect(memoryMessages(memory([entry(1, { global: true })]))[1]).toContain(
       "all sites",
     );
+  });
+
+  it("brings only the rules the answer's issues name, when told which", () => {
+    expect(memoryMessages(memory([entry(1)]), ["image-alt"])).toEqual([
+      FP_FILING_GUIDE,
+    ]);
+    expect(memoryMessages(memory([entry(1)]), ["role-required"])[0]).toBe(
+      FP_APPLY_NOTE,
+    );
+  });
+});
+
+describe("applyMemory", () => {
+  const SBB = "https://www.sbb.ch/de/angebote/halbtax";
+
+  /** Entry 3 as the Accessibility API stores it for www.sbb.ch. */
+  const sbbEntry = entry(3, {
+    site: "www.sbb.ch",
+    counterExamples: null,
+    pattern: {
+      predicate:
+        "Custom elements with tag prefix 'sbb-' (SBB Lyne design system) that have no role attribute on the host but set a role through ElementInternals (internals.role, e.g. button or radio): sbb-expansion-panel-header, sbb-radio-button-panel, sbb-header-button, sbb-button, sbb-mini-button, sbb-secondary-button, sbb-block-link-button, sbb-card-button, sbb-tag, sbb-datepicker-toggle, sbb-datepicker-next-day, sbb-datepicker-previous-day. Does not cover sbb-breadcrumb (no internals role; it renders a native <a> in its shadow root) or non-sbb elements.",
+      tagPrefix: "sbb-",
+      designSystem: "SBB Lyne",
+      hasShadowRoot: true,
+      isCustomElement: true,
+    },
+    seedIssue: {
+      pageUrl: SBB,
+      component: "sbb#",
+      htmlSnippet:
+        '<sbb-radio-button-panel data-testid="product-offer-panel-radio" tabindex="0">',
+    },
+  });
+
+  const issue = (
+    HTML_snippet: string,
+    extra: { issue_type?: string; affected_page?: string } = {},
+  ) => ({
+    issue_type: "role-required",
+    affected_page: SBB,
+    HTML_snippet,
+    ...extra,
+  });
+
+  it("leaves out the family a tag prefix names, on its site and rule only", () => {
+    const issues = {
+      panelHeader: issue(
+        '<sbb-expansion-panel-header tabindex="0" slot="header" aria-expanded="false">',
+      ),
+      radio: issue('<sbb-radio-button-panel name="g1" tabindex="0">'),
+      // The engine cuts this snippet inside an attribute's value.
+      headerButton: issue(
+        '<sbb-header-button id="nav-trigger" aria-label="Menü" onclick="()=>',
+      ),
+      tag: issue('<sbb-tag value="all">'),
+      breadcrumb: issue('<sbb-breadcrumb slot="li-3">'),
+      div: issue('<div class="sbb-like" tabindex="0">'),
+      otherRule: issue('<sbb-expansion-panel-header tabindex="0">', {
+        issue_type: "aria-allowed-attr",
+      }),
+      otherHost: issue('<sbb-header-button icon-name="globe">', {
+        affected_page: "https://lyne-storybook.app.sbb.ch/iframe.html",
+      }),
+    };
+
+    const { covered, leftOut } = applyMemory(
+      memory([sbbEntry]),
+      Object.values(issues),
+    );
+
+    expect([...covered]).toEqual([
+      issues.panelHeader,
+      issues.radio,
+      issues.headerButton,
+      issues.tag,
+    ]);
+    // Excluded by the predicate's "Does not cover", not by any structured field.
+    expect(covered.has(issues.breadcrumb)).toBe(false);
+    expect(leftOut).toEqual([{ rule: "role-required", entry: 3, count: 4 }]);
+  });
+
+  it("never leaves out a tag the entry excludes or a counter-example names", () => {
+    const rh = entry(5, {
+      site: "www.redhat.com",
+      pattern: {
+        predicate: "Red Hat design system elements",
+        tagPrefix: "rh-*",
+      },
+      counterExamples: ["rh-cta in the footer is a real issue"],
+    });
+    const page = { affected_page: "https://www.redhat.com/en" };
+    const button = issue('<rh-button variant="primary">', page);
+    const cta = issue('<rh-cta href="/x">', page);
+    const tile = issue('<rh-tile id="t1">', page);
+    const pfe = issue('<pfe-button variant="primary">', page);
+
+    const withExclusion = memory([
+      { ...rh, pattern: { ...rh.pattern, excludeTags: ["rh-tile"] } },
+    ]);
+    const { covered } = applyMemory(withExclusion, [button, cta, tile, pfe]);
+
+    expect([...covered]).toEqual([button]);
+  });
+
+  it("applies an entry saved for all sites on every host", () => {
+    const issues = [
+      issue('<sbb-button tabindex="0">', {
+        affected_page: "https://company.sbb.ch/de",
+      }),
+    ];
+    expect(applyMemory(memory([sbbEntry]), issues).covered.size).toBe(0);
+    expect(
+      applyMemory(memory([{ ...sbbEntry, global: true }]), issues).covered.size,
+    ).toBe(1);
+  });
+
+  it("leaves out a class family on any tag, and only elements with every class", () => {
+    const swiper = entry(7, {
+      site: "www.sbb.ch",
+      pattern: {
+        predicate: "Swiper carousel wrappers",
+        classes: [".swiper-wrapper"],
+      },
+      counterExamples: [],
+    });
+    const div = issue('<div class="swiper-wrapper slides" style="">');
+    const ul = issue("<ul class='swiper-wrapper'>");
+    const other = issue('<div class="slides">');
+
+    expect([
+      ...applyMemory(memory([swiper]), [div, ul, other]).covered,
+    ]).toEqual([div, ul]);
+  });
+
+  it("takes an exact tag list, and a component scope's tag from its seed", () => {
+    const list = entry(8, {
+      site: "www.sbb.ch",
+      pattern: { predicate: "Shoelace buttons", tags: ["sl-button"] },
+    });
+    const component = entry(9, {
+      site: "www.sbb.ch",
+      matchScope: "component",
+      pattern: { predicate: "the header button", tagPrefix: "sbb-" },
+      seedIssue: { htmlSnippet: '<sbb-header-button id="nav-trigger">' },
+    });
+    const slButton = issue("<sl-button>");
+    const slInput = issue("<sl-input>");
+    const header = issue('<sbb-header-button icon-name="user-small">');
+    const tag = issue("<sbb-tag>");
+
+    const { covered } = applyMemory(memory([list, component]), [
+      slButton,
+      slInput,
+      header,
+      tag,
+    ]);
+
+    expect([...covered]).toEqual([slButton, header]);
+  });
+
+  it("leaves out an element scope's own element on its own page only", () => {
+    const one = entry(10, {
+      site: "www.sbb.ch",
+      matchScope: "element",
+      pattern: { predicate: "this one panel" },
+      seedIssue: {
+        pageUrl: `${SBB}/`,
+        htmlSnippet: '<sbb-radio-button-panel  name="g1" tabindex="0">',
+      },
+    });
+    const same = issue('<sbb-radio-button-panel name="g1" tabindex="0">');
+    const otherPage = issue('<sbb-radio-button-panel name="g1" tabindex="0">', {
+      affected_page: "https://www.sbb.ch/de/angebote/ga",
+    });
+    const sibling = issue('<sbb-radio-button-panel name="g2" tabindex="0">');
+
+    expect([
+      ...applyMemory(memory([one]), [same, otherPage, sibling]).covered,
+    ]).toEqual([same]);
+  });
+
+  it("leaves to the agent what no structured field names", () => {
+    const proseOnly = entry(11, {
+      site: "www.sbb.ch",
+      pattern: { predicate: "every sbb element that renders its own button" },
+    });
+    const plainTag = entry(12, {
+      site: "www.sbb.ch",
+      pattern: {
+        predicate: "the promo banners",
+        classes: ["chb"],
+        isCustomElement: true,
+      },
+    });
+
+    const result = applyMemory(memory([proseOnly, plainTag]), [
+      issue("<sbb-button>"),
+      issue('<div class="chb">'),
+      issue("not html at all"),
+    ]);
+
+    expect(result.covered.size).toBe(0);
+    expect(result.leftOut).toEqual([]);
+  });
+
+  it("leaves nothing out without a memory", () => {
+    expect(applyMemory(undefined, [issue("<sbb-button>")]).covered.size).toBe(
+      0,
+    );
+  });
+});
+
+describe("leftOutMessages", () => {
+  it("says nothing when nothing was left out", () => {
+    expect(leftOutMessages([])).toEqual([]);
+  });
+
+  it("counts what was left out by entry, quoted as untrusted, and says where it still shows", () => {
+    const [message] = leftOutMessages([
+      { rule: "role-required", entry: 3, count: 75 },
+      { rule: "image-alt", entry: 9, count: 2 },
+    ]);
+
+    expect(message).toContain("left out 77 issues");
+    expect(message).toMatch(/dashboard and the CSV export still list them/);
+    expect(message).toMatch(/untrusted/i);
+    expect(message).toContain('"entry":3');
   });
 });
 

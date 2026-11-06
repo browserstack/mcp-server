@@ -9,7 +9,7 @@ import {
   sortBySeverity,
 } from "./paginate.js";
 
-type SimplifiedAccessibilityIssue = {
+export type SimplifiedAccessibilityIssue = {
   issue_type: string;
   component: string;
   issue_description: string;
@@ -90,6 +90,13 @@ type PaginationOptions = {
   nextPage?: number;
   /** Only the issues on this page. */
   pageUrl?: string;
+  /**
+   * The issues to leave out of the pages and counts (those the account's saved false
+   * positives cover), given every issue read.
+   */
+  leaveOut?: (
+    issues: SimplifiedAccessibilityIssue[],
+  ) => Promise<ReadonlySet<SimplifiedAccessibilityIssue>>;
 };
 
 type PaginatedResult = {
@@ -134,7 +141,7 @@ function isMainIssue(row: Record<string, string>): boolean {
 }
 
 /** A page address as the report writes it, give or take host case, trailing slash and hash. */
-function samePage(url: string): string {
+export function samePage(url: string): string {
   try {
     const u = new URL(url.trim());
     return `${u.protocol}//${u.host.toLowerCase()}${u.pathname.replace(/\/+$/, "")}${u.search}`;
@@ -273,17 +280,28 @@ function summaryOf(
  * counts of all of them. Most severe first, and within a severity rule by rule, the most
  * common rule first: a page then names fewer rules, and a rule's text, counted against the
  * page's length the first time the page names it, is said once for all its issues there.
+ *
+ * Issues in `leftOut` are on no page and in no count, but the rule texts, the order and the
+ * cursor are those of every issue: a page's offsets then hold whatever is left out.
  */
 function pageWithRules(
   all: SimplifiedAccessibilityIssue[],
   rows: Record<string, string>[],
   options: { maxCharacterLength: number; nextPage: number },
+  leftOut: ReadonlySet<SimplifiedAccessibilityIssue> = new Set(),
 ) {
   const rules = rulesOf(rows, all);
-  const summary = summaryOf(all, rules);
+  const everyIssue = summaryOf(all, rules);
+  const summary = leftOut.size
+    ? summaryOf(
+        all.filter((issue) => !leftOut.has(issue)),
+        rules,
+      )
+    : everyIssue;
   const ruleRank = new Map(
-    summary.by_rule.map(({ issue_type }, i) => [issue_type, i]),
+    everyIssue.by_rule.map(({ issue_type }, i) => [issue_type, i]),
   );
+  const skipped = new Set<IssueRow>();
   const ordered = all
     .map((issue, i) => ({ issue, i }))
     .sort(
@@ -293,10 +311,15 @@ function pageWithRules(
           (ruleRank.get(b.issue.issue_type) ?? 0) ||
         a.i - b.i,
     )
-    .map(({ issue }) => withoutRuleText(issue, rules[issue.issue_type]));
+    .map(({ issue }) => {
+      const row = withoutRuleText(issue, rules[issue.issue_type]);
+      if (leftOut.has(issue)) skipped.add(row);
+      return row;
+    });
   const named = new Set<string>();
   const page = pageOf(ordered, {
     ...options,
+    skip: (row) => skipped.has(row),
     extraLength: (row) => {
       if (named.has(row.issue_type)) return 0;
       named.add(row.issue_type);
@@ -419,6 +442,31 @@ function pageIssues(
       .slice(0, 5);
   }
   return { all, page };
+}
+
+/** A page's counts without the issues left out, and every occurrence of them on it. */
+function pageWithout(
+  page: PageSummary,
+  leftOut: ReadonlySet<SimplifiedAccessibilityIssue>,
+): PageSummary {
+  if (leftOut.size === 0) return page;
+  const bySeverity = { ...page.by_severity };
+  let occurrences = page.occurrences;
+  let firstFoundHere = page.first_found_here;
+  for (const issue of leftOut) {
+    const count = issue.occurrences_on_page ?? 0;
+    occurrences -= count;
+    bySeverity[issue.severity] = (bySeverity[issue.severity] ?? 0) - count;
+    if (bySeverity[issue.severity] <= 0) delete bySeverity[issue.severity];
+    if (!issue.first_found_on) firstFoundHere--;
+  }
+  return {
+    ...page,
+    occurrences,
+    distinct_issues: page.distinct_issues - leftOut.size,
+    first_found_here: firstFoundHere,
+    by_severity: bySeverity,
+  };
 }
 
 /** A main issue as two runs are matched on: the rule, the element and the page. */
@@ -572,6 +620,7 @@ export async function parseAccessibilityReportFromCSV(
     maxCharacterLength = PAGE_CHARACTERS,
     nextPage = 0,
     pageUrl,
+    leaveOut,
   }: PaginationOptions = {},
 ): Promise<PaginatedResult> {
   // 1) Download & parse
@@ -579,14 +628,20 @@ export async function parseAccessibilityReportFromCSV(
 
   if (pageUrl) {
     const { all, page } = pageIssues(parsed, columns, pageUrl);
-    const slice = pageWithRules(all, parsed, { maxCharacterLength, nextPage });
+    const leftOut = (await leaveOut?.(all)) ?? new Set();
+    const slice = pageWithRules(
+      all,
+      parsed,
+      { maxCharacterLength, nextPage },
+      leftOut,
+    );
     return {
       ...slice,
-      total_issues: all.length,
+      total_issues: all.filter((issue) => !leftOut.has(issue)).length,
       duplicate_issues: null,
       unlinked_duplicates: 0,
       hidden_issues: null,
-      page,
+      page: pageWithout(page, leftOut),
     };
   }
 
@@ -645,12 +700,23 @@ export async function parseAccessibilityReportFromCSV(
     else unlinkedDuplicates++;
   }
 
-  // 3) Most severe first, in pages by JSON length, each rule's text once per page
-  const page = pageWithRules(all, parsed, { maxCharacterLength, nextPage });
+  // 3) Leave out what the caller says to, with its repeats.
+  const leftOut = (await leaveOut?.(all)) ?? new Set();
+  for (const issue of all) {
+    if (leftOut.has(issue)) duplicates -= issue.duplicate_count ?? 0;
+  }
+
+  // 4) Most severe first, in pages by JSON length, each rule's text once per page
+  const page = pageWithRules(
+    all,
+    parsed,
+    { maxCharacterLength, nextPage },
+    leftOut,
+  );
 
   return {
     ...page,
-    total_issues: all.length,
+    total_issues: all.filter((issue) => !leftOut.has(issue)).length,
     duplicate_issues: grouped ? duplicates : null,
     unlinked_duplicates: unlinkedDuplicates,
     hidden_issues: columns.includes(STATUS_COLUMN)

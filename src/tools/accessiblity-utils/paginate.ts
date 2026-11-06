@@ -58,6 +58,7 @@ export function pageOf<T>(
     maxCharacterLength = PAGE_CHARACTERS,
     nextPage = 0,
     extraLength,
+    skip,
   }: {
     maxCharacterLength?: number;
     nextPage?: number;
@@ -66,6 +67,11 @@ export function pageOf<T>(
      * the cursor: the text of a rule the page has not named yet.
      */
     extraLength?: (record: T) => number;
+    /**
+     * Rows left out of every page: each still moves the cursor by its length, so the
+     * offsets an agent holds stay valid when what is left out changes between calls.
+     */
+    skip?: (record: T) => boolean;
   } = {},
 ): Page<T> {
   // Walk to the starting offset
@@ -80,20 +86,23 @@ export function pageOf<T>(
   // Collect up to maxCharacterLength; a row larger than that still makes a page of its
   // own, or the cursor would never move past it
   const page: T[] = [];
-  let extra = 0;
-  for (let i = idx; i < all.length; i++) {
+  let used = charCursor - nextPage;
+  let i = idx;
+  for (; i < all.length; i++) {
     const recStr = JSON.stringify(all[i]);
+    if (skip?.(all[i])) {
+      charCursor += recStr.length;
+      continue;
+    }
     const more = extraLength?.(all[i]) ?? 0;
-    const fits =
-      charCursor - nextPage + extra + more + recStr.length <=
-      maxCharacterLength;
+    const fits = used + more + recStr.length <= maxCharacterLength;
     if (!fits && page.length > 0) break;
     page.push(all[i]);
     charCursor += recStr.length;
-    extra += more;
+    used += more + recStr.length;
   }
 
-  const remaining = all.length - idx - page.length;
+  const remaining = all.slice(i).filter((record) => !skip?.(record)).length;
   return {
     records: page,
     page_length: page.length,

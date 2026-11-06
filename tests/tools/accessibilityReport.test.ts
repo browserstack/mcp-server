@@ -253,3 +253,144 @@ describe("parseAccessibilityReportFromCSV", () => {
     expect(records.every((r) => !("source_test" in r))).toBe(true);
   });
 });
+
+describe("parseAccessibilityReportFromCSV leaving issues out", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  const leaveOutRule =
+    (rule: string) => async (issues: { issue_type: string }[]) =>
+      new Set(issues.filter((issue) => issue.issue_type === rule));
+
+  it("leaves them and their repeats out of the issues and every count", async () => {
+    get.mockResolvedValue(csvResponse(toCsv(COLUMNS, GROUPED_ROWS)));
+    const leaveOut = vi.fn(leaveOutRule("color-contrast"));
+
+    const result = await parseAccessibilityReportFromCSV("https://csv", {
+      leaveOut: leaveOut as any,
+    });
+
+    // Asked about every issue read, not one page's.
+    expect(leaveOut.mock.calls[0][0].map((i: any) => i.issue_type)).toEqual([
+      "color-contrast",
+      "image-alt",
+    ]);
+    expect(result.records.map((r) => r.issue_type)).toEqual(["image-alt"]);
+    expect(result.total_issues).toBe(1);
+    expect(result.summary.by_rule).toEqual([
+      { issue_type: "image-alt", count: 1 },
+    ]);
+    expect(result.summary.by_severity).toEqual({ critical: 1 });
+    // The two repeats of the issue left out go with it; the unlinked one stays counted.
+    expect(result.duplicate_issues).toBe(1);
+    expect(result.unlinked_duplicates).toBe(1);
+  });
+
+  it("keeps the cursor an agent holds when an issue it already read is left out next time", async () => {
+    // Six issues of one length, one to a page, so a cursor that moved with the issues left
+    // out would land a whole issue late and skip one.
+    const csv = [
+      "Issue type,Severity,Component,Issue description,HTML snippet,How to fix this issue",
+      ...[1, 2, 3, 4, 5, 6].map(
+        (n) =>
+          `region,moderate,div,Not in a landmark,<div id=a${n}>,Add a landmark`,
+      ),
+    ].join("\n");
+    get.mockResolvedValue(csvResponse(csv));
+    const ids = (records: { HTML_snippet: string }[]) =>
+      records.map((r) => r.HTML_snippet);
+
+    const first = await parseAccessibilityReportFromCSV("https://csv", {
+      maxCharacterLength: 1,
+    });
+    expect(ids(first.records)).toEqual(["<div id=a1>"]);
+
+    // The user says the first one is a false positive; the agent reads on.
+    const leaveOut = async (issues: { HTML_snippet: string }[]) =>
+      new Set(issues.filter((i) => i.HTML_snippet === "<div id=a1>"));
+    const seen: string[] = [];
+    let cursor = first.next_page;
+    while (cursor !== null) {
+      const page = await parseAccessibilityReportFromCSV("https://csv", {
+        maxCharacterLength: 1,
+        nextPage: cursor,
+        leaveOut: leaveOut as any,
+      });
+      seen.push(...ids(page.records));
+      cursor = page.next_page;
+    }
+
+    expect(seen).toEqual([2, 3, 4, 5, 6].map((n) => `<div id=a${n}>`));
+  });
+
+  it("hands out every other issue once when issues between pages are left out", async () => {
+    const csv = [
+      "Issue type,Severity,Component,Issue description,HTML snippet,How to fix this issue",
+      ...[1, 2, 3, 4, 5].map(
+        (n) =>
+          `region,moderate,div,Not in a landmark,<div id=a${n}>,Add a landmark`,
+      ),
+    ].join("\n");
+    get.mockResolvedValue(csvResponse(csv));
+    const leaveOut = async (issues: { HTML_snippet: string }[]) =>
+      new Set(
+        issues.filter((i) =>
+          ["<div id=a2>", "<div id=a4>"].includes(i.HTML_snippet),
+        ),
+      );
+
+    const seen: string[] = [];
+    let cursor: number | null = 0;
+    // Bounded, so a cursor that stops moving fails the test instead of hanging it.
+    for (let calls = 0; cursor !== null && calls < 10; calls++) {
+      const page = await parseAccessibilityReportFromCSV("https://csv", {
+        maxCharacterLength: 1,
+        nextPage: cursor,
+        leaveOut: leaveOut as any,
+      });
+      seen.push(...page.records.map((r) => r.HTML_snippet));
+      cursor = page.next_page;
+    }
+
+    expect(seen).toEqual(["<div id=a1>", "<div id=a3>", "<div id=a5>"]);
+    expect(cursor).toBeNull();
+  });
+
+  it("does not let an issue left out take a place on its page", async () => {
+    const csv = [
+      "Issue type,Severity,Component,Issue description,HTML snippet,How to fix this issue",
+      ...[1, 2, 3].map(
+        (n) =>
+          `region,moderate,div,Not in a landmark,<div id=a${n}>,Add a landmark`,
+      ),
+    ].join("\n");
+    get.mockResolvedValue(csvResponse(csv));
+
+    const page = await parseAccessibilityReportFromCSV("https://csv", {
+      maxCharacterLength: 1,
+      leaveOut: (async (issues: { HTML_snippet: string }[]) =>
+        new Set(issues.filter((i) => i.HTML_snippet !== "<div id=a3>"))) as any,
+    });
+
+    expect(page.records.map((r) => r.HTML_snippet)).toEqual(["<div id=a3>"]);
+    expect(page.next_page).toBeNull();
+    expect(page.remaining).toBe(0);
+  });
+
+  it("counts one page's occurrences without the issues left out", async () => {
+    get.mockResolvedValue(csvResponse(toCsv(COLUMNS, GROUPED_ROWS)));
+
+    const result = await parseAccessibilityReportFromCSV("https://csv", {
+      pageUrl: "https://site.example/",
+      leaveOut: leaveOutRule("color-contrast") as any,
+    });
+
+    expect(result.records.map((r) => r.issue_type)).toEqual(["image-alt"]);
+    expect(result.total_issues).toBe(1);
+    expect(result.page).toMatchObject({
+      occurrences: 1,
+      distinct_issues: 1,
+      first_found_here: 1,
+      by_severity: { critical: 1 },
+    });
+  });
+});

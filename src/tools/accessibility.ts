@@ -168,7 +168,7 @@ async function executeAccessibilityRAG(
       undefined,
       config,
     );
-    const { query, shortened } = fitExpertQuery(args.query);
+    const { query, shortened, kept } = fitExpertQuery(args.query);
     const answer = await queryAccessibilityRAG(query, config);
     if (!shortened) return answer;
     return {
@@ -176,7 +176,7 @@ async function executeAccessibilityRAG(
       content: [
         {
           type: "text",
-          text: `The question was ${args.query.length} characters; the knowledge base takes at most ${EXPERT_QUERY_MAX_CHARS}, so ${query.length} were sent: its opening and its last sentence. If the answer misses the point, ask again more briefly.`,
+          text: `The question was ${args.query.length} characters; the knowledge base takes at most ${EXPERT_QUERY_MAX_CHARS}, so ${query.length} were sent: its ${kept ?? "opening"}. If the answer misses the point, ask again more briefly.`,
         },
         ...(answer.content ?? []),
       ],

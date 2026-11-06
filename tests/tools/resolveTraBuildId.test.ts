@@ -76,85 +76,10 @@ describe("resolveTraBuildIdFromHashed", () => {
     });
   });
 
-  it("finds an older run of the same name in the project's builds", async () => {
-    const OLDER = "olderrun0000000000000000000000000000abcd";
-    const calls: any[] = [];
-    (apiClient.get as Mock).mockImplementation(async ({ url, params }) => {
-      calls.push({ url, params });
-      if (url.endsWith("/builds/latest")) return ok({ build_id: TRA_ID });
-      if (url.endsWith(`/ext/v1/builds/${TRA_ID}`))
-        return ok({ name: "nightly" });
-      if (url.endsWith("/ext/v1/projects"))
-        return ok({ projects: [{ id: 7, name: "Mobile" }], pagination: {} });
-      if (url.endsWith("/ext/v1/projects/7/builds"))
-        return ok({
-          builds: [
-            {
-              build_id: TRA_ID,
-              name: "nightly",
-              original_name: "nightly-42",
-              started_at: "2026-11-05T10:00:00Z",
-            },
-            {
-              build_id: "otherbuild",
-              name: "nightly",
-              original_name: "nightly-41",
-              started_at: "2026-11-01T10:00:00Z",
-            },
-            {
-              build_id: OLDER,
-              name: "nightly",
-              original_name: "nightly-42",
-              started_at: "2026-10-01T10:05:00Z",
-            },
-          ],
-          pagination: { has_next: false },
-        });
-      return ok([
-        {
-          automation_session: {
-            hashed_id: "s1",
-            project_name: "Mobile",
-            build_name: "nightly-42",
-            created_at: "2026-10-01T10:00:00Z",
-          },
-        },
-      ]);
-    });
-    (resolveHashedBuildId as Mock).mockImplementation(async (id: string) => ({
-      hashedBuildId: id === OLDER ? HASHED : "a-different-run",
-      sessionId: "s1",
-      sessionType: SessionType.Automate,
-    }));
-
-    await expect(
-      resolveTraBuildIdFromHashed(HASHED, config),
-    ).resolves.toMatchObject({
-      traBuildId: OLDER,
-      hashedBuildId: HASHED,
-    });
-    // The walk is narrowed to the dashboard label of the latest run.
-    expect(
-      calls.find((c) => c.url.endsWith("/projects/7/builds"))?.params
-        .unique_build_names,
-    ).toBe("nightly");
-    // Only the same SDK name is confirmed; "nightly-41" is never checked.
-    expect((resolveHashedBuildId as Mock).mock.calls.map((c) => c[0])).toEqual([
-      TRA_ID,
-      OLDER,
-    ]);
-  });
-
-  it("refuses rather than returning the wrong build when no run matches", async () => {
-    (apiClient.get as Mock).mockImplementation(async ({ url }) => {
-      if (url.endsWith("/builds/latest")) return ok({ build_id: TRA_ID });
-      if (url.endsWith("/ext/v1/projects"))
-        return ok({ projects: [{ id: 7, name: "Mobile" }], pagination: {} });
-      if (url.endsWith("/ext/v1/projects/7/builds"))
-        return ok({ builds: [], pagination: { has_next: false } });
-      if (url.includes("/ext/v1/builds/")) return notFound;
-      return sessionList;
-    });
+  it("refuses an older run rather than searching for it", async () => {
+    (apiClient.get as Mock).mockImplementation(async ({ url }) =>
+      url.endsWith("/builds/latest") ? ok({ build_id: TRA_ID }) : sessionList,
+    );
     (resolveHashedBuildId as Mock).mockResolvedValue({
       hashedBuildId: "a-different-run",
       sessionId: "s9",
@@ -162,7 +87,12 @@ describe("resolveTraBuildIdFromHashed", () => {
     });
 
     await expect(resolveTraBuildIdFromHashed(HASHED, config)).rejects.toThrow(
-      /matches no TRA run in the last year/,
+      /is not the latest TRA build named "nightly-42"/,
+    );
+    // One session read and one latest lookup: no walk over older builds.
+    const urls = (apiClient.get as Mock).mock.calls.map(([req]) => req.url);
+    expect(urls.some((u: string) => u.includes("/ext/v1/projects"))).toBe(
+      false,
     );
   });
 

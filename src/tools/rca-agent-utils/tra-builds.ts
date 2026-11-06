@@ -217,16 +217,3 @@ export async function listProjectBuilds(
   }
   return rows;
 }
-
-/** The dashboard label of a TRA build, or undefined when it cannot be read. */
-export async function fetchTraBuildName(
-  buildId: string,
-  config: BrowserStackConfig,
-): Promise<string | undefined> {
-  const response = await getWithRetry(
-    `${getAutomationBaseUrl()}/ext/v1/builds/${encodeURIComponent(buildId)}`,
-    config,
-  ).catch(() => undefined);
-  const name = response?.ok ? response.data?.name : undefined;
-  return typeof name === "string" && name ? name : undefined;
-}

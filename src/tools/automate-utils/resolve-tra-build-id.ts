@@ -2,14 +2,7 @@ import { SessionType } from "../../lib/constants.js";
 import { getBrowserStackAuth } from "../../lib/get-auth.js";
 import { BrowserStackConfig } from "../../lib/types.js";
 import { apiClient } from "../../lib/apiClient.js";
-import {
-  fetchLatestBuildId,
-  fetchTraBuildName,
-  findProject,
-  listProjectBuilds,
-  normaliseName,
-  TraBuildRow,
-} from "../rca-agent-utils/tra-builds.js";
+import { fetchLatestBuildId } from "../rca-agent-utils/tra-builds.js";
 import { sessionsListUrl } from "./list-session-ids.js";
 import {
   resolveHashedBuildId,
@@ -41,9 +34,7 @@ async function readAutomateBuild(
   hashedBuildId: string,
   sessionType: SessionType,
   config: BrowserStackConfig,
-): Promise<
-  { projectName?: string; buildName?: string; startedAt?: string } | undefined
-> {
+): Promise<{ projectName?: string; buildName?: string } | undefined> {
   const headers = {
     "Content-Type": "application/json",
     Authorization: `Basic ${Buffer.from(getBrowserStackAuth(config)).toString("base64")}`,
@@ -71,69 +62,7 @@ async function readAutomateBuild(
   return {
     projectName: session.project_name ?? undefined,
     buildName: session.build_name ?? undefined,
-    startedAt: session.created_at ?? undefined,
   };
-}
-
-// Older runs: how many listing pages to walk, and how many candidates to confirm.
-const OLDER_RUN_PAGES = 20;
-const OLDER_RUN_CONFIRMATIONS = 5;
-const DAY_MS = 24 * 60 * 60 * 1000;
-
-/**
- * Find an older TRA run of the same build: walk the project's builds (filtered by
- * the dashboard label when known) for rows the SDK sent under the same name,
- * closest in start time first, and confirm each by resolving its hashed id.
- */
-async function findOlderTraRun(
-  hashedBuildId: string,
-  build: { projectName: string; buildName: string; startedAt?: string },
-  latestTraBuildId: string,
-  sessionType: SessionType,
-  config: BrowserStackConfig,
-): Promise<{ traBuildId: string; sessionType: SessionType } | undefined> {
-  const { project } = await findProject(build.projectName, config);
-  if (!project) return undefined;
-
-  const dashboardName = await fetchTraBuildName(latestTraBuildId, config);
-  const wanted = normaliseName(build.buildName);
-  const started = build.startedAt ? Date.parse(build.startedAt) : NaN;
-  const rowTime = (row: TraBuildRow) =>
-    row.startedAt ? Date.parse(row.startedAt) : NaN;
-
-  const rows = await listProjectBuilds(project.id, config, {
-    dashboardName,
-    maxPages: OLDER_RUN_PAGES,
-    // Pages are newest first: stop once they reach a day before this run began.
-    stop: (seen) =>
-      !Number.isNaN(started) &&
-      seen.some((row) => rowTime(row) < started - DAY_MS),
-  });
-
-  const candidates = rows
-    .filter(
-      (row) =>
-        row.buildId !== latestTraBuildId &&
-        normaliseName(row.originalName) === wanted,
-    )
-    .sort((a, b) =>
-      Number.isNaN(started)
-        ? 0
-        : Math.abs(rowTime(a) - started) - Math.abs(rowTime(b) - started),
-    )
-    .slice(0, OLDER_RUN_CONFIRMATIONS);
-
-  for (const row of candidates) {
-    const confirmed = await resolveHashedBuildId(
-      row.buildId,
-      config,
-      sessionType,
-    ).catch(() => undefined);
-    if (confirmed?.hashedBuildId === hashedBuildId) {
-      return { traBuildId: row.buildId, sessionType: confirmed.sessionType };
-    }
-  }
-  return undefined;
 }
 
 /**
@@ -183,38 +112,20 @@ export async function resolveTraBuildIdFromHashed(
       config,
       sessionType,
     ).catch(() => undefined);
-    if (confirmed?.hashedBuildId === id) {
-      return {
-        traBuildId,
-        hashedBuildId: id,
-        sessionType: confirmed.sessionType,
-        projectName: build.projectName,
-        buildName: build.buildName,
-      };
-    }
-
-    const older = await findOlderTraRun(
-      id,
-      {
-        projectName: build.projectName,
-        buildName: build.buildName,
-        startedAt: build.startedAt,
-      },
-      traBuildId,
-      sessionType,
-      config,
-    );
-    if (!older) {
+    if (confirmed?.hashedBuildId !== id) {
+      // Only the latest run is mapped: walking older runs costs many calls per
+      // lookup, and clients retry failed lookups.
       throw new TraBuildNotFoundError(
-        `${sessionType} build "${id}" (build "${build.buildName}" in project ` +
-          `"${build.projectName}") matches no TRA run in the last year. Call listBuildId ` +
-          "with that project, build name and the build number from the dashboard.",
+        `${sessionType} build "${id}" is not the latest TRA build named ` +
+          `"${build.buildName}" in project "${build.projectName}". Call listBuildId with ` +
+          "that project, build name and the build number from the dashboard.",
       );
     }
+
     return {
-      traBuildId: older.traBuildId,
+      traBuildId,
       hashedBuildId: id,
-      sessionType: older.sessionType,
+      sessionType: confirmed.sessionType,
       projectName: build.projectName,
       buildName: build.buildName,
     };

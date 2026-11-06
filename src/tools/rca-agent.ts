@@ -196,7 +196,7 @@ export default function addRCATools(
 
   tools.getBuildId = server.tool(
     "getBuildId",
-    "Like listBuildId, but prefers the caller's own builds. Finds a build id from project + build name, build number or link.",
+    "Like listBuildId, but a build-name lookup tries the caller's own builds first, then anyone's.",
     GET_BUILD_ID_PARAMS,
     {
       title: "Get Build ID",

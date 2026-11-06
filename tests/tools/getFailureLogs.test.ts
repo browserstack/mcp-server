@@ -104,19 +104,20 @@ describe('BrowserStack Failure Logs', () => {
       const mockServer = { server: { getClientVersion: () => "test-version" } };
       (resolveAppAutomateBuildId as any).mockResolvedValue(undefined);
       (detectSession as any).mockResolvedValue({ sessionType: 'automate', hashedBuildId: 'h' });
-      vi.mocked(automate.retrieveConsoleFailures).mockResolvedValue('console failures');
+      vi.mocked(automate.retrieveSessionFailures).mockResolvedValue('session failures');
 
       const result = await getFailureLogs({
         sessionId: 'test-session',
-        logTypes: ['deviceLogs'],
+        logTypes: ['appiumLogs'],
         sessionType: 'app-automate'
       }, mockServer);
 
       expect(result.isError).toBeFalsy();
-      expect(automate.retrieveConsoleFailures).toHaveBeenCalledWith('test-session', mockServer);
+      expect(automate.retrieveSessionFailures).toHaveBeenCalledWith('test-session', mockServer);
       const texts = result.content.map((c: any) => c.text).join('\n');
       expect(texts).toContain('ran on automate, not app-automate');
-      expect(texts).toContain("fetched 'consoleLogs' instead");
+      expect(texts).toContain("fetched 'sessionLogs' instead");
+      expect(result.content[0].text).toContain('ran on automate');
     });
 
     it('ignores a TRA build id passed as the App Automate build id', async () => {
@@ -203,7 +204,7 @@ describe('BrowserStack Failure Logs', () => {
       expect(appAutomate.retrieveDeviceLogs).toHaveBeenCalledWith('test-session', 'app-build', mockServer);
     });
 
-    it('fetches the app equivalent when Automate log types are asked of an app session', async () => {
+    it('fetches appiumLogs for sessionLogs and reports networkLogs as unavailable on an app session', async () => {
       const mockServer = { server: { getClientVersion: () => "test-version" } };
       (detectSession as any).mockResolvedValue({ sessionType: 'app-automate', hashedBuildId: 'app-build' });
       vi.mocked(appAutomate.retrieveAppiumLogs).mockResolvedValue('appium logs');
@@ -217,8 +218,10 @@ describe('BrowserStack Failure Logs', () => {
 
       expect(result.isError).toBeFalsy();
       expect(appAutomate.retrieveAppiumLogs).toHaveBeenCalledWith('test-session', 'app-build', mockServer);
-      expect(appAutomate.retrieveDeviceLogs).toHaveBeenCalledWith('test-session', 'app-build', mockServer);
+      expect(appAutomate.retrieveDeviceLogs).not.toHaveBeenCalled();
       expect(automate.retrieveSessionFailures).not.toHaveBeenCalled();
+      const texts = result.content.map((c: any) => c.text).join('\n');
+      expect(texts).toContain("'networkLogs' is not available for app-automate sessions.");
     });
 
     it('throws when mismatched log types name a session neither product knows', async () => {

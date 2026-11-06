@@ -42,13 +42,10 @@ function fitsSessionType(logType: LogType, sessionType: SessionType): boolean {
   return types.includes(logType);
 }
 
+// Only true equivalents: other log types are a different kind of evidence.
 const EQUIVALENT_LOG_TYPE: Partial<Record<LogType, LogType>> = {
   [AutomateLogType.SessionLogs]: AppAutomateLogType.AppiumLogs,
-  [AutomateLogType.ConsoleLogs]: AppAutomateLogType.DeviceLogs,
-  [AutomateLogType.NetworkLogs]: AppAutomateLogType.DeviceLogs,
   [AppAutomateLogType.AppiumLogs]: AutomateLogType.SessionLogs,
-  [AppAutomateLogType.DeviceLogs]: AutomateLogType.ConsoleLogs,
-  [AppAutomateLogType.CrashLogs]: AutomateLogType.SessionLogs,
 };
 
 // Main log fetcher function
@@ -133,7 +130,9 @@ export async function getFailureLogs(
     const fitted = fitsSessionType(logType, sessionType)
       ? logType
       : EQUIVALENT_LOG_TYPE[logType];
-    if (fitted !== logType) {
+    if (!fitted) {
+      errors.push(`'${logType}' is not available for ${sessionType} sessions.`);
+    } else if (fitted !== logType) {
       notes.push(
         `'${logType}' is not available for ${sessionType} sessions; fetched '${fitted}' instead.`,
       );
@@ -210,7 +209,7 @@ export async function getFailureLogs(
   }
 
   if (notes.length > 0) {
-    results.push({ type: "text", text: notes.join("\n") });
+    results.unshift({ type: "text", text: notes.join("\n") });
   }
   if (errors.length > 0) {
     results.push({

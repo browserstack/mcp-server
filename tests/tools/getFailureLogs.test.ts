@@ -127,7 +127,7 @@ describe('BrowserStack Failure Logs', () => {
 
       await getFailureLogs({
         sessionId: 'test-session',
-        buildId: 'jlcb5jo8xakocnjyll3n10b1rx5sqnrprh3y6zsp',
+        buildId: 'zz00000000000000000000000000000000000003',
         logTypes: ['deviceLogs'],
         sessionType: 'app-automate'
       }, mockServer);

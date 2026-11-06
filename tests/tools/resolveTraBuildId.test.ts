@@ -31,8 +31,8 @@ const config = {
   "browserstack-username": "user",
   "browserstack-access-key": "key",
 };
-const HASHED = "df9fde1187c547ea157e6e683289ed17ad58452c";
-const TRA_ID = "bqmruo3dnu8bsuvyvshvxz13ku8quja0w5xz7w42";
+const HASHED = "aa00000000000000000000000000000000000001";
+const TRA_ID = "zz000000000000000000000000000000000000a1";
 
 const ok = (data: unknown) => ({ ok: true, status: 200, data });
 const notFound = { ok: false, status: 404, statusText: "Not Found", data: {} };

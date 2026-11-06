@@ -175,7 +175,7 @@ describe("fetchBuildInsightsTool", () => {
       .mockResolvedValueOnce({ name: "Mapped Build" })
       .mockResolvedValueOnce({});
     (mapHashedToTra as Mock).mockResolvedValue({
-      traBuildId: "jlcb5jo8xakocnjyll3n10b1rx5sqnrprh3y6zsp",
+      traBuildId: "zz00000000000000000000000000000000000003",
       hashedBuildId: HASHED_ID,
       sessionType: "app-automate",
       projectName: "P",
@@ -189,7 +189,7 @@ describe("fetchBuildInsightsTool", () => {
 
     expect(result.content[0].text).toContain("Mapped Build");
     expect(result.content[0].text).toContain(
-      '"tra_build_id": "jlcb5jo8xakocnjyll3n10b1rx5sqnrprh3y6zsp"',
+      '"tra_build_id": "zz00000000000000000000000000000000000003"',
     );
     expect(result.content[0].text).toContain(`"hashed_id": "${HASHED_ID}"`);
     expect(result.content[0].text).toContain('"session_type": "app-automate"');

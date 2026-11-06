@@ -367,7 +367,7 @@ describe("listSessionIdsTool", () => {
   });
 
   it("routes a base-36 TRA id straight to resolution", async () => {
-    const TRA_ID = "jlcb5jo8xakocnjyll3n10b1rx5sqnrprh3y6zsp";
+    const TRA_ID = "zz00000000000000000000000000000000000003";
     (resolveHashedBuildId as Mock).mockRejectedValue(new NoSessionsError(TRA_ID));
 
     await expect(

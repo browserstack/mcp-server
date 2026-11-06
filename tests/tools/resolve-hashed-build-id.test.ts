@@ -202,7 +202,7 @@ describe("findSessionIdForObservabilityBuild", () => {
 describe("isTraBuildId", () => {
   it("accepts UUIDs and base-36 ids with a letter past f", () => {
     expect(isTraBuildId(OBS_UUID)).toBe(true);
-    expect(isTraBuildId("jlcb5jo8xakocnjyll3n10b1rx5sqnrprh3y6zsp")).toBe(true);
+    expect(isTraBuildId("zz00000000000000000000000000000000000003")).toBe(true);
   });
 
   it("rejects all-hex ids, which are probably Automate hashed ids", () => {

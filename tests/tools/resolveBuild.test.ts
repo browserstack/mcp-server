@@ -43,8 +43,8 @@ const config = {
   "browserstack-access-key": "key",
 };
 
-const TRA_ID = "jlcb5jo8xakocnjyll3n10b1rx5sqnrprh3y6zsp";
-const HASHED = "df9fde1187c547ea157e6e683289ed17ad58452c";
+const TRA_ID = "zz00000000000000000000000000000000000003";
+const HASHED = "aa00000000000000000000000000000000000001";
 
 const ok = (data: unknown) => ({ ok: true, status: 200, data });
 const notFound = { ok: false, status: 404, statusText: "Not Found", data: {} };
@@ -60,16 +60,16 @@ function routeLatest(latest: Record<string, string>) {
   });
 }
 
-const PROJECT = "Checking Project Name";
+const PROJECT = "Sample Project";
 
 describe("parseBuildUrl", () => {
   it("reads project, dashboard name and number from a TRA link", () => {
     expect(
       parseBuildUrl(
-        "https://observability.browserstack.com/projects/Checking+Project+Name/builds/junit/3?tab=tests",
+        "https://observability.browserstack.com/projects/Sample+Project/builds/junit/3?tab=tests",
       ),
     ).toEqual({
-      projectName: "Checking Project Name",
+      projectName: "Sample Project",
       buildName: "junit",
       buildNumber: 3,
     });
@@ -108,13 +108,13 @@ describe("resolveBuild", () => {
   beforeEach(() => vi.resetAllMocks());
 
   it("returns the latest run for the SDK build name in one request", async () => {
-    routeLatest({ "patc204-junit-105mb": TRA_ID });
+    routeLatest({ "unit-tests-ci-1234": TRA_ID });
 
     await expect(
       resolveBuild(
         {
           browserStackProjectName: PROJECT,
-          browserStackBuildName: "patc204-junit-105mb",
+          browserStackBuildName: "unit-tests-ci-1234",
         },
         config,
       ),
@@ -145,7 +145,7 @@ describe("resolveBuild", () => {
   it("resolves a build number through the capability in one call", async () => {
     (callCapability as Mock).mockResolvedValue(
       capabilityAnswer(200, {
-        buildId: "e9tdlmcerew3j7bbob4ghuvfuu6aztjrm7pm0rkl",
+        buildId: "zz00000000000000000000000000000000000002",
       }),
     );
 
@@ -158,7 +158,7 @@ describe("resolveBuild", () => {
       config,
     );
 
-    expect(result.buildId).toBe("e9tdlmcerew3j7bbob4ghuvfuu6aztjrm7pm0rkl");
+    expect(result.buildId).toBe("zz00000000000000000000000000000000000002");
     expect(callCapability).toHaveBeenCalledWith(
       "tra",
       "get_build_id_from_build_coordinates",
@@ -177,23 +177,23 @@ describe("resolveBuild", () => {
   it("reads project, name and number from TRA and Automate project links", async () => {
     (callCapability as Mock).mockResolvedValue(
       capabilityAnswer(200, {
-        buildId: "08d60aead8cfe40baa85c508c0d9a713717a6abf",
+        buildId: "aa000000000000000000000000000000000000b1",
       }),
     );
 
     const result = await resolveBuild(
       {
         buildUrl:
-          "https://automate.browserstack.com/projects/Default+Project+4/builds/TC-LCA+agentic+run++default/1022",
+          "https://automate.browserstack.com/projects/Mobile+App/builds/Checkout+flow++smoke/1022",
       },
       config,
     );
 
-    expect(result.buildId).toBe("08d60aead8cfe40baa85c508c0d9a713717a6abf");
+    expect(result.buildId).toBe("aa000000000000000000000000000000000000b1");
     expect((callCapability as Mock).mock.calls[0][2]).toEqual({
       query: {
-        projectNormalisedName: "Default Project 4",
-        buildNormalisedName: "TC-LCA agentic run  default",
+        projectNormalisedName: "Mobile App",
+        buildNormalisedName: "Checkout flow  smoke",
         buildSerialId: 1022,
       },
     });
@@ -206,7 +206,7 @@ describe("resolveBuild", () => {
       resolveBuild(
         {
           browserStackProjectName: PROJECT,
-          browserStackBuildName: "patc204-junit-105mb",
+          browserStackBuildName: "unit-tests-ci-1234",
           buildNumber: 3,
         },
         config,
@@ -259,7 +259,7 @@ describe("resolveBuild", () => {
       resolveBuild(
         {
           buildUrl:
-            "https://observability.browserstack.com/projects/Checking+Project+Name/builds/junit",
+            "https://observability.browserstack.com/projects/Sample+Project/builds/junit",
         },
         config,
       ),

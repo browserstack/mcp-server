@@ -169,7 +169,7 @@ describe("RCA Agent Tools", () => {
       );
 
       const result = await listTestIdsTool(
-        { buildId: "jlcb5jo8xakocnjyll3n10b1rx5sqnrprh3y6zsp" },
+        { buildId: "zz00000000000000000000000000000000000003" },
         mockConfig,
       );
 

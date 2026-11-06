@@ -2,7 +2,7 @@ import { BrowserStackConfig } from "../../lib/types.js";
 import { GroupedArguments } from "./bind.js";
 import { indexPaths, isEnabled, resolveBaseUrl } from "./config.js";
 import { fetchTransport } from "./egress.js";
-import { CapabilityRegistry } from "./index-loader.js";
+import { CapabilityRegistry, productFromPath } from "./index-loader.js";
 import { invoke, InvokeResult } from "./resolve.js";
 
 /** The capability registry is switched off or its index is missing. */
@@ -13,26 +13,30 @@ export class CapabilityUnavailableError extends Error {
   }
 }
 
-// The index is static product metadata shipped with the package, not user data, so
-// one copy per process is safe for the multi-tenant server.
-let loaded: CapabilityRegistry | undefined;
+// Static product metadata shipped with the package, not user data, so one copy per
+// process is safe across tenants. Only the products a tool calls are loaded.
+const loaded = new Map<string, CapabilityRegistry>();
 
-function registry(): CapabilityRegistry {
+function registry(product: string): CapabilityRegistry {
   if (!isEnabled()) {
     throw new CapabilityUnavailableError(
       "the capability registry is disabled on this server",
     );
   }
-  if (!loaded) {
-    const files = indexPaths();
+  let reg = loaded.get(product);
+  if (!reg) {
+    const files = indexPaths().filter(
+      (file) => productFromPath(file) === product,
+    );
     if (files.length === 0) {
       throw new CapabilityUnavailableError(
-        "the capability index is not installed",
+        `the ${product} capability index is not installed`,
       );
     }
-    loaded = CapabilityRegistry.fromFiles(files);
+    reg = CapabilityRegistry.fromFiles(files);
+    loaded.set(product, reg);
   }
-  return loaded;
+  return reg;
 }
 
 /**
@@ -45,7 +49,7 @@ export async function callCapability(
   args: GroupedArguments,
   config: BrowserStackConfig,
 ): Promise<InvokeResult> {
-  const reg = registry();
+  const reg = registry(product);
   const { capability } = reg.byNameLookup(name, product);
   const productIndex = reg.index.products[product];
   return invoke(
@@ -70,5 +74,5 @@ export async function callCapability(
 
 /** Test hook: forget the loaded index. */
 export function resetCapabilityRegistryForTests(): void {
-  loaded = undefined;
+  loaded.clear();
 }

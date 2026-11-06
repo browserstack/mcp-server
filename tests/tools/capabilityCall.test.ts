@@ -65,6 +65,36 @@ describe("callCapability", () => {
     expect(product).toBe("tra");
   });
 
+  it("loads only the requested product's index", async () => {
+    const { CapabilityRegistry } =
+      await import("../../src/tools/capability-registry/index-loader");
+    const spy = vi.spyOn(CapabilityRegistry, "fromFiles");
+    (invoke as Mock).mockResolvedValue({
+      ok: true,
+      completed: true,
+      http_response: { status: 200, body: {} },
+    });
+
+    await callCapability(
+      "tra",
+      "get_build_id_from_build_coordinates",
+      {},
+      config,
+    );
+    await callCapability(
+      "tra",
+      "get_build_id_from_build_coordinates",
+      {},
+      config,
+    );
+
+    expect(spy).toHaveBeenCalledTimes(1);
+    const files = spy.mock.calls[0][0];
+    expect(files).toHaveLength(1);
+    expect(files[0]).toMatch(/tra\.capability-index\.json$/);
+    spy.mockRestore();
+  });
+
   it("refuses when the registry is disabled", async () => {
     process.env.CAPABILITY_REGISTRY_DISABLED = "true";
 

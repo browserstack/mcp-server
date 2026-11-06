@@ -68,7 +68,9 @@ describe("the App Accessibility capability index", () => {
     );
     // The docs call it page_number; the API reads page.
     expect(projects.query.map((q: any) => q.name)).toContain("page");
-    expect(projects.query.map((q: any) => q.name)).not.toContain("page_number");
+    expect(projects.query.map((q: any) => q.name)).not.toContain(
+      "page_number",
+    );
   });
 
   it.each([
@@ -88,18 +90,9 @@ describe("the App Accessibility capability index", () => {
   });
 
   it.each([
-    [
-      "list manual app accessibility reports",
-      "list_manual_app_accessibility_reports",
-    ],
-    [
-      "list the builds of an app accessibility project",
-      "list_app_accessibility_builds",
-    ],
-    [
-      "find an app accessibility project by name",
-      "list_app_accessibility_projects",
-    ],
+    ["list manual app accessibility reports", "list_manual_app_accessibility_reports"],
+    ["list the builds of an app accessibility project", "list_app_accessibility_builds"],
+    ["find an app accessibility project by name", "list_app_accessibility_projects"],
   ])("finds %j as %s", (query, expected) => {
     const { hits } = searchCapabilities(products, query, {
       product: "app_accessibility",

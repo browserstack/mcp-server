@@ -13,17 +13,13 @@ const products = { tm } as Record<string, ProductIndex>;
 
 describe("browse mode", () => {
   it("recognises the wildcard forms and nothing else", () => {
-    for (const q of ["*", "all", " * ", "ALL"])
-      expect(isBrowseQuery(q)).toBe(true);
+    for (const q of ["*", "all", " * ", "ALL"]) expect(isBrowseQuery(q)).toBe(true);
     for (const q of ["create a test case", "", undefined, "allocate"])
       expect(isBrowseQuery(q)).toBe(false);
   });
 
   it("'*' returns every capability, not a ranked shortlist", () => {
-    const r = searchCapabilities(products, "*", {
-      product: "tm",
-      limit: 10000,
-    });
+    const r = searchCapabilities(products, "*", { product: "tm", limit: 10000 });
     expect(r.browse).toBe(true);
     expect(r.total_matched).toBe(tm.capabilities.length);
     expect(r.hits).toHaveLength(tm.capabilities.length);
@@ -119,16 +115,8 @@ describe("pagination", () => {
   });
 
   it("browse order is stable across calls, so an offset means the same thing twice", () => {
-    const once = searchCapabilities(products, "*", {
-      product: "tm",
-      limit: 40,
-      offset: 20,
-    });
-    const twice = searchCapabilities(products, "*", {
-      product: "tm",
-      limit: 40,
-      offset: 20,
-    });
+    const once = searchCapabilities(products, "*", { product: "tm", limit: 40, offset: 20 });
+    const twice = searchCapabilities(products, "*", { product: "tm", limit: 40, offset: 20 });
     expect(once.hits.map((h) => h.capability.name)).toEqual(
       twice.hits.map((h) => h.capability.name),
     );

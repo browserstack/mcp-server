@@ -39,11 +39,7 @@ const CONTRAST_ISSUE = {
   },
   issue_details: [
     { label: "class", value: '"UILabel"', important: false },
-    {
-      label: "visibleText",
-      value: '"Low contrast body copy"',
-      important: false,
-    },
+    { label: "visibleText", value: '"Low contrast body copy"', important: false },
     { label: "detectedForegroundColor", value: '"#999999"', important: true },
     { label: "detectedBackgroundColor", value: '"#FFFFFF"', important: true },
     { label: "calculatedColorContrast", value: 2.85, important: true },
@@ -64,10 +60,7 @@ describe("an app issue's measurements", () => {
   it("carries what the rule measured on the element and what it expects", () => {
     const [row] = flattenAppSnapshots([
       {
-        meta: {
-          snapshot_id: "1",
-          screenshot_url: "https://assets.example/s1.jpeg",
-        },
+        meta: { snapshot_id: "1", screenshot_url: "https://assets.example/s1.jpeg" },
         aggregated_results: [contrastRule([CONTRAST_ISSUE])],
       } as any,
     ]);
@@ -136,10 +129,7 @@ describe("a page of app issues", () => {
   });
 
   it("names each rule's description, WCAG criteria and fix, and each screen's screenshot, once", async () => {
-    serve([
-      screen(1, [CONTRAST_ISSUE]),
-      screen(2, [{ ...CONTRAST_ISSUE, uid: "u9" }]),
-    ]);
+    serve([screen(1, [CONTRAST_ISSUE]), screen(2, [{ ...CONTRAST_ISSUE, uid: "u9" }])]);
 
     const report = await fetcher().appBuildReport(BUILD_ID);
 
@@ -158,8 +148,7 @@ describe("a page of app issues", () => {
     expect(report.rules).toEqual({
       "text-color-contrast": {
         issue_type: "Text Element Color Contrast (Minimum)",
-        issue_description:
-          "Text must have enough contrast against its background.",
+        issue_description: "Text must have enough contrast against its background.",
         wcag: "WCAG 2.2-1.4.3 AA",
         how_to_fix: "Adjust the color of the text element or its background.",
       },
@@ -175,11 +164,7 @@ describe("a page of app issues", () => {
       screen(1, [
         CONTRAST_ISSUE,
         { ...CONTRAST_ISSUE, uid: "u2" },
-        {
-          ...CONTRAST_ISSUE,
-          uid: "u3",
-          how_to_fix_desc: "<document>Use a darker grey.</document>",
-        },
+        { ...CONTRAST_ISSUE, uid: "u3", how_to_fix_desc: "<document>Use a darker grey.</document>" },
       ]),
     ]);
 
@@ -192,16 +177,8 @@ describe("a page of app issues", () => {
 
   it("fits about three times the issues on a page that it did when each issue repeated them", async () => {
     // Measurements are an issue's own; this is about what its rule and screen repeat.
-    const plain = {
-      uid: "u",
-      status: "fail",
-      how_to_fix_desc: CONTRAST_ISSUE.how_to_fix_desc,
-      issue_details: [],
-    };
-    const thirty = Array.from({ length: 30 }, (_, i) => ({
-      ...plain,
-      uid: `u${i}`,
-    }));
+    const plain = { uid: "u", status: "fail", how_to_fix_desc: CONTRAST_ISSUE.how_to_fix_desc, issue_details: [] };
+    const thirty = Array.from({ length: 30 }, (_, i) => ({ ...plain, uid: `u${i}` }));
     serve([screen(1, thirty.slice(0, 15)), screen(2, thirty.slice(15))]);
 
     const report = await fetcher().appBuildReport(BUILD_ID);
@@ -227,21 +204,9 @@ describe("an iOS issue's element", () => {
               issue_id_ios: "",
               issue_details: [
                 { label: "class", value: '"UILabel"', important: false },
-                {
-                  label: "identifier",
-                  value: '"promo_text"',
-                  important: false,
-                },
-                {
-                  label: "frame",
-                  value: '{"x":16,"y":413,"width":180,"height":20}',
-                  important: false,
-                },
-                {
-                  label: "visibleText",
-                  value: '"Low contrast body copy"',
-                  important: false,
-                },
+                { label: "identifier", value: '"promo_text"', important: false },
+                { label: "frame", value: '{"x":16,"y":413,"width":180,"height":20}', important: false },
+                { label: "visibleText", value: '"Low contrast body copy"', important: false },
               ],
             },
           ]),

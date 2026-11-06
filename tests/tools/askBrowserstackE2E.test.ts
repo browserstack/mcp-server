@@ -5,10 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AskError } from "../../src/tools/ask-browserstack/config.js";
 import { resetTokenCache } from "../../src/tools/ask-browserstack/central-oauth.js";
 import { addAskBrowserStackAITool } from "../../src/tools/ask-browserstack/register.js";
-import {
-  NEEDS_A11Y_CONFIG_ID,
-  NEEDS_A11Y_SCAN_ID,
-} from "../../src/tools/tool-handoff.js";
+import { NEEDS_A11Y_CONFIG_ID, NEEDS_A11Y_SCAN_ID } from "../../src/tools/tool-handoff.js";
 
 // `apiClient` adapted onto the global `fetch` stub these tests already install.
 //
@@ -364,9 +361,7 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
       // no longer sends the model to Ask AI; the auth-config one still does.
       expect(NEEDS_A11Y_SCAN_ID).not.toMatch(/askBrowserStackAI/);
       for (const handoff of [NEEDS_A11Y_CONFIG_ID]) {
-        const named = handoff.match(
-          /askBrowserStackAI with product "([^"]+)"/,
-        )?.[1];
+        const named = handoff.match(/askBrowserStackAI with product "([^"]+)"/)?.[1];
         expect(named).toBeDefined();
         expect(values).toContain(named);
       }

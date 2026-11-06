@@ -54,11 +54,7 @@ describe("BStack SDK Tool", () => {
     });
 
     const handler = serverMock.handlers["setupBrowserStackAutomateTests"];
-    const result = await handler({
-      language: "java",
-      test_framework: "testng",
-      testing_type: "web",
-    });
+    const result = await handler({ language: "java", test_framework: "testng", testing_type: "web" });
 
     expect(result.content[0].text).toContain("SDK configured");
   });
@@ -69,11 +65,7 @@ describe("BStack SDK Tool", () => {
     );
 
     const handler = serverMock.handlers["setupBrowserStackAutomateTests"];
-    const result = await handler({
-      language: "bad",
-      test_framework: "bad",
-      testing_type: "web",
-    });
+    const result = await handler({ language: "bad", test_framework: "bad", testing_type: "web" });
 
     expect(result.isError).toBe(true);
   });

@@ -58,8 +58,7 @@ const contrast = (fix: string) =>
     "Issue name": "Elements must meet minimum color contrast ratio thresholds",
     Severity: "serious",
     Component: "p",
-    "Issue description":
-      "Ensure the contrast between foreground and background colors meets WCAG thresholds",
+    "Issue description": "Ensure the contrast between foreground and background colors meets WCAG thresholds",
     "Guideline(s)": "SC 1.4.3",
     "How to fix this issue": fix,
   });
@@ -120,23 +119,13 @@ describe("a web report's issues, rules and counts", () => {
       statusText: "OK",
       data: toCsv([
         ...ROWS,
-        row({
-          "Issue type": "label",
-          Severity: "serious",
-          "Issue description": "l",
-          "How to fix this issue": "f",
-          "Needs review": "Yes",
-          "Needs Review Status": "Confirmed",
-        }),
+        row({ "Issue type": "label", Severity: "serious", "Issue description": "l", "How to fix this issue": "f", "Needs review": "Yes", "Needs Review Status": "Confirmed" }),
       ]),
     });
 
-    const { records, summary } =
-      await parseAccessibilityReportFromCSV("https://csv");
+    const { records, summary } = await parseAccessibilityReportFromCSV("https://csv");
 
-    expect(records.find((r) => r.issue_type === "label")?.needs_review).toBe(
-      "confirmed",
-    );
+    expect(records.find((r) => r.issue_type === "label")?.needs_review).toBe("confirmed");
     expect(summary.needs_review).toBe(1);
   });
 
@@ -145,51 +134,28 @@ describe("a web report's issues, rules and counts", () => {
       ok: true,
       statusText: "OK",
       data: toCsv([
-        row({
-          "Issue type": "label",
-          Severity: "serious",
-          "Issue description": "l",
-          "How to fix this issue": "f",
-          "Needs review": "Yes",
-          "Needs Review Status": " Confirmed ",
-        }),
-        row({
-          "Issue type": "region",
-          Severity: "moderate",
-          "Issue description": "r",
-          "How to fix this issue": "f",
-          "Needs review": "Yes",
-          "Needs Review Status": "  ",
-        }),
+        row({ "Issue type": "label", Severity: "serious", "Issue description": "l", "How to fix this issue": "f", "Needs review": "Yes", "Needs Review Status": " Confirmed " }),
+        row({ "Issue type": "region", Severity: "moderate", "Issue description": "r", "How to fix this issue": "f", "Needs review": "Yes", "Needs Review Status": "  " }),
       ]),
     });
 
-    const { records, summary } =
-      await parseAccessibilityReportFromCSV("https://csv");
+    const { records, summary } = await parseAccessibilityReportFromCSV("https://csv");
 
-    expect(records.find((r) => r.issue_type === "label")?.needs_review).toBe(
-      "confirmed",
-    );
-    expect(records.find((r) => r.issue_type === "region")?.needs_review).toBe(
-      "unreviewed",
-    );
+    expect(records.find((r) => r.issue_type === "label")?.needs_review).toBe("confirmed");
+    expect(records.find((r) => r.issue_type === "region")?.needs_review).toBe("unreviewed");
     expect(summary.needs_review).toBe(1);
   });
 
   it("names each rule's text once, under rules, and keeps an issue's own fix only when it differs", async () => {
-    const { records, rules } =
-      await parseAccessibilityReportFromCSV("https://csv");
+    const { records, rules } = await parseAccessibilityReportFromCSV("https://csv");
 
     expect(rules["color-contrast"]).toEqual({
       name: "Elements must meet minimum color contrast ratio thresholds",
-      description:
-        "Ensure the contrast between foreground and background colors meets WCAG thresholds",
+      description: "Ensure the contrast between foreground and background colors meets WCAG thresholds",
       wcag: "SC 1.4.3",
       how_to_fix: "Raise the contrast to 4.5:1 (now 2.1)",
     });
-    const contrastIssues = records.filter(
-      (r) => r.issue_type === "color-contrast",
-    );
+    const contrastIssues = records.filter((r) => r.issue_type === "color-contrast");
     expect(contrastIssues).toHaveLength(3);
     for (const r of records) expect(r).not.toHaveProperty("issue_description");
     expect(contrastIssues.map((r) => r.how_to_fix ?? null).sort()).toEqual([
@@ -213,27 +179,9 @@ describe("a web report's issues, rules and counts", () => {
       ok: true,
       statusText: "OK",
       data: toCsv([
-        row({
-          "Issue type": "label",
-          Severity: "serious",
-          "Issue description": "l",
-          "How to fix this issue": "f",
-          "Affected page": "https://site.example/a",
-        }),
-        row({
-          "Issue type": "label",
-          Severity: "serious",
-          "Issue description": "l",
-          "How to fix this issue": "f",
-          "Affected page": "https://site.example/b",
-        }),
-        row({
-          "Issue type": "region",
-          Severity: "moderate",
-          "Issue description": "r",
-          "How to fix this issue": "f",
-          "Affected page": "https://site.example/b",
-        }),
+        row({ "Issue type": "label", Severity: "serious", "Issue description": "l", "How to fix this issue": "f", "Affected page": "https://site.example/a" }),
+        row({ "Issue type": "label", Severity: "serious", "Issue description": "l", "How to fix this issue": "f", "Affected page": "https://site.example/b" }),
+        row({ "Issue type": "region", Severity: "moderate", "Issue description": "r", "How to fix this issue": "f", "Affected page": "https://site.example/b" }),
       ]),
     });
 
@@ -248,18 +196,15 @@ describe("a web report's issues, rules and counts", () => {
   it("marks a best-practice rule, which is not a WCAG failure", async () => {
     const { rules } = await parseAccessibilityReportFromCSV("https://csv");
 
-    expect(rules.region).toMatchObject({
-      best_practice: true,
-      wcag: "Best Practice",
-    });
+    expect(rules.region).toMatchObject({ best_practice: true, wcag: "Best Practice" });
     expect(rules["color-contrast"]).not.toHaveProperty("best_practice");
   });
 
   it("counts the whole report, while a page names only its own issues' rules", async () => {
-    const { records, rules, summary, next_page } =
-      await parseAccessibilityReportFromCSV("https://csv", {
-        maxCharacterLength: 1,
-      });
+    const { records, rules, summary, next_page } = await parseAccessibilityReportFromCSV(
+      "https://csv",
+      { maxCharacterLength: 1 },
+    );
 
     expect(records).toHaveLength(1);
     expect(next_page).not.toBeNull();
@@ -279,19 +224,13 @@ describe("a web report's issues, rules and counts", () => {
 
   it("keeps a page within its length, its rules' text counted once", async () => {
     for (const maxCharacterLength of [900, 1500, 2500]) {
-      const { records, rules } = await parseAccessibilityReportFromCSV(
-        "https://csv",
-        {
-          maxCharacterLength,
-        },
-      );
+      const { records, rules } = await parseAccessibilityReportFromCSV("https://csv", {
+        maxCharacterLength,
+      });
       if (records.length < 2) continue;
       const length =
         records.reduce((sum, r) => sum + JSON.stringify(r).length, 0) +
-        Object.values(rules).reduce(
-          (sum, r) => sum + JSON.stringify(r).length,
-          0,
-        );
+        Object.values(rules).reduce((sum, r) => sum + JSON.stringify(r).length, 0);
       expect(length).toBeLessThanOrEqual(maxCharacterLength);
     }
   });
@@ -301,26 +240,11 @@ describe("a web report's issues, rules and counts", () => {
       ok: true,
       statusText: "OK",
       data: toCsv([
-        row({
-          "Issue type": "label",
-          Severity: "serious",
-          "Issue description": "l",
-          "How to fix this issue": "f",
-        }),
+        row({ "Issue type": "label", Severity: "serious", "Issue description": "l", "How to fix this issue": "f" }),
         contrast("c"),
-        row({
-          "Issue type": "label",
-          Severity: "serious",
-          "Issue description": "l",
-          "How to fix this issue": "f",
-        }),
+        row({ "Issue type": "label", Severity: "serious", "Issue description": "l", "How to fix this issue": "f" }),
         contrast("c"),
-        row({
-          "Issue type": "image-alt",
-          Severity: "critical",
-          "Issue description": "a",
-          "How to fix this issue": "f",
-        }),
+        row({ "Issue type": "image-alt", Severity: "critical", "Issue description": "a", "How to fix this issue": "f" }),
         contrast("c"),
       ]),
     });
@@ -343,55 +267,28 @@ describe("a web report's issues, rules and counts", () => {
       ok: true,
       statusText: "OK",
       data: toCsv([
-        row({
-          "Issue type": "region",
-          Severity: "moderate",
-          "Issue description": "r",
-          "How to fix this issue": "f",
-          "HTML snippet": long,
-        }),
-        row({
-          "Issue type": "label",
-          Severity: "serious",
-          "Issue description": "l",
-          "How to fix this issue": "f",
-          "HTML snippet": "<input id=q>",
-        }),
+        row({ "Issue type": "region", Severity: "moderate", "Issue description": "r", "How to fix this issue": "f", "HTML snippet": long }),
+        row({ "Issue type": "label", Severity: "serious", "Issue description": "l", "How to fix this issue": "f", "HTML snippet": "<input id=q>" }),
       ]),
     });
 
     const { records } = await parseAccessibilityReportFromCSV("https://csv");
 
     const region = records.find((r) => r.issue_type === "region")!;
-    expect(
-      region.HTML_snippet.startsWith('<div class="promo"><span>offer</span>'),
-    ).toBe(true);
+    expect(region.HTML_snippet.startsWith('<div class="promo"><span>offer</span>')).toBe(true);
     expect(region.HTML_snippet.length).toBeLessThan(500);
-    expect(region.HTML_snippet).toMatch(
-      new RegExp(`… \\(${long.length - 400} more characters in the CSV\\)$`),
-    );
-    expect(records.find((r) => r.issue_type === "label")!.HTML_snippet).toBe(
-      "<input id=q>",
-    );
+    expect(region.HTML_snippet).toMatch(new RegExp(`… \\(${long.length - 400} more characters in the CSV\\)$`));
+    expect(records.find((r) => r.issue_type === "label")!.HTML_snippet).toBe("<input id=q>");
   });
 
   it("does the same when the report is read for one page", async () => {
-    const { records, rules } = await parseAccessibilityReportFromCSV(
-      "https://csv",
-      {
-        pageUrl: "https://site.example/",
-      },
-    );
+    const { records, rules } = await parseAccessibilityReportFromCSV("https://csv", {
+      pageUrl: "https://site.example/",
+    });
 
     expect(records).toHaveLength(5);
-    expect(
-      records.find((r) => r.issue_type === "image-alt")?.needs_review,
-    ).toBe("unreviewed");
-    expect(Object.keys(rules).sort()).toEqual([
-      "color-contrast",
-      "image-alt",
-      "region",
-    ]);
+    expect(records.find((r) => r.issue_type === "image-alt")?.needs_review).toBe("unreviewed");
+    expect(Object.keys(rules).sort()).toEqual(["color-contrast", "image-alt", "region"]);
     for (const r of records) expect(r).not.toHaveProperty("issue_description");
   });
 });

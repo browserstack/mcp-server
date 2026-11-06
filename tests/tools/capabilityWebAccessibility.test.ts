@@ -154,15 +154,9 @@ describe("the Web Accessibility capability index", () => {
   it.each([
     ["list workflow analyzer reports", "list_workflow_analyzer_reports"],
     ["list website scanner scans", "list_website_scanner_scans"],
-    [
-      "list the runs of a website scanner scan",
-      "list_website_scanner_scan_runs",
-    ],
+    ["list the runs of a website scanner scan", "list_website_scanner_scan_runs"],
     ["list automated tests projects", "list_automated_tests_projects"],
-    [
-      "list the builds of an automated tests project",
-      "list_automated_tests_builds",
-    ],
+    ["list the builds of an automated tests project", "list_automated_tests_builds"],
     ["list assisted test reports", "list_assisted_test_reports"],
   ])("finds %j as %s", (query, expected) => {
     const { hits } = searchCapabilities(products, query, {

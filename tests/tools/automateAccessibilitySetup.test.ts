@@ -25,10 +25,7 @@ describe("setupBrowserStackAutomateTests and accessibility", () => {
       detectedTestingFramework: "playwright",
     };
     expect(RunTestsOnBrowserStackSchema.parse(base).accessibility).toBe(false);
-    expect(
-      RunTestsOnBrowserStackSchema.parse({ ...base, accessibility: true })
-        .accessibility,
-    ).toBe(true);
+    expect(RunTestsOnBrowserStackSchema.parse({ ...base, accessibility: true }).accessibility).toBe(true);
   });
 
   it("writes accessibility: true into browserstack.yml when asked", () => {
@@ -40,9 +37,7 @@ describe("setupBrowserStackAutomateTests and accessibility", () => {
   });
 
   it("says to add to an existing browserstack.yml rather than replace it", () => {
-    expect(yml(true)).toContain(
-      "If the file already exists, add these keys to it and keep its other settings",
-    );
+    expect(yml(true)).toContain("If the file already exists, add these keys to it and keep its other settings");
   });
 });
 
@@ -50,10 +45,7 @@ describe("setupBrowserStackAutomateTests and accessibility", () => {
 // browserstack-cypress CLI's browserstack.json, WebdriverIO through its BrowserStack
 // service's options. Each turns accessibility on in its own file.
 describe("setupBrowserStackAutomateTests, accessibility and the frameworks without browserstack.yml", () => {
-  const setup = async (
-    framework: "cypress" | "webdriverio",
-    accessibility: boolean,
-  ) => {
+  const setup = async (framework: "cypress" | "webdriverio", accessibility: boolean) => {
     const { steps } = await runBstackSDKOnly(
       RunTestsOnBrowserStackSchema.parse({
         projectName: "Checkout",
@@ -84,9 +76,7 @@ describe("setupBrowserStackAutomateTests, accessibility and the frameworks witho
   it("says nothing of accessibility when it is not asked for", async () => {
     for (const framework of ["cypress", "webdriverio"] as const) {
       const text = await setup(framework, false);
-      expect(text).not.toMatch(
-        /accessibility: true|"accessibility"|fetchAccessibilityIssues/,
-      );
+      expect(text).not.toMatch(/accessibility: true|"accessibility"|fetchAccessibilityIssues/);
     }
   });
 });

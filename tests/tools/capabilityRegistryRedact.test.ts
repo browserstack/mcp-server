@@ -1,8 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  MAX_LENGTH,
-  redact,
-} from "../../src/tools/capability-registry/redact.js";
+import { MAX_LENGTH, redact } from "../../src/tools/capability-registry/redact.js";
 
 /** Built at runtime: a committed credential-shaped literal trips secret scanning. */
 const fake = {

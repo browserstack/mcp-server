@@ -8,10 +8,7 @@ import {
 describe("the routing token carries the verdict instead of the server remembering it", () => {
   it("round-trips what the routing step concluded", () => {
     const token = signRouting({ verdict: "settled", product: "tm" });
-    expect(readRouting(token)).toMatchObject({
-      verdict: "settled",
-      product: "tm",
-    });
+    expect(readRouting(token)).toMatchObject({ verdict: "settled", product: "tm" });
 
     const clash = signRouting({ verdict: "clash", terms: ["report", "run"] });
     expect(readRouting(clash)).toMatchObject({
@@ -48,11 +45,7 @@ describe("the routing token carries the verdict instead of the server rememberin
 
   it("expires, so a verdict cannot be banked and spent much later", () => {
     const issued = 1_000_000;
-    const token = signRouting({
-      verdict: "settled",
-      product: "tm",
-      iat: issued,
-    });
+    const token = signRouting({ verdict: "settled", product: "tm", iat: issued });
     expect(readRouting(token, issued + TOKEN_TTL_SECONDS - 1)).toBeDefined();
     expect(readRouting(token, issued + TOKEN_TTL_SECONDS + 1)).toBeUndefined();
   });

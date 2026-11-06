@@ -91,8 +91,9 @@ describe("getFailureLogs with oversized logs", () => {
       const actual: any = await importOriginal();
       return { default: { ...actual.default, REMOTE_MCP: false } };
     });
-    const { MAX_LOG_BYTES } =
-      await import("../../src/tools/failurelogs-utils/utils");
+    const { MAX_LOG_BYTES } = await import(
+      "../../src/tools/failurelogs-utils/utils"
+    );
     expect(MAX_LOG_BYTES).toBeUndefined();
   });
 });

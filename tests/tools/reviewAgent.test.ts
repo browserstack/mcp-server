@@ -43,11 +43,7 @@ describe("fetchPercyChanges", () => {
     });
     (getChangedPercySnapshotIds as Mock).mockResolvedValue(["snap-1"]);
     (getPercySnapshotDiffs as Mock).mockResolvedValue([
-      {
-        name: "Homepage",
-        title: "Visual Change",
-        description: "Button color changed",
-      },
+      { name: "Homepage", title: "Visual Change", description: "Button color changed" },
     ]);
 
     const result = await fetchPercyChanges(
@@ -89,7 +85,9 @@ describe("fetchPercyChanges", () => {
   });
 
   it("FAIL: throws when Percy token fetch fails", async () => {
-    (fetchPercyToken as Mock).mockRejectedValue(new Error("Token not found"));
+    (fetchPercyToken as Mock).mockRejectedValue(
+      new Error("Token not found"),
+    );
 
     await expect(
       fetchPercyChanges({ project_name: "bad" }, mockConfig),

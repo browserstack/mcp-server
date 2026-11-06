@@ -44,40 +44,23 @@ describe("native build requests and App Accessibility", () => {
   it.each([
     ["Espresso", triggerEspressoBuild],
     ["XCUITest", triggerXcuiBuild],
-  ])(
-    "asks for accessibility checks on an %s build when wanted",
-    async (_f, trigger) => {
-      await trigger(
-        "bs://app",
-        "bs://suite",
-        ["Google Pixel 8-14.0"],
-        "p",
-        CONFIG,
-        {
-          accessibility: true,
-        },
-      );
+  ])("asks for accessibility checks on an %s build when wanted", async (_f, trigger) => {
+    await trigger("bs://app", "bs://suite", ["Google Pixel 8-14.0"], "p", CONFIG, {
+      accessibility: true,
+    });
 
-      expect(m.post.mock.calls[0][0].body).toMatchObject({
-        app: "bs://app",
-        testSuite: "bs://suite",
-        accessibility: true,
-      });
-    },
-  );
+    expect(m.post.mock.calls[0][0].body).toMatchObject({
+      app: "bs://app",
+      testSuite: "bs://suite",
+      accessibility: true,
+    });
+  });
 
   // Espresso App Accessibility reports need Test Observability on; XCUITest's do not.
   it("turns Test Observability on with accessibility for Espresso, as its reports need it", async () => {
-    await triggerEspressoBuild(
-      "bs://app",
-      "bs://suite",
-      ["Google Pixel 8-14.0"],
-      "p",
-      CONFIG,
-      {
-        accessibility: true,
-      },
-    );
+    await triggerEspressoBuild("bs://app", "bs://suite", ["Google Pixel 8-14.0"], "p", CONFIG, {
+      accessibility: true,
+    });
 
     expect(m.post.mock.calls[0][0].body).toMatchObject({
       accessibility: true,
@@ -86,39 +69,21 @@ describe("native build requests and App Accessibility", () => {
   });
 
   it("leaves Test Observability alone for XCUITest", async () => {
-    await triggerXcuiBuild(
-      "bs://app",
-      "bs://suite",
-      ["iPhone 15-17.0"],
-      "p",
-      CONFIG,
-      {
-        accessibility: true,
-      },
-    );
+    await triggerXcuiBuild("bs://app", "bs://suite", ["iPhone 15-17.0"], "p", CONFIG, {
+      accessibility: true,
+    });
 
-    expect(m.post.mock.calls[0][0].body).not.toHaveProperty(
-      "testObservability",
-    );
+    expect(m.post.mock.calls[0][0].body).not.toHaveProperty("testObservability");
   });
 
   it.each([
     ["Espresso", triggerEspressoBuild],
     ["XCUITest", triggerXcuiBuild],
-  ])(
-    "sends no accessibility flag on an %s build by default",
-    async (_f, trigger) => {
-      await trigger(
-        "bs://app",
-        "bs://suite",
-        ["Google Pixel 8-14.0"],
-        "p",
-        CONFIG,
-      );
+  ])("sends no accessibility flag on an %s build by default", async (_f, trigger) => {
+    await trigger("bs://app", "bs://suite", ["Google Pixel 8-14.0"], "p", CONFIG);
 
-      expect(m.post.mock.calls[0][0].body).not.toHaveProperty("accessibility");
-    },
-  );
+    expect(m.post.mock.calls[0][0].body).not.toHaveProperty("accessibility");
+  });
 });
 
 describe("runAppTestsOnBrowserStack and App Accessibility", () => {
@@ -127,8 +92,9 @@ describe("runAppTestsOnBrowserStack and App Accessibility", () => {
   beforeEach(async () => {
     vi.clearAllMocks();
     m.post.mockResolvedValue({ data: { build_id: "b1" } });
-    const { default: addAppAutomationTools } =
-      await import("../../src/tools/appautomate.js");
+    const { default: addAppAutomationTools } = await import(
+      "../../src/tools/appautomate.js"
+    );
     handlers = {};
     const server: any = {
       tool: vi.fn((...args: any[]) => {
@@ -143,13 +109,7 @@ describe("runAppTestsOnBrowserStack and App Accessibility", () => {
     handlers.runAppTestsOnBrowserStack({
       browserstackAppUrl: "bs://app",
       browserstackTestSuiteUrl: "bs://suite",
-      devices: [
-        {
-          platform: "android",
-          deviceName: "Google Pixel 8",
-          osVersion: "14.0",
-        },
-      ],
+      devices: [{ platform: "android", deviceName: "Google Pixel 8", osVersion: "14.0" }],
       project: "p",
       detectedAutomationFramework: "espresso",
       ...extra,
@@ -163,9 +123,7 @@ describe("runAppTestsOnBrowserStack and App Accessibility", () => {
     expect(body).toContain("Build ID: b1");
     expect(body).toContain("App Accessibility checks are on");
     expect(body).toContain("fetchAccessibilityIssues");
-    expect(body).toContain(
-      "reportUrl: https://app-automate.browserstack.com/builds/b1",
-    );
+    expect(body).toContain("reportUrl: https://app-automate.browserstack.com/builds/b1");
   });
 
   it("says an Espresso suite must be built with BrowserStack's Gradle plugin and SDK to be scanned", async () => {
@@ -180,9 +138,7 @@ describe("runAppTestsOnBrowserStack and App Accessibility", () => {
     const result = await run({ accessibility: true });
 
     const body = result.content.map((c: any) => c.text).join("\n");
-    expect(m.post.mock.calls[0][0].body).toMatchObject({
-      testObservability: true,
-    });
+    expect(m.post.mock.calls[0][0].body).toMatchObject({ testObservability: true });
     expect(body).toContain("Test Observability is turned on for the build");
   });
 
@@ -190,9 +146,7 @@ describe("runAppTestsOnBrowserStack and App Accessibility", () => {
     const result = await run({
       accessibility: true,
       detectedAutomationFramework: "xcuitest",
-      devices: [
-        { platform: "ios", deviceName: "iPhone 15", osVersion: "17.0" },
-      ],
+      devices: [{ platform: "ios", deviceName: "iPhone 15", osVersion: "17.0" }],
     });
 
     const body = result.content.map((c: any) => c.text).join("\n");
@@ -214,8 +168,9 @@ describe("runAppTestsOnBrowserStack and App Accessibility", () => {
 // that would otherwise finish, 10 to 20 minutes later, with no scans.
 describe("the accessibility flag's description", () => {
   it("names the SDK the suite must be built with, within the argument budget", async () => {
-    const { RUN_APP_AUTOMATE_SCHEMA } =
-      await import("../../src/tools/appautomate-utils/native-execution/constants.js");
+    const { RUN_APP_AUTOMATE_SCHEMA } = await import(
+      "../../src/tools/appautomate-utils/native-execution/constants.js"
+    );
     const description = RUN_APP_AUTOMATE_SCHEMA.accessibility.description ?? "";
 
     expect(description).toMatch(/BrowserStack's SDK/);

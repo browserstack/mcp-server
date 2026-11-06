@@ -59,10 +59,7 @@ describe("resolveAppAutomateBuildId", () => {
   it.each([
     ["the field is absent", { automation_session: {} }],
     ["the field is blank", { automation_session: { build_hashed_id: "  " } }],
-    [
-      "the field is not a string",
-      { automation_session: { build_hashed_id: 42 } },
-    ],
+    ["the field is not a string", { automation_session: { build_hashed_id: 42 } }],
     ["the payload has no session", {}],
   ])("returns undefined when %s", async (_label, data) => {
     (apiClient.get as Mock).mockResolvedValue({ ok: true, status: 200, data });

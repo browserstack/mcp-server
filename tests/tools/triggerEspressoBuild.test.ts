@@ -27,9 +27,7 @@ describe("triggerEspressoBuild — credential sourcing", () => {
   });
 
   it("uses creds from config, not process.env", async () => {
-    (apiClient.post as any).mockResolvedValue({
-      data: { build_id: "BUILD-1" },
-    });
+    (apiClient.post as any).mockResolvedValue({ data: { build_id: "BUILD-1" } });
 
     const buildId = await triggerEspressoBuild(
       "app.apk",
@@ -45,10 +43,7 @@ describe("triggerEspressoBuild — credential sourcing", () => {
     const authHeader = call.headers.Authorization as string;
     expect(authHeader.startsWith("Basic ")).toBe(true);
 
-    const decoded = Buffer.from(
-      authHeader.slice("Basic ".length),
-      "base64",
-    ).toString();
+    const decoded = Buffer.from(authHeader.slice("Basic ".length), "base64").toString();
     expect(decoded).toBe("config-user:config-key");
     expect(decoded).not.toContain("env-user-should-be-ignored");
   });

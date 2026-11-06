@@ -9,15 +9,7 @@ import {
 const COMBOS: Array<[string, string[]]> = [
   [
     "java",
-    [
-      "testng",
-      "cucumber",
-      "junit4",
-      "junit5",
-      "jbehave",
-      "selenide",
-      "serenity",
-    ],
+    ["testng", "cucumber", "junit4", "junit5", "jbehave", "selenide", "serenity"],
   ],
   ["python", ["pytest", "robot", "behave", "lettuce"]],
   ["nodejs", ["jest", "mocha", "cucumberJs", "webdriverio", "nightwatch"]],

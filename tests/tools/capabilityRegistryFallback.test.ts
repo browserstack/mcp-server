@@ -132,16 +132,18 @@ function harness(statuses: number[], fallbacks?: unknown[]) {
   );
   const call = async (input: Record<string, unknown>) =>
     readAnswer(
-      await handlers.invokeCapability(
-        {
-          name: "hide_keyboard",
-          product: "p",
-          path_params: { session_id: SESSION },
-          user_permission: "granted",
-          change_summary: "close the keyboard",
-          ...input,
-        },
-        {} as never,
+      (
+        await handlers.invokeCapability(
+          {
+            name: "hide_keyboard",
+            product: "p",
+            path_params: { session_id: SESSION },
+            user_permission: "granted",
+            change_summary: "close the keyboard",
+            ...input,
+          },
+          {} as never,
+        )
       ),
     );
   return { sent, call, handlers };
@@ -263,9 +265,11 @@ describe("the contract shows the chain", () => {
   it("describeCapability publishes `fallbacks`, so a caller knows what may be pressed", async () => {
     const { handlers } = harness([], CHAIN);
     const doc = readAnswer(
-      await handlers.describeCapability(
-        { name: "hide_keyboard", product: "p" },
-        {} as never,
+      (
+        await handlers.describeCapability(
+          { name: "hide_keyboard", product: "p" },
+          {} as never,
+        )
       ),
     );
     expect(doc.fallbacks).toHaveLength(2);

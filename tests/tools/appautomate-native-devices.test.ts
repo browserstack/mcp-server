@@ -46,10 +46,7 @@ vi.mock("../../src/lib/instrumentation.js", () => ({ trackMCP: vi.fn() }));
 vi.mock("../../src/logger.js", () => ({
   default: { error: vi.fn(), info: vi.fn(), debug: vi.fn(), warn: vi.fn() },
 }));
-vi.mock("../../src/index.js", () => ({
-  trackMCP: vi.fn(),
-  PackageJsonVersion: "0.0.0",
-}));
+vi.mock("../../src/index.js", () => ({ trackMCP: vi.fn(), PackageJsonVersion: "0.0.0" }));
 
 import addAppAutomationTools from "../../src/tools/appautomate.js";
 
@@ -57,8 +54,7 @@ function runTests() {
   let handler: (args: any) => Promise<any> = async () => undefined;
   const server: any = {
     tool: vi.fn((...args: any[]) => {
-      if (args[0] === "runAppTestsOnBrowserStack")
-        handler = args[args.length - 1];
+      if (args[0] === "runAppTestsOnBrowserStack") handler = args[args.length - 1];
     }),
     server: { getClientVersion: vi.fn().mockReturnValue({ version: "1.0" }) },
   };
@@ -86,9 +82,7 @@ describe("runAppTestsOnBrowserStack devices", () => {
     const result = await runTests()({
       ...RUN,
       detectedAutomationFramework: "espresso",
-      devices: [
-        { platform: "android", deviceName: "google pixel 8", osVersion: "14" },
-      ],
+      devices: [{ platform: "android", deviceName: "google pixel 8", osVersion: "14" }],
     });
 
     expect(result.isError).toBeFalsy();
@@ -122,11 +116,7 @@ describe("runAppTestsOnBrowserStack devices", () => {
   });
 
   it("still sends no devices when none were asked for", async () => {
-    await runTests()({
-      ...RUN,
-      detectedAutomationFramework: "espresso",
-      devices: [],
-    });
+    await runTests()({ ...RUN, detectedAutomationFramework: "espresso", devices: [] });
 
     expect(m.triggerEspressoBuild).toHaveBeenCalledWith(
       "bs://app",
@@ -148,9 +138,7 @@ describe("runAppTestsOnBrowserStack devices", () => {
     const result = await runTests()({
       ...RUN,
       detectedAutomationFramework: "espresso",
-      devices: [
-        { platform: "android", deviceName: "google pixel 8", osVersion: "14" },
-      ],
+      devices: [{ platform: "android", deviceName: "google pixel 8", osVersion: "14" }],
     });
 
     expect(text(result)).toContain("Devices: Google Pixel 8-14.0");

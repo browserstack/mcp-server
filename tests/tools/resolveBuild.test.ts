@@ -358,6 +358,7 @@ describe("resolveBuild", () => {
   });
 
   it("explains what to pass when nothing identifies a project", async () => {
+    (apiClient.get as Mock).mockResolvedValue(ok([]));
     await expect(
       resolveBuild({ browserStackBuildName: "junit" }, config),
     ).rejects.toThrow(/Pass browserStackProjectName/);
@@ -508,7 +509,8 @@ describe("resolveBuild: request budget", () => {
         config,
       ),
     ).rejects.toThrow(
-      /"Missing" is not among the first 50 TRA projects[\s\S]*Pass the TRA build id/,
+      // Counts the projects actually seen: one per fake page here.
+      /"Missing" is not among the first 5 TRA projects[\s\S]*Pass the TRA build id/,
     );
     const urls = (apiClient.get as Mock).mock.calls.map(
       ([req]) => req.url as string,
@@ -580,6 +582,72 @@ describe("resolveBuild: Automate outages", () => {
         },
         config,
       ),
+    ).rejects.toThrow(/503/);
+  });
+});
+
+describe("resolveBuild: Automate name search outages", () => {
+  beforeEach(() => vi.resetAllMocks());
+
+  it("surfaces a server error from the builds list", async () => {
+    routeTra({ projects: [] });
+    const route = (apiClient.get as Mock).getMockImplementation()!;
+    (apiClient.get as Mock).mockImplementation(async (req) =>
+      req.url.endsWith("/builds.json")
+        ? {
+            ok: false,
+            status: 503,
+            statusText: "Service Unavailable",
+            data: {},
+          }
+        : route(req),
+    );
+
+    await expect(
+      resolveBuild({ browserStackBuildName: "nightly" }, config),
+    ).rejects.toThrow(/Failed to list automate builds: 503/);
+  });
+
+  it("skips a product the account cannot access", async () => {
+    routeTra({ projects: [] });
+    (apiClient.get as Mock).mockImplementation(async ({ url }) => {
+      if (url.includes("app-automate/builds.json"))
+        return { ok: false, status: 401, statusText: "Unauthorized", data: {} };
+      if (url.endsWith("/builds.json"))
+        return ok([
+          { automation_build: { name: "nightly", hashed_id: HASHED } },
+        ]);
+      throw new Error(`unexpected url ${url}`);
+    });
+    (resolveTraBuildIdFromHashed as Mock).mockRejectedValue(
+      new TraBuildNotFoundError("has no TRA build."),
+    );
+
+    const result = await resolveBuild(
+      { browserStackBuildName: "nightly" },
+      config,
+    );
+    expect(result.buildId).toBe(HASHED);
+  });
+
+  it("surfaces a server error while mapping the match to TRA", async () => {
+    const { HttpError } = await import("../../src/lib/error");
+    routeTra({
+      automateBuilds: {
+        automate: [
+          { automation_build: { name: "nightly", hashed_id: HASHED } },
+        ],
+      },
+    });
+    (resolveTraBuildIdFromHashed as Mock).mockRejectedValue(
+      new HttpError(
+        "Failed to read automate build: 503 Service Unavailable",
+        503,
+      ),
+    );
+
+    await expect(
+      resolveBuild({ browserStackBuildName: "nightly" }, config),
     ).rejects.toThrow(/503/);
   });
 });

@@ -28,7 +28,6 @@ export const BUILD_LOOKUP_WINDOW_DAYS = 365;
 
 // The project list has no name filter; kept low because clients retry failed lookups.
 const MAX_PROJECT_PAGES = 5;
-export const PROJECTS_SEARCHED = MAX_PROJECT_PAGES * 10;
 
 function authHeaders(config: BrowserStackConfig): Record<string, string> {
   const auth = Buffer.from(getBrowserStackAuth(config)).toString("base64");
@@ -105,10 +104,13 @@ export async function findProject(
   similar: TraProject[];
   /** The page cap ended the search, so the project may still exist. */
   truncated: boolean;
+  /** How many projects were checked. */
+  searched: number;
 }> {
   const wanted = normaliseName(projectName);
   const similar: TraProject[] = [];
   let nextPage: string | undefined;
+  let searched = 0;
 
   for (let page = 0; page < MAX_PROJECT_PAGES; page++) {
     const response = await getWithRetry(
@@ -121,24 +123,26 @@ export async function findProject(
     }
     const projects: any[] = response.data?.projects ?? [];
     // The last full page still reports has_next; an empty page is the real end.
-    if (projects.length === 0) return { similar, truncated: false };
+    if (projects.length === 0) return { similar, truncated: false, searched };
 
     for (const row of projects) {
+      searched++;
       if (typeof row?.id !== "number" || typeof row?.name !== "string")
         continue;
       const project = { id: row.id, name: row.name };
       const name = normaliseName(row.name);
-      if (name === wanted) return { project, similar, truncated: false };
+      if (name === wanted)
+        return { project, similar, truncated: false, searched };
       if (name.includes(wanted) || wanted.includes(name)) similar.push(project);
     }
 
     const cursor = response.data?.pagination?.next_page;
     if (!response.data?.pagination?.has_next || !cursor) {
-      return { similar, truncated: false };
+      return { similar, truncated: false, searched };
     }
     nextPage = cursor;
   }
-  return { similar, truncated: nextPage !== undefined };
+  return { similar, truncated: nextPage !== undefined, searched };
 }
 
 function toRow(raw: any): TraBuildRow | undefined {

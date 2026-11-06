@@ -3,6 +3,7 @@ import { SessionType } from "../../lib/constants.js";
 import { getBrowserStackAuth } from "../../lib/get-auth.js";
 import { BrowserStackConfig } from "../../lib/types.js";
 import { getRegionalHost } from "../../lib/regional-host.js";
+import { HttpError } from "../../lib/error.js";
 
 export interface AutomateBuildMatch {
   hashedBuildId: string;
@@ -13,6 +14,7 @@ export interface AutomateBuildMatch {
 // One page per product: clients retry failed lookups.
 const PAGE_SIZE = 100;
 const MAX_PAGES = 1;
+const NO_ACCESS = [401, 403, 404];
 
 function buildsUrl(sessionType: SessionType): string {
   return sessionType === SessionType.Automate
@@ -35,15 +37,21 @@ export async function findAutomateBuildsByName(
   const searchProduct = async (sessionType: SessionType) => {
     const matches: AutomateBuildMatch[] = [];
     for (let page = 0; page < MAX_PAGES; page++) {
-      const response = await apiClient
-        .get({
-          url: buildsUrl(sessionType),
-          headers,
-          params: { limit: PAGE_SIZE, offset: page * PAGE_SIZE },
-          raise_error: false,
-        })
-        .catch(() => undefined);
-      if (!response?.ok || !Array.isArray(response.data)) break;
+      const response = await apiClient.get({
+        url: buildsUrl(sessionType),
+        headers,
+        params: { limit: PAGE_SIZE, offset: page * PAGE_SIZE },
+        raise_error: false,
+      });
+      // No access to this product: nothing to search there.
+      if (NO_ACCESS.includes(response.status)) break;
+      if (!response.ok) {
+        throw new HttpError(
+          `Failed to list ${sessionType} builds: ${response.status} ${response.statusText}`.trim(),
+          response.status,
+        );
+      }
+      if (!Array.isArray(response.data)) break;
       for (const item of response.data) {
         const build = item?.automation_build;
         if (

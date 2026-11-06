@@ -14,7 +14,6 @@ import {
   fetchLatestBuildId,
   findProject,
   listProjectBuilds,
-  PROJECTS_SEARCHED,
   normaliseName,
   TraBuildRow,
 } from "./tra-builds.js";
@@ -183,7 +182,7 @@ async function resolveInProject(
   buildNumber: number | undefined,
   config: BrowserStackConfig,
 ): Promise<BuildLookupResult> {
-  const { project, similar, truncated } = await findProject(
+  const { project, similar, truncated, searched } = await findProject(
     projectName,
     config,
   );
@@ -196,7 +195,7 @@ async function resolveInProject(
       : "";
     if (truncated) {
       throw new BuildLookupError(
-        `"${projectName}" is not among the first ${PROJECTS_SEARCHED} TRA projects, and ` +
+        `"${projectName}" is not among the first ${searched} TRA projects, and ` +
           `the project list cannot be searched by name.${hint} Pass the TRA build id, ` +
           "or an Automate build link (.../builds/<build id>).",
       );
@@ -387,9 +386,7 @@ async function searchAutomateBuilds(
   config: BrowserStackConfig,
   traError: BuildLookupError,
 ): Promise<BuildLookupResult> {
-  const matches = await findAutomateBuildsByName(buildName, config).catch(
-    () => [],
-  );
+  const matches = await findAutomateBuildsByName(buildName, config);
   if (!matches.length) {
     throw new BuildLookupError(
       `${traError.message}\nNone of the latest Automate or App Automate builds is named "${buildName}" either.`,
@@ -401,7 +398,7 @@ async function searchAutomateBuilds(
     first.hashedBuildId,
     first.sessionType,
     config,
-  ).catch((): BuildLookupResult => ({ buildId: first.hashedBuildId }));
+  );
   const found = `Found ${first.sessionType} build "${first.name}" by name (first match), not through TRA.`;
   const rest = others.length
     ? `\nOther builds with this name:\n${others

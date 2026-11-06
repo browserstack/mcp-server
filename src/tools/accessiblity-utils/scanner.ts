@@ -62,10 +62,12 @@ export class ScanRefusedError extends Error {
  * central-scanner's refusal of a scan over the plan's limit, "You don't have access to make
  * over 50 scans". It read as a failure to report on GitHub, with no hint of the limit.
  */
-const SCAN_LIMIT_REFUSAL = /make over \d+ scans/i;
+const SCAN_LIMIT_REFUSAL = /make over (\d+) scans/i;
 
-export const SCAN_LIMIT_MESSAGE =
-  "Your plan allows 50 saved scans and this account has reached that limit. Delete scans you no longer need in the dashboard, or upgrade the plan to create more.";
+/** The plan-limit refusal, with the limit the API named (50 on the plans seen so far). */
+export function scanLimitMessage(limit?: string): string {
+  return `${limit ? `Your plan allows ${limit} saved scans and this account has reached that limit` : "This account has reached your plan's limit of saved scans"}. Delete scans you no longer need in the dashboard, or upgrade the plan to create more.`;
+}
 
 /** Hosts on the user's own machine, which a scan reaches as bs-local.com through the tunnel. */
 const LOCAL_HOSTS = new Set(["127.0.0.1", "localhost", "0.0.0.0"]);
@@ -203,11 +205,9 @@ function nameIsTaken(err: any): boolean {
 function scanStartError(err: any): Error {
   // apiClient throws generic errors, try to extract message.
   const reason = refusalReason(err);
-  if (
-    err?.response?.status === 402 &&
-    SCAN_LIMIT_REFUSAL.test(String(reason ?? ""))
-  ) {
-    return new ScanRefusedError(SCAN_LIMIT_MESSAGE);
+  const limit = SCAN_LIMIT_REFUSAL.exec(String(reason ?? ""));
+  if (err?.response?.status === 402 && limit) {
+    return new ScanRefusedError(scanLimitMessage(limit[1]));
   }
   if (err?.response?.status === 422 && !reason) {
     return new Error(

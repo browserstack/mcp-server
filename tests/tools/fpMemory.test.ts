@@ -32,11 +32,11 @@ const AUTH = { username: "u", password: "k" };
 
 function entry(id: number, extra: Partial<FpEntry> = {}): FpEntry {
   return {
-    id,
+    id: `fp_${id}`,
     site: "www.shop.example",
     global: false,
     verdict: "false_positive",
-    matchScope: "component_family",
+    scope: "component_family",
     rootCause:
       "The role is set inside the custom element's shadow root; the host has no role attribute.",
     pattern: {
@@ -45,11 +45,9 @@ function entry(id: number, extra: Partial<FpEntry> = {}): FpEntry {
     },
     counterExamples: ["div.to_sign_in"],
     userStatement: "These Acme components work with VoiceOver",
-    seedIssue: {
-      pageUrl: "https://www.shop.example/de/angebote/halbtax",
-      component: "acme-header-button#",
-      htmlSnippet: "<acme-header-button>",
-    },
+    pageUrl: "https://www.shop.example/de/angebote/halbtax",
+    component: "acme-header-button#",
+    htmlSnippet: "<acme-header-button>",
     ...extra,
   };
 }
@@ -64,7 +62,7 @@ function memory(entries: FpEntry[], ruleCode = "role-required"): FpMemory {
         entries,
       },
     ],
-    truncated: false,
+    nextCursor: null,
   };
 }
 
@@ -80,10 +78,10 @@ describe("memoryForReport", () => {
 
     const result = await memoryForReport(AUTH, ["role-required", "image-alt"]);
 
-    expect(result?.rules[0].entries[0].id).toBe(1);
+    expect(result?.rules[0].entries[0].id).toBe("fp_1");
     const call = get.mock.calls[0][0];
     expect(call.url).toContain(
-      "/api/fp-memory/v1/memory?ruleCodes=role-required%2Cimage-alt",
+      "/api/fp-memory/v1/memory?ruleCodes=role-required%2Cimage-alt&limit=200",
     );
     expect(call.headers.Authorization).toBe(
       "Basic " + Buffer.from("u:k").toString("base64"),
@@ -130,7 +128,7 @@ describe("applyMemory", () => {
   });
 
   it("only says how to save one when no saved entry covers these issues", () => {
-    const view = applyMemory({ rules: [], truncated: false }, [
+    const view = applyMemory({ rules: [], nextCursor: null }, [
       issue("role-required"),
     ]);
     expect(view.marked).toBe(0);
@@ -146,7 +144,7 @@ describe("applyMemory", () => {
     ]);
 
     expect(view.marked).toBe(1);
-    expect(view.records[0].saved_fp_entries).toEqual([1, 2]);
+    expect(view.records[0].saved_fp_entries).toEqual(["fp_1", "fp_2"]);
     expect(view.records[1].saved_fp_entries).toBeUndefined();
     expect(view.records[2].saved_fp_entries).toBeUndefined();
   });
@@ -155,7 +153,7 @@ describe("applyMemory", () => {
     const view = applyMemory(memory([entry(1, { global: true })]), [
       issue("role-required", "https://other.example/page"),
     ]);
-    expect(view.records[0].saved_fp_entries).toEqual([1]);
+    expect(view.records[0].saved_fp_entries).toEqual(["fp_1"]);
     expect(view.notes[1]).toContain("all sites");
   });
 
@@ -165,7 +163,7 @@ describe("applyMemory", () => {
       [{ issue_type: "role-required" }],
       ON_SITE,
     );
-    expect(view.records[0].saved_fp_entries).toEqual([1]);
+    expect(view.records[0].saved_fp_entries).toEqual(["fp_1"]);
   });
 
   it("opens by saying to remove the marked issues before giving any list or count", () => {
@@ -193,14 +191,26 @@ describe("applyMemory", () => {
       "https://www.browserstack.com/docs/accessibility/rules/a11y-engine/role-required/",
     );
     expect(view.notes[1]).toContain("div.to_sign_in");
+    expect(view.notes.join("\n")).not.toContain("Not all entries fit");
     const shown = JSON.parse(
       view.notes[1].slice(
         view.notes[1].indexOf("[{"),
         view.notes[1].lastIndexOf("}]") + 2,
       ),
     );
-    expect(shown[0].entries.map((e: any) => e.id)).toEqual([1]);
+    expect(shown[0].entries.map((e: any) => e.id)).toEqual(["fp_1"]);
     expect(view.notes.at(-1)).toBe(FP_FILING_GUIDE);
+  });
+});
+
+describe("applyMemory with more entries than one read returns", () => {
+  it("says how to read the next page", () => {
+    const view = applyMemory({ ...memory([entry(1)]), nextCursor: "fp_1" }, [
+      issue("role-required"),
+    ]);
+    const note = view.notes.find((n) => n.startsWith("Not all entries fit"));
+    expect(note).toContain(READ_CAPABILITY);
+    expect(note).toContain("nextCursor");
   });
 });
 
@@ -211,7 +221,7 @@ describe("memoryPayload", () => {
 
     expect(json.length).toBeLessThanOrEqual(4_000);
     const kept = JSON.parse(json)[0].entries.map((e: any) => e.id);
-    expect(kept[0]).toBe(100);
+    expect(kept[0]).toBe("fp_100");
     expect(omitted).toEqual([
       { rule: "role-required", count: 40 - kept.length },
     ]);
@@ -219,7 +229,7 @@ describe("memoryPayload", () => {
 
   it("shortens long HTML snippets", () => {
     const long = entry(1, {
-      seedIssue: { htmlSnippet: "<div>" + "x".repeat(1000) + "</div>" },
+      htmlSnippet: "<div>" + "x".repeat(1000) + "</div>",
     });
     const html = JSON.parse(memoryPayload(memory([long])).json)[0].entries[0]
       .seed_issue.html;

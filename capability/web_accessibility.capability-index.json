@@ -449,11 +449,7 @@
             "name": "verdict",
             "type": "string",
             "required": true,
-            "values": [
-              "false_positive",
-              "not_applicable",
-              "accepted_risk"
-            ],
+            "values": ["false_positive", "not_applicable", "accepted_risk"],
             "description": "false_positive unless the user says the issue is real but does not apply, or is a risk they accept."
           },
           {
@@ -557,7 +553,8 @@
           "Before saving, inspect the element yourself (open the page if you can, else read the issue's HTML) and write rootCause and pattern.predicate from what you saw: a record that only says the element works for the user matches almost nothing on the next report.",
           "Propose the widest scope the root cause supports (e.g. component_family for every custom element of one design system) and have the user confirm it; ask them for any similar element that is a real issue and send it in counterExamples.",
           "Send the issue's fields as fetchAccessibilityIssues gave them; selectors are not taken, as they differ per page.",
-          "warnings in the reply ask you to re-check the scope with the user; resend at the wider scope if they agree."
+          "warnings in the reply ask you to re-check the scope with the user; resend at the wider scope if they agree.",
+          "A 409 reply means an active entry already covers this rule, site, scope and predicate: nothing was saved, and data.existingId names that entry; tell the user it is already saved."
         ],
         "returns": [
           "data.id",
@@ -566,7 +563,8 @@
           "data.site",
           "data.global",
           "data.activeEntriesForRule",
-          "data.warnings"
+          "data.warnings",
+          "data.existingId"
         ],
         "responses": {
           "201": {
@@ -581,7 +579,7 @@
                   "type": "object",
                   "properties": {
                     "id": {
-                      "type": "integer"
+                      "type": "string"
                     },
                     "ruleCode": {
                       "type": "string"
@@ -615,6 +613,9 @@
           "403": {
             "$response": "FpMemoryDisabled"
           },
+          "409": {
+            "$response": "FpFeedbackDuplicate"
+          },
           "422": {
             "$response": "FpFeedbackRejected"
           },
@@ -640,6 +641,19 @@
             "name": "site",
             "type": "string",
             "description": "A host or page URL: only that site's entries, plus those saved for all sites."
+          },
+          {
+            "name": "limit",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200,
+            "default": 100,
+            "description": "Entries per page, newest first."
+          },
+          {
+            "name": "cursor",
+            "type": "string",
+            "description": "The previous page's data.nextCursor, to read the next page."
           }
         ],
         "intent": "Read the account's saved false positives, grouped by rule with each rule's docs link, to filter accessibility issues with or to find an entry's id.",
@@ -652,11 +666,11 @@
           "data.rules.docsUrl",
           "data.rules.entryCount",
           "data.rules.entries",
-          "data.truncated"
+          "data.nextCursor"
         ],
         "responses": {
           "200": {
-            "description": "The memory, grouped by rule; newest entries first, at most 5000.",
+            "description": "The memory, grouped by rule; newest entries first, one page at a time.",
             "schema": {
               "type": "object",
               "properties": {
@@ -666,8 +680,9 @@
                 "data": {
                   "type": "object",
                   "properties": {
-                    "truncated": {
-                      "type": "boolean"
+                    "nextCursor": {
+                      "type": ["string", "null"],
+                      "description": "Set when more entries follow: pass it as cursor."
                     },
                     "rules": {
                       "type": "array",
@@ -689,7 +704,7 @@
                               "type": "object",
                               "properties": {
                                 "id": {
-                                  "type": "integer"
+                                  "type": "string"
                                 },
                                 "site": {
                                   "type": "string"
@@ -700,7 +715,7 @@
                                 "verdict": {
                                   "type": "string"
                                 },
-                                "matchScope": {
+                                "scope": {
                                   "type": "string"
                                 },
                                 "rootCause": {
@@ -715,8 +730,14 @@
                                 "userStatement": {
                                   "type": "string"
                                 },
-                                "seedIssue": {
-                                  "type": "object"
+                                "pageUrl": {
+                                  "type": "string"
+                                },
+                                "component": {
+                                  "type": "string"
+                                },
+                                "htmlSnippet": {
+                                  "type": "string"
                                 }
                               }
                             }
@@ -735,6 +756,9 @@
           "403": {
             "$response": "FpMemoryDisabled"
           },
+          "422": {
+            "description": "Invalid limit, or a cursor that is not an entry of the account."
+          },
           "500": {
             "$response": "InternalServerError"
           }
@@ -749,20 +773,17 @@
         "path_params": [
           {
             "name": "id",
-            "type": "integer",
+            "type": "string",
             "required": true,
-            "minimum": 1,
-            "description": "The entry's id, from the memory or the save reply."
+            "description": "The entry's id (fp_…), from the memory or the save reply.",
+            "example": "fp_Ab12Cd34Ef56"
           }
         ],
         "intent": "Remove a saved false positive the user no longer agrees with, so the issues it covered show again in later reports.",
         "guidance": [
           "Revoked entries are kept on the account's side but no longer returned or applied; there is no undo, so save a new entry instead if the user changes their mind."
         ],
-        "returns": [
-          "data.id",
-          "data.status"
-        ],
+        "returns": ["data.id", "data.status"],
         "responses": {
           "200": {
             "description": "Revoked.",
@@ -776,7 +797,7 @@
                   "type": "object",
                   "properties": {
                     "id": {
-                      "type": "integer"
+                      "type": "string"
                     },
                     "status": {
                       "type": "string"
@@ -818,9 +839,7 @@
         "id_convention": "A plain integer, discovered through the report list; it is the workflowReportId the accessibility issue tool reads.",
         "parents": [],
         "relations": [],
-        "capabilities": [
-          "list_workflow_analyzer_reports"
-        ],
+        "capabilities": ["list_workflow_analyzer_reports"],
         "key_facts": [
           "Reports are shared across the account, so the list holds everyone's; one person's are picked out by the creator on each row.",
           "A report is created by scanning in the browser extension; there is nothing to create or delete here."
@@ -848,9 +867,7 @@
             "via": "runs once, or again on each recurrence"
           }
         ],
-        "capabilities": [
-          "list_website_scanner_scans"
-        ],
+        "capabilities": ["list_website_scanner_scans"],
         "key_facts": [
           "A scan's own row carries only its latest run; the earlier runs are listed per scan.",
           "Scans are shared across the account, so the list holds everyone's."
@@ -868,18 +885,14 @@
           "previous scan"
         ],
         "id_convention": "A plain integer, read together with its scan's id; discovered through the scan's run list.",
-        "parents": [
-          "website_scan"
-        ],
+        "parents": ["website_scan"],
         "relations": [
           {
             "entity": "website_scan",
             "via": "belongs to one scan"
           }
         ],
-        "capabilities": [
-          "list_website_scanner_scan_runs"
-        ],
+        "capabilities": ["list_website_scanner_scan_runs"],
         "key_facts": [
           "A page that did not load in a run is still counted as scanned in some places; the run's failure count says how many did not load."
         ]
@@ -902,9 +915,7 @@
             "via": "groups the builds reported under its name"
           }
         ],
-        "capabilities": [
-          "list_automated_tests_projects"
-        ],
+        "capabilities": ["list_automated_tests_projects"],
         "key_facts": [
           "A project is created by the first test run reported under its name; there is nothing to create or delete here."
         ]
@@ -921,18 +932,14 @@
           "accessibility test run"
         ],
         "id_convention": "A 40-character string of lowercase letters and digits, the thBuildId in the build's dashboard link; discovered through the build list.",
-        "parents": [
-          "automated_tests_project"
-        ],
+        "parents": ["automated_tests_project"],
         "relations": [
           {
             "entity": "automated_tests_project",
             "via": "belongs to one project"
           }
         ],
-        "capabilities": [
-          "list_automated_tests_builds"
-        ],
+        "capabilities": ["list_automated_tests_builds"],
         "key_facts": [
           "A build appears only if its tests ran with accessibility checks on.",
           "status is the accessibility report's; a completed report whose build ran no tests reads failed."
@@ -951,9 +958,7 @@
         "id_convention": "A plain integer, discovered through the report list.",
         "parents": [],
         "relations": [],
-        "capabilities": [
-          "list_assisted_test_reports"
-        ],
+        "capabilities": ["list_assisted_test_reports"],
         "key_facts": [
           "Its individual issues are read on the Accessibility dashboard; the list gives its counts."
         ]
@@ -969,7 +974,7 @@
           "fp feedback",
           "ignored issue pattern"
         ],
-        "id_convention": "A plain integer, returned when the feedback is saved and on each entry of the memory.",
+        "id_convention": "A string starting with fp_, returned when the feedback is saved and on each entry of the memory.",
         "parents": [],
         "relations": [],
         "capabilities": [
@@ -1689,6 +1694,12 @@
       },
       "FpFeedbackRejected": {
         "description": "The feedback was not saved: unknown rule, a root cause or predicate too thin to match later issues by, a pageUrl without a host, or the rule already holds 1000 entries. error says which.",
+        "schema": {
+          "$schema": "Failure"
+        }
+      },
+      "FpFeedbackDuplicate": {
+        "description": "Not saved: an active entry already covers the same rule, site (or all sites), scope and predicate. data.existingId names it.",
         "schema": {
           "$schema": "Failure"
         }

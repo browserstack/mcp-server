@@ -106,7 +106,7 @@ const REPORT = {
 };
 
 const MEMORY = {
-  truncated: false,
+  nextCursor: null,
   rules: [
     {
       ruleCode: "role-required",
@@ -115,11 +115,11 @@ const MEMORY = {
       entryCount: 1,
       entries: [
         {
-          id: 41,
+          id: "fp_41",
           site: "www.shop.example",
           global: false,
           verdict: "false_positive",
-          matchScope: "component_family",
+          scope: "component_family",
           rootCause:
             "Role is set inside each acme- custom element's shadow root; the host has none.",
           pattern: {
@@ -176,8 +176,8 @@ describe("fetchAccessibilityIssues with saved false positives", () => {
     const issues = JSON.parse(block.split("\n")[2]).issues;
 
     expect(issues.map((i: any) => i.saved_fp_entries)).toEqual([
-      [41],
-      [41],
+      ["fp_41"],
+      ["fp_41"],
       undefined,
     ]);
   });
@@ -201,7 +201,7 @@ describe("fetchAccessibilityIssues with saved false positives", () => {
 
   it("answers as it always did when no saved entry covers these issues", async () => {
     m.memoryForReport.mockResolvedValue({
-      truncated: false,
+      nextCursor: null,
       rules: [
         {
           ...MEMORY.rules[0],

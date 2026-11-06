@@ -20,22 +20,27 @@ export const READ_CAPABILITY = "get_false_positive_memory";
 /** A read made while answering with issues must not hold the issues back for long. */
 const MEMORY_READ_TIMEOUT_MS = 8_000;
 
+/** The most entries one read returns; more than the answer's budget below holds anyway. */
+const MEMORY_PAGE_SIZE = 200;
+
 /** How much of an answer the memory may take; a rule's oldest entries go first. */
 export const MEMORY_CHARACTERS = 24_000;
 const SNIPPET_CHARACTERS = 200;
 
 export interface FpEntry {
-  id: number;
+  id: string;
   site: string;
   global: boolean;
   verdict: string;
-  matchScope: string;
+  scope: string;
   rootCause: string;
   pattern: Record<string, unknown>;
   evidence?: Record<string, unknown> | null;
   counterExamples?: unknown[] | null;
   userStatement: string;
-  seedIssue?: { pageUrl?: string; component?: string; htmlSnippet?: string };
+  pageUrl?: string;
+  component?: string;
+  htmlSnippet?: string;
 }
 
 export interface FpRuleMemory {
@@ -47,7 +52,8 @@ export interface FpRuleMemory {
 
 export interface FpMemory {
   rules: FpRuleMemory[];
-  truncated: boolean;
+  /** Set when the account holds more entries for these rules than one read returns. */
+  nextCursor: string | null;
 }
 
 /**
@@ -62,7 +68,7 @@ export async function memoryForReport(
   if (ruleCodes.length === 0) return undefined;
   try {
     const resp = await apiClient.get({
-      url: `${getRegionalHost("accessibilityApi")}/api/fp-memory/v1/memory?ruleCodes=${encodeURIComponent(ruleCodes.join(","))}`,
+      url: `${getRegionalHost("accessibilityApi")}/api/fp-memory/v1/memory?ruleCodes=${encodeURIComponent(ruleCodes.join(","))}&limit=${MEMORY_PAGE_SIZE}`,
       headers: {
         Authorization:
           "Basic " +
@@ -86,12 +92,12 @@ export async function memoryForReport(
 }
 
 function compactEntry(entry: FpEntry) {
-  const snippet = entry.seedIssue?.htmlSnippet ?? "";
+  const snippet = entry.htmlSnippet ?? "";
   return {
     id: entry.id,
     site: entry.global ? "all sites" : entry.site,
     verdict: entry.verdict,
-    scope: entry.matchScope,
+    scope: entry.scope,
     root_cause: entry.rootCause,
     pattern: entry.pattern,
     ...(entry.counterExamples?.length
@@ -100,8 +106,8 @@ function compactEntry(entry: FpEntry) {
     ...(entry.evidence ? { evidence: entry.evidence } : {}),
     user_statement: entry.userStatement,
     seed_issue: {
-      page: entry.seedIssue?.pageUrl,
-      component: entry.seedIssue?.component,
+      page: entry.pageUrl,
+      component: entry.component,
       ...(snippet
         ? {
             html:
@@ -159,7 +165,7 @@ interface IssueLike {
 /** What an answer with issues says about the memory, and where. */
 export interface MemoryView<T> {
   /** The issues, those with saved entries for their rule and site marked saved_fp_entries. */
-  records: (T & { saved_fp_entries?: number[] })[];
+  records: (T & { saved_fp_entries?: string[] })[];
   /** How many of them are marked. */
   marked: number;
   /** First in the answer: remove the false positives before giving any list or count. */
@@ -193,7 +199,7 @@ export function applyMemory<T extends IssueLike>(
 ): MemoryView<T> {
   if (!memory) return { records, marked: 0, lead: [], notes: [], closing: [] };
   const byRule = new Map(memory.rules.map((rule) => [rule.ruleCode, rule]));
-  const used = new Map<string, Set<number>>();
+  const used = new Map<string, Set<string>>();
   let marked = 0;
   const annotated = records.map((record) => {
     const host = hostOf(record.affected_page ?? page);
@@ -202,7 +208,7 @@ export function applyMemory<T extends IssueLike>(
       .map((entry) => entry.id);
     if (ids.length === 0) return record;
     marked++;
-    const seen = used.get(record.issue_type) ?? new Set<number>();
+    const seen = used.get(record.issue_type) ?? new Set<string>();
     ids.forEach((id) => seen.add(id));
     used.set(record.issue_type, seen);
     return { ...record, saved_fp_entries: ids };
@@ -211,7 +217,7 @@ export function applyMemory<T extends IssueLike>(
     return { records, marked, lead: [], notes: [FP_FILING_GUIDE], closing: [] };
   }
   const shown: FpMemory = {
-    truncated: memory.truncated,
+    nextCursor: memory.nextCursor,
     rules: memory.rules
       .filter((rule) => used.has(rule.ruleCode))
       .map((rule) => {
@@ -231,9 +237,9 @@ export function applyMemory<T extends IssueLike>(
     notes: [
       FP_APPLY_NOTE,
       `False-positive memory: ${wrapUntrusted("saved false positives (user-written)", json)}`,
-      ...(omitted.length || memory.truncated
+      ...(omitted.length || memory.nextCursor
         ? [
-            `Not all entries fit here${omitted.length ? ` (${omitted.map((o) => `${o.count} older entries of ${o.rule}`).join(", ")})` : ""}. When a marked issue is not covered by the entries above, read its rule's entries with the web_accessibility capability ${READ_CAPABILITY}.`,
+            `Not all entries fit here${omitted.length ? ` (${omitted.map((o) => `${o.count} older entries of ${o.rule}`).join(", ")})` : ""}. When a marked issue is not covered by the entries above, read its rule's entries with the web_accessibility capability ${READ_CAPABILITY} (ruleCodes set to its rule; pass each page's nextCursor as cursor for the next).`,
           ]
         : []),
       FP_FILING_GUIDE,

@@ -8,7 +8,9 @@ import {
   UnknownBuildError,
 } from "./automate-utils/list-session-ids.js";
 import {
-  isObservabilityBuildUuid,
+  isTraBuildId,
+  NoSessionsError,
+  otherSessionType,
   resolveHashedBuildId,
 } from "./automate-utils/resolve-hashed-build-id.js";
 import { SessionType } from "../lib/constants.js";
@@ -86,42 +88,69 @@ export async function listSessionIdsTool(
   config: BrowserStackConfig,
 ): Promise<CallToolResult> {
   try {
-    // Accept the observability build id too. Observability ids are usually
-    // UUIDs but can also be 40-char hex like Automate hashed ids, so shape
-    // alone is not enough: try the REST list first and resolve on a miss.
     const inputId = args.buildId.trim();
+    const notes: string[] = [];
+    let sessionType = args.sessionType;
     let buildId = inputId;
-    let resolvedNote: string | undefined;
+    let sessions: Awaited<ReturnType<typeof listSessionIds>> | undefined;
 
-    const resolve = async () => {
+    const switched = (actual: SessionType) => {
+      if (actual !== args.sessionType) {
+        notes.push(
+          `This build ran on ${actual}, not ${args.sessionType}; use sessionType "${actual}" for its sessions.`,
+        );
+      }
+      sessionType = actual;
+    };
+
+    const fromTraBuild = async () => {
       const resolved = await resolveHashedBuildId(
         inputId,
         config,
         args.sessionType,
       );
       buildId = resolved.hashedBuildId;
-      resolvedNote = `Resolved observability build ${inputId} to hashed build id ${buildId}.`;
+      switched(resolved.sessionType);
+      notes.push(
+        `Resolved TRA build ${inputId} to hashed build id ${buildId}.`,
+      );
+      return listSessionIds({ ...args, sessionType, buildId }, config);
     };
 
-    let sessions;
-    if (isObservabilityBuildUuid(inputId)) {
-      await resolve();
-      sessions = await listSessionIds({ ...args, buildId }, config);
+    if (isTraBuildId(inputId)) {
+      sessions = await fromTraBuild();
     } else {
-      try {
-        sessions = await listSessionIds({ ...args, buildId }, config);
-      } catch (error) {
-        if (!(error instanceof UnknownBuildError)) throw error;
+      // Probably an Automate hashed id: try the given product, then the other.
+      for (const candidate of [
+        args.sessionType,
+        otherSessionType(args.sessionType),
+      ]) {
         try {
-          await resolve();
+          sessions = await listSessionIds(
+            { ...args, sessionType: candidate, buildId },
+            config,
+          );
+          switched(candidate);
+          break;
+        } catch (error) {
+          if (!(error instanceof UnknownBuildError)) throw error;
+        }
+      }
+      if (!sessions) {
+        // An all-hex id can still be an older TRA build id.
+        try {
+          sessions = await fromTraBuild();
         } catch (resolveError) {
+          if (resolveError instanceof NoSessionsError) throw resolveError;
           logger.debug(
-            "listSessions: id is neither a known hashed build nor a resolvable observability build",
+            "listSessions: id is not a TRA build either",
             resolveError,
           );
-          throw error;
+          throw new UnknownBuildError(
+            `No Automate, App Automate or TRA build has id "${inputId}". Pass the id from ` +
+              "the dashboard build link, or the TRA build id from listBuildId.",
+          );
         }
-        sessions = await listSessionIds({ ...args, buildId }, config);
       }
     }
 
@@ -134,8 +163,8 @@ export async function listSessionIdsTool(
             : JSON.stringify(sessions, null, 2),
       },
     ];
-    if (resolvedNote) {
-      content.push({ type: "text", text: resolvedNote });
+    for (const note of notes) {
+      content.push({ type: "text", text: note });
     }
 
     return { content };
@@ -158,10 +187,10 @@ export default function addAutomationTools(
     {
       sessionId: z
         .string()
-        .describe("The BrowserStack session ID to fetch screenshots from"),
+        .describe("Session id from listSessions or listTestIds."),
       sessionType: z
         .enum([SessionType.Automate, SessionType.AppAutomate])
-        .describe("Type of BrowserStack session"),
+        .describe("Product the session ran on."),
     },
     {
       title: "Fetch Automation Screenshots",
@@ -203,16 +232,14 @@ export default function addAutomationTools(
 
   tools.listSessions = server.tool(
     "listSessions",
-    "List sessions for a hashed Automate/App Automate build: session IDs, status, OS, browser/device, dashboard URL.",
+    "List a build's sessions: session IDs, status, OS, browser/device, dashboard URL. Takes an Automate or a TRA build id.",
     {
       sessionType: z
         .enum([SessionType.Automate, SessionType.AppAutomate])
-        .describe("Type of BrowserStack session"),
+        .describe("Product the build ran on; the other is also tried."),
       buildId: z
         .string()
-        .describe(
-          "Hashed build id from the dashboard, or the observability build id from getBuildId.",
-        ),
+        .describe("Automate hashed build id, or TRA id from listBuildId."),
       limit: z
         .number()
         .int()

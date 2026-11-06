@@ -14,6 +14,18 @@ const ERROR_SUMMARY_MAX = 200;
 // Safety bound on pagination; hitting it is logged, never silent.
 const MAX_PAGES = 100;
 
+/** A dropped connection ("fetch failed") is retried once; HTTP errors are not. */
+async function fetchWithRetry(
+  url: string,
+  init: RequestInit,
+): Promise<Response> {
+  try {
+    return await fetch(url, init);
+  } catch {
+    return await fetch(url, init);
+  }
+}
+
 export async function getTestIds(
   buildId: string,
   authString: string,
@@ -35,7 +47,7 @@ export async function getTestIds(
     while (true) {
       requestNumber++;
 
-      const response = await fetch(url, {
+      const response = await fetchWithRetry(url, {
         headers: {
           Authorization: authHeader,
           "Content-Type": "application/json",

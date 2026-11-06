@@ -2,8 +2,10 @@ import { describe, it, expect, vi, beforeEach, Mock } from "vitest";
 import { SessionType } from "../../src/lib/constants";
 import { apiClient } from "../../src/lib/apiClient";
 import {
+  detectSession,
   findSessionIdForObservabilityBuild,
   isHashedBuildId,
+  isTraBuildId,
   isObservabilityBuildUuid,
   resolveBuildIdFromSession,
   resolveHashedBuildId,
@@ -186,6 +188,42 @@ describe("findSessionIdForObservabilityBuild", () => {
   });
 });
 
+describe("isTraBuildId", () => {
+  it("accepts UUIDs and base-36 ids with a letter past f", () => {
+    expect(isTraBuildId(OBS_UUID)).toBe(true);
+    expect(isTraBuildId("jlcb5jo8xakocnjyll3n10b1rx5sqnrprh3y6zsp")).toBe(true);
+  });
+
+  it("rejects all-hex ids, which are probably Automate hashed ids", () => {
+    expect(isTraBuildId(HASHED_BUILD)).toBe(false);
+    expect(isTraBuildId("not-an-id")).toBe(false);
+  });
+});
+
+describe("detectSession", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("finds the session on the other product when the preferred one misses", async () => {
+    (apiClient.get as Mock)
+      .mockResolvedValueOnce({ ok: false, status: 404 })
+      .mockResolvedValueOnce(sessionDetails(HASHED_BUILD));
+
+    await expect(
+      detectSession(SESSION_ID, SessionType.AppAutomate, config),
+    ).resolves.toEqual({
+      sessionType: SessionType.Automate,
+      hashedBuildId: HASHED_BUILD,
+    });
+  });
+
+  it("returns undefined when neither product knows the session", async () => {
+    (apiClient.get as Mock).mockResolvedValue({ ok: false, status: 404 });
+    await expect(
+      detectSession(SESSION_ID, SessionType.Automate, config),
+    ).resolves.toBeUndefined();
+  });
+});
+
 describe("resolveHashedBuildId", () => {
   beforeEach(() => vi.clearAllMocks());
 
@@ -232,8 +270,19 @@ describe("resolveHashedBuildId", () => {
     );
 
     await expect(resolveHashedBuildId(OBS_UUID, config)).rejects.toThrow(
-      /No BrowserStack sessions found/,
+      /has no BrowserStack sessions: its results were uploaded/,
     );
+  });
+
+  it("corrects a wrong session type by trying the other product", async () => {
+    (apiClient.get as Mock)
+      .mockResolvedValueOnce(testRunsPage([{ id: 1, session_id: SESSION_ID }]))
+      .mockResolvedValueOnce({ ok: false, status: 404 })
+      .mockResolvedValueOnce(sessionDetails(HASHED_BUILD));
+
+    await expect(
+      resolveHashedBuildId(OBS_UUID, config, SessionType.Automate),
+    ).resolves.toMatchObject({ sessionType: SessionType.AppAutomate });
   });
 
   it("fails clearly when the session does not report a build", async () => {

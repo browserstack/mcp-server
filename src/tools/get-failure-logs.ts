@@ -18,6 +18,10 @@ import {
 } from "./failurelogs-utils/app-automate.js";
 
 import { resolveAppAutomateBuildId } from "./failurelogs-utils/resolve-app-build-id.js";
+import {
+  detectSession,
+  isTraBuildId,
+} from "./automate-utils/resolve-hashed-build-id.js";
 import { retrieveSessionVideo } from "./failurelogs-utils/video.js";
 
 import {
@@ -29,6 +33,24 @@ import {
 
 type LogType = AutomateLogType | AppAutomateLogType;
 type SessionTypeValues = SessionType;
+
+function fitsSessionType(logType: LogType, sessionType: SessionType): boolean {
+  const types: readonly string[] =
+    sessionType === SessionType.Automate
+      ? Object.values(AutomateLogType)
+      : Object.values(AppAutomateLogType);
+  return types.includes(logType);
+}
+
+// The closest log of the other product, so a mismatched request still returns evidence.
+const EQUIVALENT_LOG_TYPE: Partial<Record<LogType, LogType>> = {
+  [AutomateLogType.SessionLogs]: AppAutomateLogType.AppiumLogs,
+  [AutomateLogType.ConsoleLogs]: AppAutomateLogType.DeviceLogs,
+  [AutomateLogType.NetworkLogs]: AppAutomateLogType.DeviceLogs,
+  [AppAutomateLogType.AppiumLogs]: AutomateLogType.SessionLogs,
+  [AppAutomateLogType.DeviceLogs]: AutomateLogType.ConsoleLogs,
+  [AppAutomateLogType.CrashLogs]: AutomateLogType.SessionLogs,
+};
 
 // Main log fetcher function
 export async function getFailureLogs(
@@ -42,75 +64,99 @@ export async function getFailureLogs(
 ): Promise<CallToolResult> {
   const results: CallToolResult["content"] = [];
   const errors: string[] = [];
-  let validLogTypes: LogType[] = [];
+  const notes: string[] = [];
 
   if (!args.sessionId) {
     throw new Error("Session ID is required");
   }
 
-  // Validate log types and collect errors
-  validLogTypes = args.logTypes.filter((logType) => {
-    const isAutomate = Object.values(AutomateLogType).includes(
-      logType as AutomateLogType,
+  const allTypes = [
+    ...new Set([
+      ...Object.values(AutomateLogType),
+      ...Object.values(AppAutomateLogType),
+    ]),
+  ] as LogType[];
+  const requested = args.logTypes.filter((logType) => {
+    if (allTypes.includes(logType)) return true;
+    errors.push(
+      `Invalid log type '${logType}'. Valid log types are: ${allTypes.join(", ")}`,
     );
-    const isAppAutomate = Object.values(AppAutomateLogType).includes(
-      logType as AppAutomateLogType,
-    );
-
-    if (!isAutomate && !isAppAutomate) {
-      errors.push(
-        `Invalid log type '${logType}'. Valid log types are: ${[
-          ...new Set([
-            ...Object.values(AutomateLogType),
-            ...Object.values(AppAutomateLogType),
-          ]),
-        ].join(", ")}`,
-      );
-      return false;
-    }
-
-    if (args.sessionType === SessionType.Automate && !isAutomate) {
-      errors.push(
-        `Log type '${logType}' is only available for app-automate sessions.`,
-      );
-      return false;
-    }
-
-    if (args.sessionType === SessionType.AppAutomate && !isAppAutomate) {
-      errors.push(
-        `Log type '${logType}' is only available for automate sessions.`,
-      );
-      return false;
-    }
-
-    return true;
+    return false;
   });
+
+  let sessionType = args.sessionType;
+  // A TRA build id is not an App Automate build: ignore it and use the session's.
+  let buildId =
+    args.buildId && !isTraBuildId(args.buildId) ? args.buildId : undefined;
+
+  const switchTo = (actual: SessionType) => {
+    if (actual === sessionType) return;
+    notes.push(
+      `Session ${args.sessionId} ran on ${actual}, not ${sessionType}.`,
+    );
+    sessionType = actual;
+  };
+  const notFound = () =>
+    new Error(
+      `Session "${args.sessionId}" was not found on Automate or App Automate. ` +
+        "Use a session id from listSessions or listTestIds.",
+    );
+
+  // A log type of the other product usually means the session type is wrong:
+  // ask the session itself before fitting the log types.
+  if (requested.some((logType) => !fitsSessionType(logType, sessionType))) {
+    const detected = await detectSession(args.sessionId, sessionType, config);
+    if (!detected) throw notFound();
+    switchTo(detected.sessionType);
+    if (sessionType === SessionType.AppAutomate) {
+      buildId = buildId ?? detected.hashedBuildId;
+    }
+  }
+
+  const needsBuildId = requested.some(
+    (logType) => logType !== SessionVideoLogType,
+  );
+  if (sessionType === SessionType.AppAutomate && needsBuildId && !buildId) {
+    buildId = await resolveAppAutomateBuildId(args.sessionId, config);
+    if (!buildId) {
+      // Not an App Automate session: it may be an Automate one.
+      const detected = await detectSession(
+        args.sessionId,
+        SessionType.Automate,
+        config,
+      );
+      if (!detected) throw notFound();
+      switchTo(detected.sessionType);
+      if (sessionType === SessionType.AppAutomate) {
+        buildId = detected.hashedBuildId;
+      }
+    }
+  }
+
+  // Swap any remaining other-product log type for this product's equivalent.
+  const validLogTypes: LogType[] = [];
+  for (const logType of requested) {
+    const fitted = fitsSessionType(logType, sessionType)
+      ? logType
+      : EQUIVALENT_LOG_TYPE[logType];
+    if (fitted !== logType) {
+      notes.push(
+        `'${logType}' is not available for ${sessionType} sessions; fetched '${fitted}' instead.`,
+      );
+    }
+    if (fitted && !validLogTypes.includes(fitted)) validLogTypes.push(fitted);
+  }
 
   if (validLogTypes.length === 0) {
     return {
       content: [
         {
           type: "text",
-          text: `No valid log types found for ${args.sessionType} session.\nErrors encountered:\n${errors.join("\n")}`,
+          text: `No valid log types found for ${sessionType} session.\nErrors encountered:\n${errors.join("\n")}`,
         },
       ],
       isError: true,
     };
-  }
-
-  let buildId = args.buildId;
-  const needsBuildId = validLogTypes.some(
-    (logType) => logType !== SessionVideoLogType,
-  );
-  if (
-    args.sessionType === SessionType.AppAutomate &&
-    needsBuildId &&
-    !buildId
-  ) {
-    buildId = await resolveAppAutomateBuildId(args.sessionId, config);
-    if (!buildId) {
-      throw new Error("Build ID is required for app-automate sessions");
-    }
   }
 
   let response;
@@ -121,7 +167,7 @@ export async function getFailureLogs(
         case SessionVideoLogType: {
           response = await retrieveSessionVideo(
             args.sessionId,
-            args.sessionType,
+            sessionType,
             config,
           );
           results.push({ type: "text", text: response });
@@ -169,6 +215,9 @@ export async function getFailureLogs(
     throw error;
   }
 
+  if (notes.length > 0) {
+    results.push({ type: "text", text: notes.join("\n") });
+  }
   if (errors.length > 0) {
     results.push({
       type: "text",
@@ -193,14 +242,10 @@ export default function registerGetFailureLogs(
     {
       sessionType: z
         .enum([SessionType.Automate, SessionType.AppAutomate])
-        .describe(
-          "Type of BrowserStack session. Must be explicitly provided by the user.",
-        ),
+        .describe("Product the session ran on; corrected if wrong."),
       sessionId: z
         .string()
-        .describe(
-          "The BrowserStack session ID. Must be explicitly provided by the user.",
-        ),
+        .describe("Session id from listSessions or listTestIds."),
       buildId: z
         .string()
         .optional()

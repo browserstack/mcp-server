@@ -537,65 +537,22 @@ describe("resolveBuild: request budget", () => {
 describe("resolveBuild: Automate project links", () => {
   beforeEach(() => vi.resetAllMocks());
 
-  const link = (n?: number) =>
-    "https://automate.browserstack.com/projects/Sample+App/builds/E2E+Tests" +
-    (n ? `/${n}` : "");
-  const automateBuild = (name: string, hashed: string) => ({
-    automation_build: { name, hashed_id: hashed },
-  });
+  // The Automate dashboard serves TRA build pages, with TRA's names and numbers.
+  const link =
+    "https://automate.browserstack.com/projects/Checking+Project+Name/builds/junit/2";
 
-  it("parses the link as an Automate lookup, not a TRA one", () => {
-    expect(parseBuildUrl(link(182))).toEqual({
-      projectName: "Sample App",
-      buildName: "E2E Tests",
-      buildNumber: 182,
-      automateProduct: SessionType.Automate,
+  it("parses the link like a TRA link", () => {
+    expect(parseBuildUrl(link)).toEqual({
+      projectName: "Checking Project Name",
+      buildName: "junit",
+      buildNumber: 2,
     });
-    expect(
-      parseBuildUrl(
-        "https://observability.browserstack.com/projects/A/builds/B/1",
-      ),
-    ).not.toHaveProperty("automateProduct");
   });
 
-  it("refuses to guess a build number among several runs of the same name", async () => {
-    routeTra({
-      automateBuilds: {
-        automate: [
-          automateBuild("E2E Tests", "a".repeat(40)),
-          automateBuild("E2E Tests", "b".repeat(40)),
-        ],
-      },
-    });
+  it("resolves it to the TRA build with that number", async () => {
+    routeTra({ projects: [PROJECT], builds: JUNIT_ROWS });
 
-    await expect(resolveBuild({ buildUrl: link(182) }, config)).rejects.toThrow(
-      /2 recent automate builds are named "E2E Tests"[\s\S]*aaaa/,
-    );
-    const urls = (apiClient.get as Mock).mock.calls.map(
-      ([req]) => req.url as string,
-    );
-    expect(urls.some((u) => u.includes("/ext/v1/"))).toBe(false);
-    expect(urls.some((u) => u.includes("app-automate"))).toBe(false);
-  });
-
-  it("returns the only recent run, flagging the number to check", async () => {
-    routeTra({
-      automateBuilds: { automate: [automateBuild("E2E Tests", HASHED)] },
-    });
-    (resolveTraBuildIdFromHashed as Mock).mockRejectedValue(
-      new TraBuildNotFoundError("has no TRA build."),
-    );
-
-    const result = await resolveBuild({ buildUrl: link(182) }, config);
-    expect(result.buildId).toBe(HASHED);
-    expect(result.note).toContain("check it is #182");
-  });
-
-  it("says so when no recent Automate build has the name", async () => {
-    routeTra({ automateBuilds: { automate: [] } });
-
-    await expect(resolveBuild({ buildUrl: link(3) }, config)).rejects.toThrow(
-      /None of the latest automate builds is named "E2E Tests"/,
-    );
+    const result = await resolveBuild({ buildUrl: link }, config);
+    expect(result.buildId).toBe("e9tdlmcerew3j7bbob4ghuvfuu6aztjrm7pm0rkl");
   });
 });

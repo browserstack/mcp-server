@@ -25,7 +25,6 @@ const normalise = (value: string) => value.trim().toLowerCase();
 export async function findAutomateBuildsByName(
   buildName: string,
   config: BrowserStackConfig,
-  products: SessionType[] = [SessionType.Automate, SessionType.AppAutomate],
 ): Promise<AutomateBuildMatch[]> {
   const wanted = normalise(buildName);
   const headers = {
@@ -64,5 +63,6 @@ export async function findAutomateBuildsByName(
     return matches;
   };
 
+  const products = [SessionType.Automate, SessionType.AppAutomate];
   return (await Promise.all(products.map(searchProduct))).flat();
 }

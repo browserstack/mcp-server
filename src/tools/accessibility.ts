@@ -3,16 +3,18 @@ import { z } from "zod";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import {
   AccessibilityScanner,
+  ScanRefusedError,
   ScanTimeoutError,
+  cleanScanName,
+  samePage as sameScanPage,
   type ScanFailureDetails,
   type ScanSettings,
 } from "./accessiblity-utils/scanner.js";
 import {
   AccessibilityReportFetcher,
-  EXPORT_WAIT_MS,
   ExportPendingError,
+  ScanNotInListError,
   ScanRunNotFoundError,
-  scanRunLink,
   type IssueSource,
 } from "./accessiblity-utils/report-fetcher.js";
 import {
@@ -28,30 +30,81 @@ import {
 } from "./accessiblity-utils/auth-config.js";
 import { trackMCP } from "../lib/instrumentation.js";
 import {
-  compareIssues,
-  loadMainIssues,
   parseAccessibilityReportFromCSV,
+  samePage,
   type IssueSummary as WebIssueSummary,
+  type RunIssue,
 } from "./accessiblity-utils/report-parser.js";
 import { wrapUntrusted } from "../lib/untrusted-content.js";
+import { isLocalURL } from "../lib/local.js";
 import { queryAccessibilityRAG } from "./accessiblity-utils/accessibility-rag.js";
-import { getBrowserStackAuth } from "../lib/get-auth.js";
 import { BrowserStackConfig } from "../lib/types.js";
 import { elicitCredentialsIfSupported } from "../lib/elicit-credentials.js";
 import logger from "../logger.js";
 import { NEEDS_A11Y_CONFIG_ID, NEEDS_A11Y_SCAN_ID } from "./tool-handoff.js";
+import {
+  createErrorResponse,
+  createSuccessResponse,
+  describeSource,
+  exportProgress,
+  formatDuration,
+  initializeScanner,
+  notifyScanProgress,
+  onOff,
+  PROCESSING_STATUSES,
+  scanDashboardNote,
+  setupAuth,
+  sourceArgs,
+  wcagName,
+  WCAG_VERSIONS,
+  type ScanProgressContext,
+} from "./accessiblity-utils/shared.js";
+import {
+  accountRefusal,
+  asSentence,
+} from "./accessiblity-utils/error-messages.js";
+import {
+  EXPERT_QUERY_MAX_CHARS,
+  fitExpertQuery,
+} from "./accessiblity-utils/expert-query.js";
+import {
+  buildIdNotFound,
+  errorPagesNote,
+  failedRunResponse,
+  failedScanRunResponse,
+  failureReasons,
+  FINALIZING_STATUSES,
+  noReportYetResponse,
+  pageReasons,
+  stillFinalizingResponse,
+} from "./accessiblity-utils/report-answers.js";
+import {
+  NO_BUILT_IN_COMPARE,
+  notReadyToCompare,
+  previousReportToCompare,
+  readBothToCompare,
+  scanRunToCompare,
+} from "./accessiblity-utils/compare-with.js";
+import {
+  comparedList,
+  diffExports,
+  pagesNotLoadedNote,
+} from "./accessiblity-utils/compare-lists.js";
+import { compareWebBuilds } from "./accessiblity-utils/web-build-compare.js";
+import {
+  compareHint,
+  localRerunNote,
+  localScanNotRerunNote,
+  otherPageNote,
+  rescanHint,
+  savedSettingDifferences,
+  uncheckedSettings,
+  unusedLoginAndTunnel,
+  withNotes,
+  type ScanArgs,
+} from "./accessiblity-utils/scan-rerun.js";
 
-interface AuthCredentials {
-  username: string;
-  password: string;
-}
-
-interface ScanProgressContext {
-  sendNotification: (notification: any) => Promise<void>;
-  _meta?: {
-    progressToken?: string | number;
-  };
-}
+export { EXPERT_QUERY_MAX_CHARS };
 
 interface FormAuthArgs {
   name: string;
@@ -74,37 +127,6 @@ interface BasicAuthArgs {
 
 type AuthConfigArgs = FormAuthArgs | BasicAuthArgs;
 
-function setupAuth(config: BrowserStackConfig): AuthCredentials {
-  const authString = getBrowserStackAuth(config);
-  const [username, password] = authString.split(":");
-  return { username, password };
-}
-
-function createErrorResponse(message: string): CallToolResult {
-  return {
-    content: [
-      {
-        type: "text",
-        text: message,
-      },
-    ],
-    isError: true,
-  };
-}
-
-/**
- * Each message ends with a newline: clients that join text blocks with no separator
- * would otherwise run a link at the end of one block into the next block's first word.
- */
-function createSuccessResponse(messages: string[]): CallToolResult {
-  return {
-    content: messages.map((text) => ({
-      type: "text" as const,
-      text: `${text}\n`,
-    })),
-  };
-}
-
 function handleMCPError(
   toolName: string,
   server: McpServer,
@@ -112,35 +134,17 @@ function handleMCPError(
   error: unknown,
 ): CallToolResult {
   trackMCP(toolName, server.server.getClientVersion()!, error, config);
-  const errorMessage = error instanceof Error ? error.message : "Unknown error";
+  const errorMessage =
+    (error instanceof Error && error.message.trim()) || "Unknown error";
+  const refusal = accountRefusal(errorMessage);
+  if (refusal) {
+    return createErrorResponse(
+      `${refusal}\nBrowserStack said: ${errorMessage}`,
+    );
+  }
   return createErrorResponse(
-    `Failed to ${toolName.replace(/([A-Z])/g, " $1").toLowerCase()}: ${errorMessage}. Please open an issue on GitHub if the problem persists`,
+    `Failed to ${toolName.replace(/([A-Z])/g, " $1").toLowerCase()}: ${asSentence(errorMessage)} Please open an issue on GitHub if the problem persists`,
   );
-}
-
-async function notifyScanProgress(
-  context: ScanProgressContext,
-  message: string,
-  progress = 0,
-): Promise<void> {
-  await context.sendNotification({
-    method: "notifications/progress",
-    params: {
-      progressToken: context._meta?.progressToken?.toString() ?? "NOT_FOUND",
-      message,
-      progress,
-      total: 100,
-    },
-  });
-}
-
-async function initializeScanner(
-  config: BrowserStackConfig,
-): Promise<AccessibilityScanner> {
-  const scanner = new AccessibilityScanner();
-  const auth = setupAuth(config);
-  scanner.setAuth(auth);
-  return scanner;
 }
 
 async function initializeReportFetcher(
@@ -164,7 +168,19 @@ async function executeAccessibilityRAG(
       undefined,
       config,
     );
-    return await queryAccessibilityRAG(args.query, config);
+    const { query, shortened, kept } = fitExpertQuery(args.query);
+    const answer = await queryAccessibilityRAG(query, config);
+    if (!shortened) return answer;
+    return {
+      ...answer,
+      content: [
+        {
+          type: "text",
+          text: `The question was ${args.query.length} characters; the knowledge base takes at most ${EXPERT_QUERY_MAX_CHARS}, so ${query.length} were sent: its ${kept ?? "opening"}. If the answer misses the point, ask again more briefly.`,
+        },
+        ...(answer.content ?? []),
+      ],
+    };
   } catch (error) {
     return handleMCPError("accessibilityExpert", server, config, error);
   }
@@ -210,44 +226,6 @@ function issueSourceFrom(args: FetchIssuesArgs): RequestedSource | string {
     return "A Website Scanner run needs both scanId and scanRunId.";
   }
   return { kind: "scan", scanId: args.scanId, scanRunId: args.scanRunId };
-}
-
-/** The arguments that name the same source again, for the next-page hint. */
-function sourceArgs(source: IssueSource): string {
-  switch (source.kind) {
-    case "scan":
-      return `scanId: "${source.scanId}", scanRunId: "${source.scanRunId}"`;
-    // A run read by its build id is named by its link again, or, given as a build id, by that.
-    case "scanBuild":
-      return source.scanName !== undefined
-        ? `reportUrl: "${scanRunLink(source)}"`
-        : `buildId: "${source.thBuildId}"`;
-    case "build":
-    case "appBuild":
-      return `buildId: "${source.buildId}"`;
-    case "workflow":
-      return `workflowReportId: "${source.reportId}"`;
-    case "appReport":
-      return `appReportId: "${source.reportId}"`;
-  }
-}
-
-/** What a dashboard link resolved to, in words. */
-function describeSource(source: IssueSource): string {
-  switch (source.kind) {
-    case "scan":
-      return `Website Scanner scan ${source.scanId}, run ${source.scanRunId}`;
-    case "scanBuild":
-      return `Website Scanner run with build id ${source.thBuildId}`;
-    case "build":
-      return `Automated Tests build ${source.buildId}`;
-    case "workflow":
-      return `Workflow Analyzer report ${source.reportId}`;
-    case "appBuild":
-      return `App Accessibility build ${source.buildId}`;
-    case "appReport":
-      return `App Accessibility manual report ${source.reportId}`;
-  }
 }
 
 async function executeFetchAccessibilityIssues(
@@ -311,114 +289,43 @@ function excludedIssuesNote(
   return notes;
 }
 
-/** How often, and for how long, a first read waits on a report that is still processing. */
-export const REPORT_STATUS_POLL_MS = 10_000;
-export const REPORT_STATUS_WAIT_MS = 5 * 60 * 1000;
-
-/** Statuses during which a report's issues are still being added (`rule_processing`: an app build's). */
-const PROCESSING_STATUSES = new Set([
-  "queued",
-  "running",
-  "processing",
-  "finalizing",
-  "rule_processing",
-  "in_progress",
-]);
-
-/**
- * Of those, the ones worth waiting on: the processing after the run (a web scan's advanced
- * issues, an app build's rules), which ends within minutes. A report whose scan or tests are still running is read as it is,
- * with a note, since that can last as long as the suite does.
- */
-const WAIT_STATUSES = new Set(["finalizing", "rule_processing"]);
-
 interface ProcessingState {
-  /** The status when the issues were read; undefined when it could not be read. */
+  /** The report's status when its issues were read; undefined when it could not be read. */
   status?: string;
-  /** The status first seen, before any waiting. */
-  firstStatus?: string;
-  waitedMs: number;
+}
+
+/** What the answer says about a report read while it is still processing, if anything. */
+function processingNote({ status }: ProcessingState): string[] {
+  if (!status || !PROCESSING_STATUSES.has(status)) return [];
+  const meaning =
+    status === "finalizing"
+      ? ", which on an advanced scan means advanced issue processing"
+      : "";
+  return [
+    `⚠️ This report is still processing (status: ${status}${meaning}). The issues below are only those found so far: more will be added and the total will grow. Call fetchAccessibilityIssues again in a few minutes for the complete list.`,
+  ];
 }
 
 /**
- * Where a report is in its processing before its issues are read. Issues keep being added
- * until it completes; an advanced scan adds its advanced-rule issues while "finalizing", for
- * minutes after the tests end, so a first read waits for that, reporting progress, for up to
- * REPORT_STATUS_WAIT_MS. A run still in progress is not waited on (it can take as long as
- * the suite), nor is a later page, nor a status that cannot be read.
+ * The last line: how to get the next page, or that there is none. With pages that were not
+ * scanned, the issues are all there are of the pages that were, not of the run's pages.
  */
-async function waitForProcessing(
-  reportFetcher: AccessibilityReportFetcher,
-  source: IssueSource,
-  wait: boolean,
-  context: ScanProgressContext | undefined,
-): Promise<ProcessingState> {
-  const started = Date.now();
-  const firstStatus = await reportFetcher.reportStatus(source);
-  let status = firstStatus;
-  while (
-    wait &&
-    status &&
-    WAIT_STATUSES.has(status) &&
-    Date.now() - started < REPORT_STATUS_WAIT_MS
-  ) {
-    const waited = Date.now() - started;
-    if (context) {
-      await notifyScanProgress(
-        context,
-        `The report is still ${status}; waiting for it to complete (${formatDuration(waited)} of up to ${formatDuration(REPORT_STATUS_WAIT_MS)}).`,
-        Math.min(99, Math.round((waited / REPORT_STATUS_WAIT_MS) * 100)),
-      );
-    }
-    await new Promise((resolve) => setTimeout(resolve, REPORT_STATUS_POLL_MS));
-    status = await reportFetcher.reportStatus(source);
-  }
-  return { status, firstStatus, waitedMs: Date.now() - started };
-}
-
-function formatDuration(ms: number): string {
-  const seconds = Math.round(ms / 1000);
-  return seconds < 60
-    ? `${seconds}s`
-    : `${Math.floor(seconds / 60)}m ${String(seconds % 60).padStart(2, "0")}s`;
-}
-
-/** What the answer says about the report's processing, if anything. */
-function processingNote({
-  status,
-  firstStatus,
-  waitedMs,
-}: ProcessingState): string[] {
-  if (status && PROCESSING_STATUSES.has(status)) {
-    const meaning =
-      status === "finalizing"
-        ? ", which on an advanced scan means advanced issue processing"
-        : "";
-    return [
-      `⚠️ This report is still processing (status: ${status}${meaning}). The issues below are only those found so far: more will be added and the total will grow. Call fetchAccessibilityIssues again in a few minutes for the complete list.`,
-    ];
-  }
-  if (firstStatus && PROCESSING_STATUSES.has(firstStatus)) {
-    return [
-      `The report was still processing (status: ${firstStatus}); waited ${formatDuration(waitedMs)} for it to complete before reading its issues.`,
-    ];
-  }
-  return [];
-}
-
-/** The last line: how to get the next page, or that there is none. */
 function closingMessage(
   next_page: number | null,
   remaining: number,
   source: IssueSource,
   stillProcessing: boolean,
   extraArgs = "",
+  pagesSkipped = false,
 ): string {
   if (next_page !== null) {
     return `${remaining} more issues available. Use fetchAccessibilityIssues with ${sourceArgs(source)}${extraArgs} and cursor: ${next_page} to get the next batch.`;
   }
   if (stillProcessing) {
     return `All issues found so far retrieved; the report is still processing.`;
+  }
+  if (pagesSkipped) {
+    return `All issues retrieved for the pages that were scanned.`;
   }
   return `✅ All issues retrieved.`;
 }
@@ -653,19 +560,22 @@ function issueList(
   return `${label} (${rows.length})${range}: ${wrapUntrusted("accessibility scan results", JSON.stringify(shown, null, 2))}`;
 }
 
-/** The build to compare with, or why there is none. */
+/** The build to compare with, or the answer to give when there is none. */
 async function baselineAppBuild(
   reportFetcher: AccessibilityReportFetcher,
   buildId: string,
   compareWith: string,
 ): Promise<
-  { buildId: string; sameName?: boolean; searchedAll?: boolean } | string
+  | { buildId: string; sameName?: boolean; searchedAll?: boolean }
+  | CallToolResult
 > {
   let baseline: { buildId: string; sameName?: boolean; searchedAll?: boolean };
   if (compareWith === "previous") {
     const previous = await reportFetcher.previousAppBuild(buildId);
     if (!previous) {
-      return "This is its project's first build, so there is nothing earlier to compare it with. Pass an earlier build's id or link as compareWith instead.";
+      return createErrorResponse(
+        "This is its project's first build, so there is nothing earlier to compare it with. Pass an earlier build's id or link as compareWith instead.",
+      );
     }
     baseline = {
       buildId: previous.buildId,
@@ -678,12 +588,17 @@ async function baselineAppBuild(
       : { kind: "build", buildId: compareWith };
     const source = await reportFetcher.resolveBuild(named);
     if (source.kind !== "appBuild") {
-      return `compareWith names ${describeSource(source)}, which is not an App Accessibility build. Pass an earlier app build's id or link, or "previous".`;
+      return readBothToCompare(
+        `compareWith names ${describeSource(source)}, which is not an App Accessibility build; an app build is compared here only with another ("previous", or an earlier build's id or link).`,
+        true,
+      );
     }
     baseline = { buildId: source.buildId };
   }
   if (baseline.buildId === buildId) {
-    return `compareWith names this build itself. Pass an earlier build's id or link, or "previous".`;
+    return createErrorResponse(
+      `compareWith names this build itself. Pass an earlier build's id or link, or "previous".`,
+    );
   }
   return baseline;
 }
@@ -692,7 +607,8 @@ async function baselineAppBuild(
  * What changed between an earlier app build and this one: issues new in this build,
  * issues the earlier one had that this one does not, and how many it kept. An issue on a
  * screen this build did not reach also reads as resolved, so a build that scanned other
- * screens or ran other tests is called out.
+ * screens or ran other tests is called out. A build still running its tests or rules is not
+ * compared.
  */
 async function compareAppBuilds(
   reportFetcher: AccessibilityReportFetcher,
@@ -700,18 +616,27 @@ async function compareAppBuilds(
   compareWith: string,
   cursor: number,
   preface: string[],
-  processing: ProcessingState,
 ): Promise<CallToolResult> {
   const baseline = await baselineAppBuild(
     reportFetcher,
     source.buildId,
     compareWith,
   );
-  if (typeof baseline === "string") return createErrorResponse(baseline);
+  if ("content" in baseline) return baseline;
   const [named, current] = await Promise.all([
     reportFetcher.appBuildIssues(baseline.buildId),
     reportFetcher.appBuildIssues(source.buildId),
   ]);
+  const unfinished = [current, named].find((b) =>
+    PROCESSING_STATUSES.has(b.status),
+  );
+  if (unfinished) {
+    return notReadyToCompare(
+      `App Accessibility build #${unfinished.build_number} (${unfinished.buildId})`,
+      unfinished.status,
+      preface,
+    );
+  }
   // Issues on screens past the read limit would read as resolved or new.
   const partial = [current, named].find((b) => b.screens_read !== undefined);
   if (partial) {
@@ -782,7 +707,6 @@ async function compareAppBuilds(
   );
   return createSuccessResponse([
     ...preface,
-    ...processingNote(processing),
     ...(reversed
       ? [
           "compareWith names a build newer than this one, so the comparison runs from this build (the earlier) to that one (the later).",
@@ -927,20 +851,6 @@ async function appReportMessages(
   ];
 }
 
-/** Progress while a report's CSV export is generated, so clients see the call is alive. */
-function exportProgress(
-  context: ScanProgressContext | undefined,
-): (waitedMs: number) => Promise<void> {
-  return async (waitedMs) => {
-    if (!context) return;
-    await notifyScanProgress(
-      context,
-      `Generating the report's CSV export (large reports take longer): ${formatDuration(waitedMs)} so far.`,
-      Math.min(99, Math.round((waitedMs / EXPORT_WAIT_MS) * 100)),
-    );
-  };
-}
-
 /** What to say of an export still being generated: how to continue it, not an error. */
 function exportPendingMessages(
   source: IssueSource,
@@ -967,18 +877,53 @@ async function fetchAccessibilityIssues(
       ? await reportFetcher.sourceFromReportUrl(requested.reportUrl)
       : requested;
   // A build id names a web build, a mobile app build, or a Website Scanner run (a scanner
-  // link's thBuildId); the APIs tell which.
+  // link's thBuildId); the APIs tell which. An Automate or App Automate build's own id
+  // (hashed_id) resolves to the accessibility build its sessions ran in.
   let source = await reportFetcher.resolveBuild(named, { orScanRun: true });
-  // Comparing runs needs the scan's ids, which only the scan list maps a build id to.
-  if (compareWith !== undefined && source.kind === "scanBuild") {
-    source = await reportFetcher.findScanRun(source);
-  }
-  // Two scan runs are compared through their CSV exports; two app builds, here below.
-  if (compareWith !== undefined && source.kind === "scan") {
-    return compareScanRuns(source, compareWith, config, context);
+  const mapped =
+    named.kind === "build" &&
+    (source.kind === "build" || source.kind === "appBuild") &&
+    source.buildId !== named.buildId
+      ? [
+          `Build id ${named.buildId} is ${source.kind === "build" ? "an Automate" : "an App Automate"} build's own id (hashed_id); its accessibility results are in ${describeSource(source)}.`,
+        ]
+      : [];
+  // Two scan runs are compared through their CSV exports; two web builds through the compare
+  // API or their exports; two app builds, here below.
+  if (compareWith !== undefined) {
+    // Comparing runs needs the scan's ids, which only the scan list maps a build id to.
+    if (source.kind === "scanBuild") {
+      source = await reportFetcher.findScanRun(source);
+    }
+    if (source.kind === "scan") {
+      return compareScanRuns(source, compareWith, config, context);
+    }
+    if (source.kind === "build") {
+      return compareWebBuilds(
+        reportFetcher,
+        source,
+        compareWith,
+        requested.kind === "link"
+          ? [`Resolved the report link to ${describeSource(source)}.`]
+          : mapped,
+        context,
+      );
+    }
+    if (
+      (source.kind === "workflow" || source.kind === "appReport") &&
+      compareWith === "previous"
+    ) {
+      return previousReportToCompare(reportFetcher, source);
+    }
+    if (source.kind !== "appBuild") {
+      return readBothToCompare(
+        NO_BUILT_IN_COMPARE[source.kind],
+        source.kind === "appReport",
+      );
+    }
   }
   const pageArg = pageUrl ? `, pageUrl: "${pageUrl}"` : "";
-  const notes: string[] = [];
+  const notes: string[] = [...mapped];
   // A run named by its build id is read by it, which works however old the scan is. If the
   // API does not know it by that id, the scan list is searched as before.
   let reportLink: string | undefined;
@@ -1005,19 +950,20 @@ async function fetchAccessibilityIssues(
         );
       }
       if (!(error instanceof ScanRunNotFoundError)) throw error;
-      if (source.scanName === undefined) {
-        throw new Error(
-          error.routeMissing
-            ? `No Automated Tests (web) or App Accessibility build with id "${source.thBuildId}". If it is a Website Scanner run's build id, this API cannot read a run by it yet: pass the scan's report link as reportUrl instead`
-            : `No Automated Tests (web), App Accessibility or Website Scanner build with id "${source.thBuildId}". Pass the id the BrowserStack SDK printed as "testhub id" at the end of the run (40 lowercase letters and digits), or the report's dashboard link as reportUrl`,
-        );
-      }
+      // A bare build id (no link) that no build API knows: where the API reads runs by build
+      // id, it knows no such run; where it cannot yet, the scan list is searched, as for a link.
+      const bare = source.scanName === undefined;
+      const thBuildId = source.thBuildId;
+      if (bare && !error.routeMissing) return buildIdNotFound(thBuildId);
       const why = error.routeMissing
         ? "This API does not read a run by its build id yet"
         : "The API could not read this run by the link's build id (not found, or not visible to this account)";
       try {
         source = await reportFetcher.findScanRun(source);
       } catch (searchError) {
+        if (bare && searchError instanceof ScanNotInListError) {
+          return buildIdNotFound(thBuildId, searchError);
+        }
         throw new Error(
           `${why}, and searching the scan list found nothing either: ${
             searchError instanceof Error
@@ -1026,30 +972,21 @@ async function fetchAccessibilityIssues(
           }`,
         );
       }
+      if (bare) {
+        notes.push(
+          `Build id ${thBuildId} is the build id of ${describeSource(source)}.`,
+        );
+      }
       notes.push(`${why}, so it was found in the scan list instead.`);
     }
   }
-  if (compareWith !== undefined && source.kind !== "appBuild") {
-    return createErrorResponse(
-      `compareWith compares Website Scanner runs and App Accessibility builds; ${describeSource(source)} is neither.`,
-    );
-  }
-  const processing = await waitForProcessing(
-    reportFetcher,
-    source,
-    cursor === 0,
-    context,
-  );
-  const stillProcessing =
-    processing.status !== undefined &&
-    PROCESSING_STATUSES.has(processing.status);
   const preface = [
     ...(requested.kind === "link"
       ? [`Resolved the report link to ${describeSource(source)}.`]
       : []),
     ...notes,
   ];
-
+  // Two app builds are compared once both have finished; the comparison reads their statuses.
   if (source.kind === "appBuild" && compareWith !== undefined) {
     return compareAppBuilds(
       reportFetcher,
@@ -1057,9 +994,38 @@ async function fetchAccessibilityIssues(
       compareWith,
       cursor,
       preface,
-      processing,
     );
   }
+  const processing: ProcessingState = {
+    status: await reportFetcher.reportStatus(source),
+  };
+  const stillProcessing =
+    processing.status !== undefined &&
+    PROCESSING_STATUSES.has(processing.status);
+
+  // A failed run has nothing to read, and its export said so badly: an empty report for a
+  // scan ("0 issues ✅"), "Failed to fetch report: null" for a build. Neither is exported.
+  // A cancelled scan run leaves the same empty report.
+  if (
+    processing.status === "failed" ||
+    (source.kind === "scan" && processing.status === "cancelled")
+  ) {
+    const failed = await failedRunResponse(
+      source,
+      processing.status,
+      config,
+      preface,
+    );
+    if (failed) return failed;
+  }
+  if (
+    cursor === 0 &&
+    processing.status &&
+    FINALIZING_STATUSES.has(processing.status)
+  ) {
+    return stillFinalizingResponse(source, processing.status, preface, pageArg);
+  }
+
   if (source.kind === "appBuild") {
     return createSuccessResponse(
       await appBuildMessages(
@@ -1085,6 +1051,15 @@ async function fetchAccessibilityIssues(
     );
   }
 
+  // The pages a completed run could not scan are simply absent from its report; its scan
+  // logs say which, read alongside the export. A run still going has not logged them all.
+  const unscanned =
+    source.kind === "scan" && processing.status === "completed"
+      ? (await initializeScanner(config)).unscannedPages(
+          source.scanId,
+          source.scanRunId,
+        )
+      : Promise.resolve([]);
   try {
     reportLink ??= await reportFetcher.getReportLink(source, {
       exportTaskId,
@@ -1095,6 +1070,16 @@ async function fetchAccessibilityIssues(
     if (error instanceof ExportPendingError) {
       return createSuccessResponse(
         exportPendingMessages(source, error, pageArg),
+      );
+    }
+    // A run or build still going may have no report to export yet: the export fails, which
+    // its words ("Failed to fetch report: null") make read like a fault.
+    if (stillProcessing) {
+      return noReportYetResponse(
+        reportFetcher,
+        source,
+        processing.status ?? "processing",
+        preface,
       );
     }
     throw error;
@@ -1112,15 +1097,37 @@ async function fetchAccessibilityIssues(
     unlinked_duplicates,
     hidden_issues,
     page,
+    error_pages = [],
   } = await parseAccessibilityReportFromCSV(reportLink, {
     nextPage: cursor,
     pageUrl,
   });
+  // A redirected page was scanned, where it redirected to; a page that showed an error page
+  // is said once, with the error page's issues.
+  const errorPageUrls = new Set(error_pages.map((p) => samePage(p.url)));
+  const notScanned = (await unscanned).filter(
+    (p) => p.status !== "redirect" && !errorPageUrls.has(samePage(p.pageUrl)),
+  );
 
   return createSuccessResponse([
     ...preface,
     ...processingNote(processing),
-    ...(page ? pageNote(page) : []),
+    // What the run did not check, said on the first page with the whole report's counts.
+    ...(cursor
+      ? []
+      : [
+          ...errorPagesNote(
+            error_pages,
+            source.kind === "build" ? "run the tests again" : "scan again",
+          ),
+          ...(notScanned.length
+            ? [
+                `⚠️ ${pageReasons(notScanned, ["was not scanned, so its issues are not in this report", "were not scanned, so their issues are not in this report"])}`,
+              ]
+            : []),
+        ]),
+    // A page that did not load has no issues of its own to count.
+    ...(page && error_pages.length === 0 ? pageNote(page) : []),
     `Retrieved ${page_length} accessibility issues (Total: ${total_issues})`,
     // The whole report's counts, said on its first page.
     ...(cursor ? [] : webSummaryNote(summary, total_issues)),
@@ -1128,7 +1135,14 @@ async function fetchAccessibilityIssues(
     fullReportLine(reportLink),
     WEB_ISSUES_NOTE,
     `Issues: ${wrapUntrusted("accessibility scan results", JSON.stringify({ issues: records, rules }))}`,
-    closingMessage(next_page, remaining, source, stillProcessing, pageArg),
+    closingMessage(
+      next_page,
+      remaining,
+      source,
+      stillProcessing,
+      pageArg,
+      error_pages.length > 0 || notScanned.length > 0,
+    ),
   ]);
 }
 
@@ -1157,65 +1171,11 @@ function pageNote(page: {
 }
 
 /**
- * The pages of the newer run that did not load (an error page was scanned in their place),
- * or whose earlier issues all gave way to new ones. Neither the scan nor the dashboard says
- * so, and their real issues would otherwise read as fixed.
- */
-function pagesNotLoadedNote(
-  diff: {
-    not_checked?: unknown[];
-    failed_pages?: string[];
-    not_checked_earlier?: unknown[];
-    failed_pages_earlier?: string[];
-    changed_pages?: string[];
-  },
-  runId: string,
-  baseRunId: string,
-): string[] {
-  const pages = (urls: string[]) =>
-    wrapUntrusted("report page addresses", JSON.stringify(urls));
-  // Worded for one page or several, one issue or several.
-  const one = (count: number, singular: string, plural: string) =>
-    count === 1 ? singular : plural;
-  const they = (n: number) => one(n, "it", "they");
-  const didNotLoad = (urls: string[], run: string) => {
-    const n = urls.length;
-    return `⚠️ ${one(n, "1 page", `${n} pages`)} did not load in run ${run}: ${one(n, "an error page was", "error pages were")} scanned in ${one(n, "its", "their")} place. The ${one(n, "error page's", "error pages'")} issues are not counted as`;
-  };
-  // A page that failed in both runs has no issues of its own in either.
-  const foundThere = (count: number, run: string, notCountedAs: string) =>
-    count > 0
-      ? `, and the ${one(count, "1 issue", `${count} issues`)} found there in run ${run} ${one(count, "is", "are")} not counted as ${notCountedAs}`
-      : "";
-  const failed = diff.failed_pages ?? [];
-  const failedEarlier = diff.failed_pages_earlier ?? [];
-  const changed = diff.changed_pages ?? [];
-  return [
-    ...(failed.length > 0
-      ? [
-          `${didNotLoad(failed, runId)} new${foundThere(diff.not_checked?.length ?? 0, baseRunId, "resolved (listed as not checked)")}. Scan again once ${they(failed.length)} ${one(failed.length, "loads", "load")}. ${pages(failed)}`,
-        ]
-      : []),
-    ...(failedEarlier.length > 0
-      ? [
-          `${didNotLoad(failedEarlier, baseRunId)} resolved${foundThere(diff.not_checked_earlier?.length ?? 0, runId, "new (listed as not checked against the earlier run)")}. Compare with a run in which ${they(failedEarlier.length)} loaded. ${pages(failedEarlier)}`,
-        ]
-      : []),
-    ...(changed.length > 0
-      ? [
-          `⚠️ None of the earlier issues on ${one(changed.length, "1 page remain, and it has", `${changed.length} pages remain, and they have`)} new ones: ${they(changed.length)} may not have loaded, or loaded something else, in run ${runId}. Check ${one(changed.length, "it", "them")} before calling those issues fixed. ${pages(changed)}`,
-        ]
-      : []),
-  ];
-}
-
-/** At most this many new and resolved issues are listed in a comparison. */
-const COMPARE_LIST_LIMIT = 50;
-
-/**
- * A Website Scanner run against an earlier run of the same scan: the run before it
- * ("previous") or a given scanRunId. Issues are matched by rule, element and page; against
- * the previous run, the dashboard's own counts (the run's changesSinceLastRun) are given too.
+ * A Website Scanner run against another run of the same scan: the run before it
+ * ("previous"), or one named by its scanRunId, report link or build id. The older run is
+ * "before", whichever was passed as compareWith. Issues are matched by rule, element and
+ * page; against the run just before, the dashboard's own counts (the run's
+ * changesSinceLastRun) are given too.
  */
 async function compareScanRuns(
   requested: RequestedSource,
@@ -1236,62 +1196,130 @@ async function compareScanRuns(
       'compareWith compares Website Scanner runs: pass the newer run (scanId and scanRunId, or its report link) and compareWith: "previous" or the older run\'s scanRunId.',
     );
   }
-  const previous = await reportFetcher.previousScanRun(
-    source.scanId,
-    source.scanRunId,
-  );
-  const baseRunId =
-    compareWith === "previous" ? previous && String(previous.id) : compareWith;
-  if (!baseRunId) {
-    return createErrorResponse(
-      `Run ${source.scanRunId} is the first run of scan ${source.scanId}; there is no earlier run to compare it with.`,
+  const preface =
+    requested.kind === "link"
+      ? [`Resolved the report link to ${describeSource(source)}.`]
+      : [];
+
+  let after = source.scanRunId;
+  let before: string;
+  let beforeDate: string | undefined;
+  let againstPrevious: boolean;
+  let reversed = false;
+  if (compareWith === "previous") {
+    const previous = await reportFetcher.previousScanRun(
+      source.scanId,
+      source.scanRunId,
+    );
+    if (!previous) {
+      return createErrorResponse(
+        `Run ${source.scanRunId} is the first run of scan ${source.scanId}; there is no earlier run to compare it with.`,
+      );
+    }
+    before = String(previous.id);
+    beforeDate = previous.scanDate;
+    againstPrevious = true;
+  } else {
+    const other = await scanRunToCompare(reportFetcher, source, compareWith);
+    if ("content" in other) return other;
+    if (other.scanRunId === source.scanRunId) {
+      return createErrorResponse(
+        `compareWith names this run itself. Pass another run's scanRunId or link, or "previous".`,
+      );
+    }
+    const { runs, complete } = await reportFetcher.scanRuns(source.scanId);
+    const at = (id: string) => runs.findIndex((run) => String(run.id) === id);
+    // A run id the scan's whole run list does not hold is another scan's run: the API would
+    // refuse it with "Scan logs not found", which reads like a fault.
+    if (complete && at(other.scanRunId) < 0) {
+      return readBothToCompare(
+        `Run ${other.scanRunId} is not a run of scan ${source.scanId}, so it is another scan's run: only runs of one scan are compared here.`,
+        false,
+        [
+          sourceArgs(source),
+          `scanRunId: "${other.scanRunId}" and its own scan's scanId`,
+        ],
+      );
+    }
+    // The older run is "before": by the run list's order, or by id when either is not in it.
+    const [selfAt, otherAt] = [at(source.scanRunId), at(other.scanRunId)];
+    reversed =
+      selfAt >= 0 && otherAt >= 0
+        ? otherAt < selfAt
+        : Number(other.scanRunId) > Number(source.scanRunId);
+    [after, before] = reversed
+      ? [other.scanRunId, source.scanRunId]
+      : [source.scanRunId, other.scanRunId];
+    againstPrevious = at(after) >= 0 && at(before) === at(after) + 1;
+    beforeDate = runs[at(before)]?.scanDate;
+  }
+  const run = (scanRunId: string): IssueSource => ({ ...source, scanRunId });
+
+  // A failed or cancelled run has no results and exports an empty report: compared with it,
+  // every issue of the other run would read as resolved (or new).
+  const [status, beforeStatus] = await Promise.all([
+    reportFetcher.reportStatus(run(after)),
+    reportFetcher.reportStatus(run(before)),
+  ]);
+  const noResults = (runStatus: string | undefined) =>
+    runStatus === "failed" || runStatus === "cancelled";
+  if (noResults(status) || noResults(beforeStatus)) {
+    const [failedRun, otherRun, failedStatus] = noResults(status)
+      ? [after, before, status]
+      : [before, after, beforeStatus];
+    return failedScanRunResponse(
+      config,
+      source.scanId,
+      failedRun,
+      preface,
+      () =>
+        `compared with it, every issue of run ${otherRun} would read as ${failedRun === after ? "resolved" : "new"}, so the runs were not compared.`,
+      "Compare two runs that completed, or fix the cause and scan again.",
+      failedStatus === "cancelled" ? "cancelled" : "failed",
     );
   }
-  const base: IssueSource = { ...source, scanRunId: baseRunId };
-  const againstPrevious =
-    previous !== undefined && String(previous.id) === baseRunId;
-
-  let links: [string, string];
-  try {
-    links = await Promise.all([
-      reportFetcher.getReportLink(source, { onWait: exportProgress(context) }),
-      reportFetcher.getReportLink(base, {}),
-    ]);
-  } catch (error) {
-    if (error instanceof ExportPendingError) {
-      return createSuccessResponse([
-        `The CSV exports of these runs are still being generated (waited ${formatDuration(error.waitedMs)}). Call fetchAccessibilityIssues again with the same arguments in about a minute; the exports continue where they are.`,
-      ]);
+  for (const [id, runStatus] of [
+    [after, status],
+    [before, beforeStatus],
+  ] as const) {
+    if (runStatus && PROCESSING_STATUSES.has(runStatus)) {
+      return notReadyToCompare(
+        `Run ${id} of Website Scanner scan ${source.scanId}`,
+        runStatus,
+        preface,
+      );
     }
-    throw error;
   }
-  const [after, before] = await Promise.all(links.map(loadMainIssues));
-  const diff = compareIssues(before, after);
+
+  const read = await diffExports(
+    reportFetcher,
+    run(after),
+    run(before),
+    "runs",
+    context,
+  );
+  if ("content" in read) return read;
+  const { links, diff } = read;
   const changes = againstPrevious
-    ? await reportFetcher.changesSinceLastRun(source.scanId, source.scanRunId)
+    ? await reportFetcher.changesSinceLastRun(source.scanId, after)
     : undefined;
 
   const baseLabel = againstPrevious
-    ? `the run before it, run ${baseRunId}${previous?.scanDate ? ` (${previous.scanDate})` : ""}`
-    : `run ${baseRunId}`;
+    ? `the run before it, run ${before}${beforeDate ? ` (${beforeDate})` : ""}`
+    : `run ${before}`;
   const matched = `${diff.added.length} new, ${diff.resolved.length} resolved, ${diff.retained} still open`;
-  const listed = (issues: typeof diff.added) =>
-    wrapUntrusted(
-      "accessibility comparison",
-      JSON.stringify(issues.slice(0, COMPARE_LIST_LIMIT), null, 2),
-    ) +
-    (issues.length > COMPARE_LIST_LIMIT
-      ? `\n(${issues.length - COMPARE_LIST_LIMIT} more not listed; see the CSV links.)`
-      : "");
+  const listed = (issues: RunIssue[]) =>
+    comparedList(issues, issues.length, "; see the CSV links");
   return createSuccessResponse([
-    ...(requested.kind === "link"
-      ? [`Resolved the report link to ${describeSource(source)}.`]
+    ...preface,
+    `Compared Website Scanner scan ${source.scanId}: run ${after} with ${baseLabel}.`,
+    ...(reversed
+      ? ["compareWith was the newer run, so it is used as 'after'."]
       : []),
-    `Compared Website Scanner scan ${source.scanId}: run ${source.scanRunId} with ${baseLabel}.`,
     changes
       ? `The dashboard's comparison: ${changes.newIssues} new, ${changes.resolvedIssues} resolved, ${changes.retainedIssues} still open. Matching the issues by rule, element and page gives ${matched}.`
       : `Matching the issues by rule, element and page: ${matched}.`,
-    ...pagesNotLoadedNote(diff, source.scanRunId, baseRunId),
+    ...pagesNotLoadedNote(diff, `run ${after}`, `run ${before}`, "run"),
     `New issues: ${listed(diff.added)}`,
     `Resolved issues: ${listed(diff.resolved)}`,
     ...(diff.not_checked?.length
@@ -1299,26 +1327,12 @@ async function compareScanRuns(
       : []),
     ...(diff.not_checked_earlier?.length
       ? [
-          `Not checked against the earlier run (page did not load in run ${baseRunId}): ${listed(diff.not_checked_earlier)}`,
+          `Not checked against the earlier run (page did not load in run ${before}): ${listed(diff.not_checked_earlier)}`,
         ]
       : []),
     `CSV of each run, valid for about 12 hours: newer ${links[0]} , older ${links[1]}`,
   ]);
 }
-
-/** The WCAG versions and levels Website Scanner checks against, and RGAA 4.1, by name. */
-const WCAG_VERSIONS = {
-  wcag2a: "WCAG 2.0 A",
-  wcag2aa: "WCAG 2.0 AA",
-  wcag2aaa: "WCAG 2.0 AAA",
-  wcag21a: "WCAG 2.1 A",
-  wcag21aa: "WCAG 2.1 AA",
-  wcag21aaa: "WCAG 2.1 AAA",
-  wcag22a: "WCAG 2.2 A",
-  wcag22aa: "WCAG 2.2 AA",
-  wcag22aaa: "WCAG 2.2 AAA",
-  rgaa41: "RGAA 4.1",
-} as const;
 
 /**
  * Why advanced or experimental rules came back off when they were not asked off. Both are
@@ -1370,9 +1384,6 @@ function scanSettingsNote(
   asked: ScanSettings,
   applied: ScanSettings | undefined,
 ): string {
-  const wcagName = (value: string) =>
-    WCAG_VERSIONS[value as keyof typeof WCAG_VERSIONS] ?? value;
-  const onOff = (value: boolean) => (value ? "on" : "off");
   const describe = (settings: ScanSettings) =>
     [
       settings.wcagVersion !== undefined ? wcagName(settings.wcagVersion) : "",
@@ -1405,12 +1416,7 @@ function scanSettingsNote(
 }
 
 async function executeAccessibilityScan(
-  args: {
-    name: string;
-    pageURL: string;
-    authConfigId?: number;
-    localIdentifier?: string;
-  } & ScanSettings,
+  args: ScanArgs,
   context: ScanProgressContext,
   server: McpServer,
   config: BrowserStackConfig,
@@ -1422,24 +1428,51 @@ async function executeAccessibilityScan(
       undefined,
       config,
     );
-    return await runAccessibilityScan(
-      args.name,
-      args.pageURL,
-      context,
-      config,
-      args.authConfigId,
-      {
-        wcagVersion: args.wcagVersion,
-        bestPractices: args.bestPractices,
-        needsReview: args.needsReview,
-        advancedRules: args.advancedRules,
-        experimentalRules: args.experimentalRules,
-      },
-      args.localIdentifier,
-    );
+    if (args.scanId !== undefined) {
+      return await rerunAccessibilityScan(
+        { ...args, scanId: args.scanId },
+        context,
+        config,
+      );
+    }
+    return await startNewScan(args, context, config);
   } catch (error) {
+    // An expected limit, such as a local URL the hosted MCP cannot reach, the plan's scan
+    // limit, or a re-run that cannot start: its message says what to do instead, so it is a
+    // plain result, not an error to report.
+    if (error instanceof ScanRefusedError) {
+      trackMCP(
+        "startAccessibilityScan",
+        server.server.getClientVersion()!,
+        error,
+        config,
+      );
+      return { content: [{ type: "text", text: error.message }] };
+    }
     return handleMCPError("startAccessibilityScan", server, config, error);
   }
+}
+
+function startNewScan(
+  args: ScanArgs,
+  context: ScanProgressContext,
+  config: BrowserStackConfig,
+): Promise<CallToolResult> {
+  return runAccessibilityScan(
+    args.name,
+    args.pageURL,
+    context,
+    config,
+    args.authConfigId,
+    {
+      wcagVersion: args.wcagVersion,
+      bestPractices: args.bestPractices,
+      needsReview: args.needsReview,
+      advancedRules: args.advancedRules,
+      experimentalRules: args.experimentalRules,
+    },
+    args.localIdentifier,
+  );
 }
 
 function validateFormAuthArgs(args: AuthConfigArgs): args is FormAuthArgs {
@@ -1559,19 +1592,6 @@ async function executeGetAuthConfig(
   }
 }
 
-/**
- * Where to see a scan in the dashboard: its own page, as the scans list links it. A scan's
- * page is named by its build, so a link made from the scan's name does not open it.
- */
-function scanDashboardNote(
-  dashboardLink: string | undefined,
-  scanId: string,
-): string {
-  return dashboardLink
-    ? `Its page in the Accessibility dashboard: ${dashboardLink}`
-    : `See it under Website Scanner in the Accessibility dashboard (scan ID ${scanId}).`;
-}
-
 /** Why the scan's name differs from the one asked for, as the start of a sentence. */
 function renameReason(
   name: string,
@@ -1586,9 +1606,6 @@ function renameReason(
   return `A scan named "${name}" already exists on this account`;
 }
 
-/** How many failed pages a failure result lists before summing up the rest. */
-const FAILED_PAGES_LISTED = 10;
-
 /**
  * A failed run, with the reason the API gives for it: the run's own and each page's. It used
  * to say only "The dashboard says why", which left an agent nothing to tell the user.
@@ -1601,24 +1618,10 @@ function createScanFailureResponse(
   dashboardLink: string | undefined,
   details: ScanFailureDetails = { pages: [] },
 ): CallToolResult {
-  const { reason, pages } = details;
-  const listed = pages.slice(0, FAILED_PAGES_LISTED);
-  const why = [
-    reason ? `Why: ${reason}${/[.!?]$/.test(reason) ? "" : "."}` : "",
-    pages.length
-      ? [
-          `${pages.length} ${pages.length === 1 ? "page" : "pages"} could not be scanned:`,
-          ...listed.map((page) => `- ${page.pageUrl}: ${page.reason}`),
-          ...(pages.length > listed.length
-            ? [`- and ${pages.length - listed.length} more.`]
-            : []),
-        ].join("\n")
-      : "",
-  ].filter(Boolean);
   return createErrorResponse(
     [
       `❌ Accessibility scan "${name}" failed with status: ${status}. Scan ID: ${scanId} and Scan Run ID: ${scanRunId}.`,
-      ...(why.length ? why : ["The dashboard says why."]),
+      ...failureReasons(details),
       scanDashboardNote(dashboardLink, scanId),
     ].join("\n"),
   );
@@ -1635,11 +1638,12 @@ function createScanStillRunningResponse(
   scanRunId: string,
   dashboardLink: string | undefined,
   waitedMs: number,
+  rerun = false,
 ): CallToolResult {
   return createSuccessResponse([
     `Accessibility scan "${name}" is still running after ${Math.round(waitedMs / 60000)} minutes, so this call stopped waiting for it. The scan was not cancelled: it carries on, and its issues can be read once it finishes. ${scanDashboardNote(dashboardLink, scanId)}`,
     `Scan ID: ${scanId} and Scan Run ID: ${scanRunId}`,
-    `To read its issues, call fetchAccessibilityIssues with scanId "${scanId}" and scanRunId "${scanRunId}" once it has finished. Do not start the scan again: that starts a second scan.`,
+    `To read its issues, call fetchAccessibilityIssues with scanId "${scanId}" and scanRunId "${scanRunId}" once it has finished. ${rerun ? "Do not re-run the scan before this run finishes." : "Do not start the scan again: that starts a second scan."}`,
   ]);
 }
 
@@ -1657,6 +1661,8 @@ function createScanSuccessResponse(
   const messages = [
     `Accessibility scan "${name}" completed. ${scanDashboardNote(dashboardLink, scanId)}`,
     `Scan ID: ${scanId} and Scan Run ID: ${scanRunId}`,
+    // The parser leaves an error page's rows out of the count; this says why.
+    ...errorPagesNote(report.error_pages ?? [], "scan again"),
     scanSettingsNote(settings, applied),
     fullReportLine(reportUrl),
     `We found ${report.total_issues} issues. Below are the details of the ${report.page_length} most critical issues.`,
@@ -1677,6 +1683,110 @@ function createScanSuccessResponse(
   }
 
   return createSuccessResponse(messages);
+}
+
+type ScanOutcome = "completed" | "still running" | "failed";
+
+/**
+ * Waits for a run that has started and gives its result: its issues, a failure with the
+ * reasons the API gives, or its ids once the wait runs out. The same for a new scan and a
+ * re-run, so a re-run reads like the scan it repeats.
+ */
+async function scanOutcome(
+  scanner: AccessibilityScanner,
+  config: BrowserStackConfig,
+  context: ScanProgressContext,
+  scan: {
+    name: string;
+    scanId: string;
+    scanRunId: string;
+    settings: ScanSettings;
+    rerun?: boolean;
+  },
+): Promise<[CallToolResult, ScanOutcome]> {
+  const { name: scanName, scanId, scanRunId, settings } = scan;
+  let status: string;
+  try {
+    status = await scanner.waitUntilComplete(scanId, scanRunId, context);
+  } catch (error) {
+    if (!(error instanceof ScanTimeoutError)) throw error;
+    return [
+      createScanStillRunningResponse(
+        scanName,
+        scanId,
+        scanRunId,
+        await scanner.dashboardLink(scanId),
+        error.waitedMs,
+        scan.rerun,
+      ),
+      "still running",
+    ];
+  }
+  if (status !== "completed") {
+    const [dashboardLink, details] = await Promise.all([
+      scanner.dashboardLink(scanId),
+      scanner.failureDetails(scanId, scanRunId),
+    ]);
+    return [
+      createScanFailureResponse(
+        scanName,
+        status,
+        scanId,
+        scanRunId,
+        dashboardLink,
+        details,
+      ),
+      "failed",
+    ];
+  }
+
+  const [applied, dashboardLink] = await Promise.all([
+    scanner.runSettings(scanId, scanRunId),
+    scanner.dashboardLink(scanId),
+  ]);
+  const reportFetcher = await initializeReportFetcher(config);
+  let reportLink: string;
+  try {
+    reportLink = await reportFetcher.getReportLink(
+      { kind: "scan", scanId, scanRunId },
+      { onWait: exportProgress(context) },
+    );
+  } catch (error) {
+    if (error instanceof ExportPendingError) {
+      return [
+        createSuccessResponse([
+          `Accessibility scan "${scanName}" completed. ${scanDashboardNote(dashboardLink, scanId)}`,
+          `Scan ID: ${scanId} and Scan Run ID: ${scanRunId}`,
+          scanSettingsNote(settings, applied),
+          ...exportPendingMessages(
+            {
+              kind: "scan",
+              scanId: String(scanId),
+              scanRunId: String(scanRunId),
+            },
+            error,
+            "",
+          ),
+        ]),
+        "completed",
+      ];
+    }
+    throw error;
+  }
+
+  return [
+    createScanSuccessResponse(
+      scanName,
+      await parseAccessibilityReportFromCSV(reportLink),
+      scanId,
+      scanRunId,
+      reportLink,
+      dashboardLink,
+      settings,
+      applied,
+    ),
+    "completed",
+  ];
 }
 
 async function runAccessibilityScan(
@@ -1700,20 +1810,6 @@ async function runAccessibilityScan(
   const scanId = startResp.data!.id;
   const scanRunId = startResp.data!.scanRunId;
   const scanName = startResp.scanName ?? name;
-  // Said first, so the name asked for is not taken for the scan's.
-  const withRenameNote = (result: CallToolResult): CallToolResult =>
-    scanName === name
-      ? result
-      : {
-          ...result,
-          content: [
-            {
-              type: "text" as const,
-              text: `${renameReason(name, startResp.nameChanges ?? ["taken"])}, so this scan was started as "${scanName}".\n`,
-            },
-            ...result.content,
-          ],
-        };
 
   await notifyScanProgress(
     context,
@@ -1721,82 +1817,118 @@ async function runAccessibilityScan(
     0,
   );
 
-  let status: string;
-  try {
-    status = await scanner.waitUntilComplete(scanId, scanRunId, context);
-  } catch (error) {
-    if (!(error instanceof ScanTimeoutError)) throw error;
-    return withRenameNote(
-      createScanStillRunningResponse(
-        scanName,
-        scanId,
-        scanRunId,
-        await scanner.dashboardLink(scanId),
-        error.waitedMs,
-      ),
-    );
-  }
-  if (status !== "completed") {
-    const [dashboardLink, details] = await Promise.all([
-      scanner.dashboardLink(scanId),
-      scanner.failureDetails(scanId, scanRunId),
+  const [result] = await scanOutcome(scanner, config, context, {
+    name: scanName,
+    scanId,
+    scanRunId,
+    settings,
+  });
+  // The rename is said first, so the name asked for is not taken for the scan's.
+  return withNotes(
+    result,
+    scanName === name
+      ? []
+      : [
+          `${renameReason(name, startResp.nameChanges ?? ["taken"])}, so this scan was started as "${scanName}".`,
+        ],
+    // A local page this MCP tunnelled itself is saved with an identifier nobody was shown,
+    // so a re-run could not reach it: no hint to re-run it.
+    isLocalURL(pageURL) && !localIdentifier ? [] : [rescanHint(String(scanId))],
+  );
+}
+
+/**
+ * A re-run of the scan the caller names, when it is for this same page: a new run of that
+ * scan, with its saved settings, which can be compared with its earlier runs. A scan for
+ * another page gets a new scan, as without scanId, and settings passed that the saved ones
+ * do not match stop the run, since a re-run cannot take them.
+ */
+async function rerunAccessibilityScan(
+  args: ScanArgs & { scanId: string },
+  context: ScanProgressContext,
+  config: BrowserStackConfig,
+): Promise<CallToolResult> {
+  const scanner = await initializeScanner(config);
+  const { scanId, pageURL } = args;
+  const saved = await scanner.savedScan(scanId);
+  if (saved.urlList.length !== 1 || !sameScanPage(saved.urlList[0], pageURL)) {
+    return withNotes(await startNewScan(args, context, config), [
+      otherPageNote(scanId, saved.urlList, pageURL),
     ]);
-    return withRenameNote(
-      createScanFailureResponse(
-        scanName,
-        status,
-        scanId,
-        scanRunId,
-        dashboardLink,
-        details,
-      ),
-    );
   }
 
-  const [applied, dashboardLink] = await Promise.all([
-    scanner.runSettings(scanId, scanRunId),
-    scanner.dashboardLink(scanId),
-  ]);
-  const reportFetcher = await initializeReportFetcher(config);
-  let reportLink: string;
-  try {
-    reportLink = await reportFetcher.getReportLink(
-      { kind: "scan", scanId, scanRunId },
-      { onWait: exportProgress(context) },
-    );
-  } catch (error) {
-    if (error instanceof ExportPendingError) {
-      return withRenameNote(
-        createSuccessResponse([
-          `Accessibility scan "${scanName}" completed. ${scanDashboardNote(dashboardLink, scanId)}`,
-          `Scan ID: ${scanId} and Scan Run ID: ${scanRunId}`,
-          scanSettingsNote(settings, applied),
-          ...exportPendingMessages(
-            {
-              kind: "scan",
-              scanId: String(scanId),
-              scanRunId: String(scanRunId),
-            },
-            error,
-            "",
-          ),
-        ]),
-      );
-    }
-    throw error;
+  // The saved scan reaches its page through a tunnel whose identifier the API does not give
+  // back: without one passed, the re-run could not reach the page.
+  if (saved.localTestingEnabled && args.localIdentifier === undefined) {
+    return withNotes(await startNewScan(args, context, config), [
+      localScanNotRerunNote(scanId),
+    ]);
   }
 
-  return withRenameNote(
-    createScanSuccessResponse(
-      scanName,
-      await parseAccessibilityReportFromCSV(reportLink),
-      scanId,
-      scanRunId,
-      reportLink,
-      dashboardLink,
-      settings,
-      applied,
-    ),
+  const name = saved.name ?? args.name;
+  // The saved name is the account's, which another user may have set: quoted, not inlined.
+  const nameLine = saved.name
+    ? [`Scan name: ${wrapUntrusted("saved scan name", saved.name)}`]
+    : [];
+  const differences = savedSettingDifferences(args, saved);
+  if (differences.length) {
+    const one = differences.length === 1;
+    // A plain result: nothing failed, and the call only has to be made again one way or
+    // the other.
+    return createSuccessResponse([
+      [
+        `Scan ${scanId} was not re-run: a re-run uses the scan's saved settings, and ${one ? "this one differs" : "these differ"} from what was passed:`,
+        ...differences.map((difference) => `- ${difference}`),
+        `To re-run it with its saved settings, call startAccessibilityScan again with scanId "${scanId}" and without ${one ? "that setting" : "those settings"}. To scan with the settings passed, call it without scanId: that starts a new scan, whose runs can't be compared with this scan's.`,
+        ...nameLine,
+      ].join("\n"),
+    ]);
+  }
+
+  const { scanRunId } = await scanner.rerunScan(scanId);
+  const passedName = args.name.trim();
+  const unchecked = uncheckedSettings(args, saved);
+  const lead = [
+    `Started a new run (${scanRunId}) of scan ${scanId} with its saved settings.`,
+    ...nameLine,
+    ...(passedName &&
+    passedName !== name &&
+    cleanScanName(passedName, "") !== name
+      ? [
+          `The scan keeps its saved name; the name "${passedName}" was not used.`,
+        ]
+      : []),
+    ...(saved.localTestingEnabled
+      ? [localRerunNote(args.localIdentifier)]
+      : []),
+    ...(unchecked.length
+      ? [
+          `${unchecked.join(", ")} could not be checked against the scan's saved settings, which the API does not give back; the run uses the saved ones.`,
+        ]
+      : []),
+    ...unusedLoginAndTunnel(args, saved),
+  ];
+  await notifyScanProgress(
+    context,
+    `Run ${scanRunId} of accessibility scan "${name}" started`,
+    0,
+  );
+  const [result, outcome] = await scanOutcome(scanner, config, context, {
+    name,
+    scanId,
+    scanRunId,
+    settings: saved.settings,
+    rerun: true,
+  });
+  const compare = compareHint(scanId, scanRunId);
+  return withNotes(
+    result,
+    lead,
+    outcome === "completed"
+      ? [compare]
+      : outcome === "still running"
+        ? [`Once it finishes: ${compare[0].toLowerCase()}${compare.slice(1)}`]
+        : [],
   );
 }
 
@@ -1832,21 +1964,27 @@ export default function addAccessibilityTools(
     "startAccessibilityScan",
     "Scan a web page URL for accessibility issues and get a CSV report. For a mobile app, run it on App Automate with accessibility on (setupBrowserStackAppAutomateTests), then fetchAccessibilityIssues.",
     {
-      name: z.string().describe("Name of the accessibility scan"),
-      pageURL: z
+      name: z.string().describe("Name of the scan"),
+      pageURL: z.string().describe("URL of the page to scan"),
+      scanId: z
         .string()
-        .describe("The web page URL to scan for accessibility issues"),
+        .trim()
+        .min(1)
+        .optional()
+        .describe(
+          "Only to re-run an earlier scan of this same page (e.g. after a fix), with its saved settings, so runs can be compared.",
+        ),
       authConfigId: z
         .number()
         .optional()
-        .describe("Optional auth config ID for authenticated scans"),
+        .describe("Auth config ID, for a page behind a login"),
       localIdentifier: z
         .string()
         .trim()
         .min(1)
         .optional()
         .describe(
-          "Identifier of a BrowserStack Local tunnel you started, for localhost or internal URLs.",
+          "ID of a BrowserStack Local tunnel you started, for localhost or internal URLs.",
         ),
       advancedRules: z
         .boolean()
@@ -1893,13 +2031,11 @@ export default function addAccessibilityTools(
     "createAccessibilityAuthConfig",
     "Create an authentication configuration for accessibility scans. Supports both form-based and basic authentication.",
     {
-      name: z.string().describe("Name for the auth configuration"),
+      name: z.string().describe("Name for the auth config"),
       type: z
         .enum(["form", "basic"])
-        .describe(
-          "Authentication type: 'form' for form-based auth, 'basic' for HTTP basic auth",
-        ),
-      url: z.string().describe("URL of the authentication page"),
+        .describe("'form' for a login form, 'basic' for HTTP basic auth"),
+      url: z.string().describe("URL of the login page"),
       username: z
         .string()
         .optional()
@@ -1985,7 +2121,7 @@ export default function addAccessibilityTools(
     "getAccessibilityAuthConfig",
     "Get an accessibility auth config by ID." + NEEDS_A11Y_CONFIG_ID,
     {
-      configId: z.number().describe("ID of the auth configuration to retrieve"),
+      configId: z.number().describe("ID of the auth config"),
     },
     {
       title: "Get Accessibility Auth Config",
@@ -2049,7 +2185,7 @@ export default function addAccessibilityTools(
         .number()
         .optional()
         .describe(
-          "Pagination offset (default 0); with compareWith, issues already listed.",
+          "The next_page value from the previous answer (default 0), not an issue index.",
         ),
       pageUrl: z
         .string()
@@ -2059,7 +2195,7 @@ export default function addAccessibilityTools(
         .string()
         .optional()
         .describe(
-          '"previous", an older scanRunId, or an earlier app build id/link; lists new and resolved issues.',
+          '"previous" (any report), or a run of the same scan or a web/app build: its id or link.',
         ),
       exportTaskId: z
         .string()

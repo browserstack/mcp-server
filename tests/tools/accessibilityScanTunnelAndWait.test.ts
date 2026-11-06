@@ -69,9 +69,11 @@ describe("AccessibilityScanner.startScan through a tunnel the user started", () 
 
   it("on the hosted server, refuses a local URL without a tunnel and says how to start one", async () => {
     m.config.REMOTE_MCP = true;
+    const { ScanRefusedError } = await scannerModule();
 
     const start = (await scanner()).startScan("dev", ["http://localhost:3000/"]);
 
+    await expect(start).rejects.toBeInstanceOf(ScanRefusedError);
     await expect(start).rejects.toThrow(/cannot open a tunnel to a local URL on your machine/);
     await expect(start).rejects.toThrow(/--local-identifier <a name>\) and pass that name as localIdentifier/);
     expect(m.post).not.toHaveBeenCalled();

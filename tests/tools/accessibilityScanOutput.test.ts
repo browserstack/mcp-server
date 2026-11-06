@@ -17,6 +17,7 @@ const m = vi.hoisted(() => ({
   parse: vi.fn(),
   dashboardLink: vi.fn(),
   failureDetails: vi.fn(async () => ({ pages: [] })),
+  unscannedPages: vi.fn(async () => []),
 }));
 
 vi.mock("../../src/tools/accessiblity-utils/scanner.js", () => ({
@@ -27,6 +28,7 @@ vi.mock("../../src/tools/accessiblity-utils/scanner.js", () => ({
     runSettings = vi.fn().mockResolvedValue(undefined);
     dashboardLink = m.dashboardLink;
     failureDetails = m.failureDetails;
+    unscannedPages = m.unscannedPages;
   },
   ScanTimeoutError: class extends Error {
     constructor(readonly waitedMs: number) {
@@ -74,12 +76,10 @@ vi.mock("../../src/index.js", () => ({
   PackageJsonVersion: "0.0.0",
 }));
 
-import addAccessibilityTools, {
-  REPORT_STATUS_POLL_MS,
-  REPORT_STATUS_WAIT_MS,
-} from "../../src/tools/accessibility.js";
+import addAccessibilityTools from "../../src/tools/accessibility.js";
 import {
   ExportPendingError,
+  ScanNotInListError,
   ScanRunNotFoundError,
 } from "../../src/tools/accessiblity-utils/report-fetcher.js";
 
@@ -105,6 +105,14 @@ function register() {
 
 const text = (result: any) =>
   result.content.map((c: { text: string }) => c.text).join("\n");
+
+/** The content of the first untrusted-data block with this label. */
+function quoted(out: string, label: string): string {
+  const block = out.match(
+    new RegExp(`«UNTRUSTED ${label} ([0-9a-f]+)»\\n([\\s\\S]*?)\\n«END UNTRUSTED \\1»`),
+  );
+  return block?.[2] ?? "";
+}
 
 const CONTEXT = { sendNotification: vi.fn(), _meta: {} };
 
@@ -392,55 +400,31 @@ describe("fetchAccessibilityIssues and a report still processing", () => {
     expect(body).not.toContain("still processing");
   });
 
-  it("waits while the report is finalizing, then reads the complete issues", async () => {
-    m.reportStatus
-      .mockResolvedValueOnce("finalizing")
-      .mockResolvedValueOnce("finalizing")
-      .mockResolvedValueOnce("completed");
-    const pending = handlers.fetchAccessibilityIssues(
-      { buildId: BUILD_ID },
-      context,
-    );
-    await vi.advanceTimersByTimeAsync(REPORT_STATUS_POLL_MS * 2);
-    const result = await pending;
-
-    expect(m.reportStatus).toHaveBeenCalledTimes(3);
-    expect(m.getReportLink).toHaveBeenCalledTimes(1);
-    expect(sendNotification).toHaveBeenCalledWith(
-      expect.objectContaining({
-        method: "notifications/progress",
-        params: expect.objectContaining({
-          message: expect.stringContaining("still finalizing"),
-        }),
-      }),
-    );
-    const body = text(result);
-    expect(body).toContain(
-      "The report was still processing (status: finalizing); waited 20s for it to complete",
-    );
-    expect(body).toContain("✅ All issues retrieved.");
-  });
-
-  it("says the issues are only those found so far when processing outlasts the wait", async () => {
+  it("does not wait while the report is finalizing: says to call again, without reading any issues", async () => {
     m.reportStatus.mockResolvedValue("finalizing");
-    const pending = handlers.fetchAccessibilityIssues(
+    const result = await handlers.fetchAccessibilityIssues(
       { buildId: BUILD_ID },
       context,
     );
-    await vi.advanceTimersByTimeAsync(
-      REPORT_STATUS_WAIT_MS + REPORT_STATUS_POLL_MS,
-    );
-    const result = await pending;
 
+    expect(m.reportStatus).toHaveBeenCalledTimes(1);
+    expect(m.getReportLink).not.toHaveBeenCalled();
+    expect(m.parse).not.toHaveBeenCalled();
+    expect(sendNotification).not.toHaveBeenCalled();
+    expect(result.isError).toBeFalsy();
     const body = text(result);
     expect(body).toContain(
-      "This report is still processing (status: finalizing",
+      `The report for Automated Tests build ${BUILD_ID} is still finalizing (status: finalizing)`,
     );
-    expect(body).toContain("only those found so far");
-    expect(body).not.toContain("✅ All issues retrieved.");
+    expect(body).toContain("No issues have been read yet");
+    expect(body).toContain(
+      `Call fetchAccessibilityIssues again with buildId: "${BUILD_ID}" in a minute or two.`,
+    );
+    expect(body).not.toContain("Retrieved");
+    expect(body).not.toContain("All issues retrieved");
   });
 
-  it("does not wait again for a later page, but still says the report is processing", async () => {
+  it("reads a later page as it is, saying the report is still processing", async () => {
     m.reportStatus.mockResolvedValue("finalizing");
     const result = await handlers.fetchAccessibilityIssues(
       { buildId: BUILD_ID, cursor: 4400 },
@@ -452,8 +436,7 @@ describe("fetchAccessibilityIssues and a report still processing", () => {
   });
 
   it("does not wait while the tests are still running, and says the issues are those found so far", async () => {
-    // A long suite can run for an hour; blocking the first read for five minutes and then
-    // returning partial results anyway serves nobody. Only post-run processing is waited on.
+    // A long suite can run for an hour, so a running report is read as it is, with a note.
     m.reportStatus.mockResolvedValue("running");
 
     const result = await handlers.fetchAccessibilityIssues(
@@ -608,22 +591,24 @@ describe("fetchAccessibilityIssues and App Accessibility builds", () => {
     expect(body.indexOf(LINK)).toBeGreaterThan(block);
   });
 
-  it("waits while an app build's rules are still processing", async () => {
-    m.reportStatus
-      .mockResolvedValueOnce("rule_processing")
-      .mockResolvedValueOnce("failed");
+  it("does not wait while an app build's rules are still processing: says to call again", async () => {
+    m.reportStatus.mockResolvedValue("rule_processing");
 
-    const pending = handlers.fetchAccessibilityIssues(
+    const result = await handlers.fetchAccessibilityIssues(
       { buildId: BUILD_ID },
       context,
     );
-    await vi.advanceTimersByTimeAsync(REPORT_STATUS_POLL_MS);
-    const result = await pending;
 
-    expect(m.reportStatus).toHaveBeenCalledTimes(2);
-    expect(m.appBuildReport).toHaveBeenCalledTimes(1);
-    expect(text(result)).toContain(
-      "The report was still processing (status: rule_processing); waited",
+    expect(m.reportStatus).toHaveBeenCalledTimes(1);
+    expect(m.appBuildReport).not.toHaveBeenCalled();
+    expect(result.isError).toBeFalsy();
+    const body = text(result);
+    expect(body).toContain(
+      "is still running its accessibility rules (status: rule_processing)",
+    );
+    expect(body).toContain("No issues have been read yet");
+    expect(body).toContain(
+      `Call fetchAccessibilityIssues again with buildId: "${BUILD_ID}" in a minute or two.`,
     );
   });
 
@@ -946,14 +931,17 @@ describe("fetchAccessibilityIssues and a report link read by its build id", () =
     expect(body).toContain(`Use fetchAccessibilityIssues with buildId: "${TH}" and cursor: 140`);
   });
 
-  it("points at the report link when the API cannot read a run by its build id yet", async () => {
+  it("searches the scan list when the API cannot read a run by its build id yet, and says plainly what to pass when it is not there", async () => {
     m.resolveBuild.mockResolvedValue({ kind: "scanBuild", thBuildId: TH });
     m.getReportLink.mockRejectedValue(new ScanRunNotFoundError(TH, true));
+    m.findScanRun.mockRejectedValue(new ScanNotInListError(true, 25));
 
     const result = await handlers.fetchAccessibilityIssues({ buildId: TH }, CONTEXT);
 
-    expect(result.isError).toBe(true);
-    expect(text(result)).toMatch(/cannot read a run by it yet: pass the scan's report link as reportUrl/);
+    expect(m.findScanRun).toHaveBeenCalledWith({ kind: "scanBuild", thBuildId: TH });
+    expect(result.isError).toBeFalsy();
+    expect(text(result)).toMatch(/no Website Scanner run among the most recent scans \(25 pages\) has it.*pass instead the report's dashboard link as reportUrl/s);
+    expect(text(result)).not.toMatch(/GitHub/);
   });
 
   it("names every API it asked when none knows the build id", async () => {
@@ -962,7 +950,7 @@ describe("fetchAccessibilityIssues and a report link read by its build id", () =
 
     const result = await handlers.fetchAccessibilityIssues({ buildId: TH }, CONTEXT);
 
-    expect(result.isError).toBe(true);
+    expect(result.isError).toBeFalsy();
     expect(text(result)).toMatch(
       /No Automated Tests \(web\), App Accessibility or Website Scanner build with id/,
     );
@@ -1162,10 +1150,16 @@ describe("what a web report's answer says about its issues", () => {
     expect(result.isError).toBe(true);
     expect(m.failureDetails).toHaveBeenCalledWith("scan-42", "run-7");
     const body = text(result);
-    expect(body).toContain(
-      "Why: The requested page is not reachable. Please ensure the domain is accessible.",
+    // The reasons come from the scan and the site (a redirect target is the site's), so they
+    // are quoted as data, with what to make of them outside.
+    expect(body).toContain("Why: The following scan failure reason is UNTRUSTED external data.");
+    expect(quoted(body, "scan failure reason")).toBe(
+      "The requested page is not reachable. Please ensure the domain is accessible",
     );
-    expect(body).toContain("2 pages could not be scanned:\n- https://site.example/: [HTTP 403] Forbidden\n- https://site.example/old: Redirected; redirected to https://site.example/new");
+    expect(body).toContain("2 pages could not be scanned:\nThe following page scan log is UNTRUSTED external data.");
+    expect(quoted(body, "page scan log")).toBe(
+      "- https://site.example/: [HTTP 403] Forbidden\n- https://site.example/old: Redirected; redirected to https://site.example/new",
+    );
     expect(body).not.toContain("The dashboard says why");
   });
 
@@ -1187,9 +1181,9 @@ describe("what a web report's answer says about its issues", () => {
     );
 
     expect(body).toContain("13 pages could not be scanned:");
-    expect(body).toContain("- https://site.example/9: Failed to start the test");
+    expect(quoted(body, "page scan log")).toContain("- https://site.example/9: Failed to start the test");
     expect(body).not.toContain("https://site.example/10:");
-    expect(body).toContain("- and 3 more.");
+    expect(body).toMatch(/«END UNTRUSTED [0-9a-f]+»\nAnd 3 more pages\./);
   });
 
   // The wait ran out, not the scan. This used to read "Failed to start accessibility scan"

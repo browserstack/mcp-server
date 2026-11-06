@@ -14,7 +14,11 @@ import {
   MAX_SCAN_LIST_PAGES,
   reportExports,
   MAX_REPORT_EXPORTS,
+  foundScanRuns,
 } from "../../src/tools/accessiblity-utils/report-fetcher.js";
+
+// Runs found by build id are cached for the process; each test starts without them.
+beforeEach(() => foundScanRuns.clear());
 
 const get = apiClient.get as Mock;
 const API = "https://api-accessibility.browserstack.com/api";
@@ -151,6 +155,19 @@ describe("AccessibilityReportFetcher.sourceFromReportUrl", () => {
       `${API}/website-scanner/v1/scans`,
       `${API}/website-scanner/v1/scans?nextPage=tok2`,
     ]);
+  });
+
+  it("remembers the run a link's build id names, so a second lookup does not walk the list again", async () => {
+    get
+      .mockResolvedValueOnce(scansPage([scan(1, "other", "aaa", 11)], "tok2"))
+      .mockResolvedValueOnce(scansPage([scan(1234, "checkout fix", "bbb", 5678)]));
+
+    const first = await fetcher().findScanRun(linkRun("checkout fix", "bbb"));
+    get.mockClear();
+    const again = await fetcher().findScanRun(linkRun("checkout fix", "bbb"));
+
+    expect(again).toEqual(first);
+    expect(get).not.toHaveBeenCalled();
   });
 
   it("names the scan when the link is to one of its earlier runs", async () => {
@@ -469,6 +486,47 @@ describe("AccessibilityReportFetcher.getReportLink on a large report", () => {
       "https://csv2?Expires=9999999999",
     );
     expect(urls().filter((u) => u.includes("scan_run_id="))).toHaveLength(2);
+  });
+
+  it("does not keep the task of an export started while the report is processing", async () => {
+    get.mockResolvedValueOnce(ok({ task_id: "t:1", message: "started" }));
+    get.mockResolvedValue(pending);
+    const first = fetcher().getReportLink(SOURCE, { stillProcessing: true });
+    const pendingFirst = expect(first).rejects.toBeInstanceOf(ExportPendingError);
+    await vi.advanceTimersByTimeAsync(EXPORT_WAIT_MS + 10_000);
+    await pendingFirst;
+
+    // Once the report has finished, the next call starts a new export instead of taking
+    // the snapshot that one was making as final.
+    get.mockReset();
+    get
+      .mockResolvedValueOnce(ok({ task_id: "t:2", message: "started" }))
+      .mockResolvedValueOnce(ok({ reportLink: "https://csv2?Expires=9999999999" }));
+    await expect(fetcher().getReportLink(SOURCE)).resolves.toBe("https://csv2?Expires=9999999999");
+    expect(urls()[0]).toBe(
+      "https://api-accessibility.browserstack.com/api/website-scanner/v1/scans/1234/scan_runs/issues?scan_run_id=5678",
+    );
+    expect(urls().some((u) => u.includes("task_id=t%3A1"))).toBe(false);
+  });
+
+  it("reuses a run read by its build id for 5 minutes at most, as its processing status is not checked", async () => {
+    const BY_BUILD_ID: IssueSource = { kind: "scanBuild", thBuildId: BUILD_ID };
+    const expires = Math.floor(Date.now() / 1000) + 12 * 3600;
+    get
+      .mockResolvedValueOnce(ok({ task_id: "t:1", message: "started" }))
+      .mockResolvedValueOnce(ok({ reportLink: `https://csv?Expires=${expires}` }));
+
+    await fetcher().getReportLink(BY_BUILD_ID);
+    vi.setSystemTime(Date.now() + 4 * 60 * 1000);
+    await expect(fetcher().getReportLink(BY_BUILD_ID)).resolves.toBe(`https://csv?Expires=${expires}`);
+    expect(get).toHaveBeenCalledTimes(2);
+
+    vi.setSystemTime(Date.now() + 2 * 60 * 1000);
+    get
+      .mockResolvedValueOnce(ok({ task_id: "t:2", message: "started" }))
+      .mockResolvedValueOnce(ok({ reportLink: "https://csv2?Expires=9999999999" }));
+    await expect(fetcher().getReportLink(BY_BUILD_ID)).resolves.toBe("https://csv2?Expires=9999999999");
+    expect(get).toHaveBeenCalledTimes(4);
   });
 
   it("remembers a bounded number of reports' exports", async () => {

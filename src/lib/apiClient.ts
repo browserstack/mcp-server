@@ -63,6 +63,47 @@ class ApiResponse<T = any> {
   }
 }
 
+/**
+ * How long a connection gives each of a host's addresses before trying the next. Node's own
+ * default is 250 ms: on a slow route the IPv4 attempt is dropped that early and the IPv6 one
+ * fails where there is no IPv6 route, so the call fails with "connect ETIMEDOUT <IPv4>;
+ * connect ENETUNREACH <IPv6>" within a second. The hosted server saw exactly that.
+ */
+export const CONNECT_ATTEMPT_TIMEOUT_MS = 2000;
+
+// Shared, so connections are reused as they are on Node's own global agent.
+const directAgent = new https.Agent({
+  keepAlive: true,
+  autoSelectFamilyAttemptTimeout: CONNECT_ATTEMPT_TIMEOUT_MS,
+});
+
+/**
+ * A connect failure is retried only when it came within this long. A slower one means every
+ * address already timed out, so the host is down: failing now keeps loops (scan-list walks,
+ * polling) from stalling twice as long on it.
+ */
+export const CONNECT_RETRY_WINDOW_MS = 5000;
+
+/** Failures to open the connection at all: nothing was sent, so a request can be repeated. */
+const CONNECT_FAILURE =
+  /\bconnect (ETIMEDOUT|ENETUNREACH|EHOSTUNREACH|ECONNREFUSED)\b/;
+const CONNECT_FAILURE_CODES = new Set([
+  "ETIMEDOUT",
+  "ENETUNREACH",
+  "EHOSTUNREACH",
+  "ECONNREFUSED",
+]);
+
+export function isConnectFailure(error: any): boolean {
+  if (!error || error.response) return false;
+  const causes = [error, error.cause, ...(error.errors ?? [])].filter(Boolean);
+  return causes.some(
+    (cause: any) =>
+      (cause.syscall === "connect" && CONNECT_FAILURE_CODES.has(cause.code)) ||
+      CONNECT_FAILURE.test(String(cause.message ?? "")),
+  );
+}
+
 // Utility to create HTTPS agent if needed (proxy/CA)
 function getAxiosAgent(): AxiosRequestConfig["httpsAgent"] | undefined {
   const proxyHost = config.browserstackLocalOptions.proxyHost;
@@ -88,10 +129,11 @@ function getAxiosAgent(): AxiosRequestConfig["httpsAgent"] | undefined {
     // CA only
     return new https.Agent({
       ca: fs.readFileSync(caCertPath),
+      autoSelectFamilyAttemptTimeout: CONNECT_ATTEMPT_TIMEOUT_MS,
     });
   }
   // Default agent (no proxy, no CA)
-  return undefined;
+  return directAgent;
 }
 
 class ApiClient {
@@ -148,7 +190,20 @@ class ApiClient {
     try {
       this.validateUrl(url, config);
 
-      const res = await fn(this.axiosAgent);
+      let res: AxiosResponse<T>;
+      const started = Date.now();
+      try {
+        res = await fn(this.axiosAgent);
+      } catch (error: any) {
+        // A connection that never opened sent nothing, so one more try is safe even for a
+        // POST; a second failure is reported as before. Only a fast failure is retried.
+        if (
+          !isConnectFailure(error) ||
+          Date.now() - started >= CONNECT_RETRY_WINDOW_MS
+        )
+          throw error;
+        res = await fn(this.axiosAgent);
+      }
       return new ApiResponse<T>(res);
     } catch (error: any) {
       if (error.response && !raise_error) {

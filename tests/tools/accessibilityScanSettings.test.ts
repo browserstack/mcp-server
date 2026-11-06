@@ -87,6 +87,49 @@ describe("AccessibilityScanner.startScan", () => {
     ).rejects.toThrow(/A scan with this name already exists/);
   });
 
+  // Scan names are unique per account, and agents re-scanning a page reuse the name they
+  // used before: the API refused those scans outright.
+  it("starts the scan under a timestamped name when the name is taken", async () => {
+    m.post
+      .mockRejectedValueOnce({
+        response: {
+          status: 422,
+          data: { message: "A scan with the provided name already exists in this group/project." },
+        },
+      })
+      .mockResolvedValueOnce({ data: { success: true, data: { id: "1", scanRunId: "2" } } });
+
+    const started = await (await scanner()).startScan("checkout", ["https://shop.example/"]);
+
+    expect(m.post).toHaveBeenCalledTimes(2);
+    const renamed = m.post.mock.calls[1][0].body.name;
+    expect(renamed).toMatch(/^checkout \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} UTC$/);
+    expect(started).toMatchObject({ data: { id: "1", scanRunId: "2" }, scanName: renamed });
+  });
+
+  it("does not rename a scan the API refused for another reason", async () => {
+    m.post.mockRejectedValue({
+      response: { status: 422, data: { message: "wcagVersion field must be one of: wcag21aa" } },
+    });
+
+    await expect(
+      (await scanner()).startScan("checkout", ["https://shop.example/"]),
+    ).rejects.toThrow(/wcagVersion field must be one of/);
+    expect(m.post).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps a timestamped name within the API's 255 characters and its allowed characters", async () => {
+    const { timestampedName } = await vi.importActual<
+      typeof import("../../src/tools/accessiblity-utils/scanner.js")
+    >("../../src/tools/accessiblity-utils/scanner.js");
+    const now = new Date("2026-11-03T07:45:12.345Z");
+
+    expect(timestampedName("checkout", now)).toBe("checkout 2026-11-03 07:45:12 UTC");
+    const long = timestampedName("x".repeat(300), now);
+    expect(long).toHaveLength(255);
+    expect(long.endsWith(" 2026-11-03 07:45:12 UTC")).toBe(true);
+  });
+
   it("sends experimental rules off when asked, as false is a setting rather than a missing one", async () => {
     await (await scanner()).startScan("checkout", ["https://shop.example/"], undefined, {
       experimentalRules: false,
@@ -226,15 +269,112 @@ describe("startAccessibilityScan scan settings", () => {
       bestPractices: true,
     });
 
-    expect(m.startScan).toHaveBeenCalledWith("checkout", ["https://shop.example/"], undefined, {
-      wcagVersion: "wcag22aaa",
-      bestPractices: true,
-    });
+    expect(m.startScan).toHaveBeenCalledWith(
+      "checkout",
+      ["https://shop.example/"],
+      undefined,
+      { wcagVersion: "wcag22aaa", bestPractices: true },
+      undefined,
+    );
     expect(m.runSettings).toHaveBeenCalledWith("7310042", "5520318");
     // Advanced rules read back off, as a plan without them turns them off.
     expect(text(result)).toContain(
       "Scan settings, as the scan ran: WCAG 2.2 AAA, best practices on, needs review on, advanced rules off.",
     );
+  });
+
+  // On an API scan a plan without advanced or experimental rules turns them off instead of
+  // refusing the scan, and the run's settings were the only sign of it: an agent that asked
+  // for advanced rules read "advanced rules off" with no reason given.
+  it("says why advanced rules asked for came back off", async () => {
+    m.runSettings.mockResolvedValue({
+      wcagVersion: "wcag22aa",
+      advancedRules: false,
+    });
+    const { run } = await tool();
+
+    const result = await run({
+      name: "checkout",
+      pageURL: "https://shop.example/",
+      wcagVersion: "wcag22aa",
+      advancedRules: true,
+    });
+
+    expect(text(result)).toContain(
+      "Scan settings, as the scan ran: WCAG 2.2 AA, advanced rules off. " +
+        "Advanced rules were asked for, but this scan ran without them, most likely because " +
+        "this account's Accessibility plan does not include them: BrowserStack then runs the " +
+        "scan at the plan's level instead of refusing it. The issues found do not include those rules.",
+    );
+  });
+
+  it("says why rules on by default came back off, apart from the ones asked for", async () => {
+    m.runSettings.mockResolvedValue({ advancedRules: false, experimentalRules: false });
+    const { run } = await tool();
+
+    const asked = text(await run({ name: "checkout", pageURL: "https://shop.example/", advancedRules: true }));
+    const unset = text(await run({ name: "checkout", pageURL: "https://shop.example/" }));
+
+    expect(asked).toContain(
+      "Advanced rules were asked for and experimental rules are on by default, but this scan ran without them",
+    );
+    expect(unset).toContain(
+      "Advanced rules and experimental rules are on by default, but this scan ran without them",
+    );
+  });
+
+  it("leads with the name the scan was started under when the one asked for was taken", async () => {
+    m.startScan.mockResolvedValue({
+      data: { id: "7310042", scanRunId: "5520318" },
+      scanName: "checkout 2026-11-03 07:45:12 UTC",
+    });
+    m.runSettings.mockResolvedValue(undefined);
+    const { run } = await tool();
+
+    const result = await run({ name: "checkout", pageURL: "https://shop.example/" });
+
+    expect(result.content[0].text).toBe(
+      'A scan named "checkout" already exists on this account, so this scan was started as "checkout 2026-11-03 07:45:12 UTC".\n',
+    );
+    expect(text(result)).toContain('Accessibility scan "checkout 2026-11-03 07:45:12 UTC" completed.');
+  });
+
+  it("says the name was cleaned when it had characters scan names can't contain", async () => {
+    m.startScan.mockResolvedValue({
+      data: { id: "7310042", scanRunId: "5520318" },
+      scanName: "Checkout - Cart",
+      nameChanges: ["characters"],
+    });
+    m.runSettings.mockResolvedValue(undefined);
+    const { run } = await tool();
+
+    const result = await run({ name: "Checkout / Cart", pageURL: "https://shop.example/" });
+
+    expect(result.content[0].text).toBe(
+      'The name "Checkout / Cart" has characters scan names can\'t contain, so this scan was started as "Checkout - Cart".\n',
+    );
+  });
+
+  it("gives no reason when the rules were asked off, ran on, or could not be read", async () => {
+    const { run } = await tool();
+
+    m.runSettings.mockResolvedValue({ advancedRules: false, experimentalRules: false });
+    const askedOff = text(
+      await run({
+        name: "checkout",
+        pageURL: "https://shop.example/",
+        advancedRules: false,
+        experimentalRules: false,
+      }),
+    );
+    m.runSettings.mockResolvedValue({ advancedRules: true, experimentalRules: true });
+    const ranOn = text(await run({ name: "checkout", pageURL: "https://shop.example/", advancedRules: true }));
+    m.runSettings.mockResolvedValue(undefined);
+    const unread = text(await run({ name: "checkout", pageURL: "https://shop.example/", advancedRules: true }));
+
+    for (const result of [askedOff, ranOn, unread]) {
+      expect(result).not.toContain("Accessibility plan");
+    }
   });
 
   it("passes experimental rules to the scan and reports them as the scan ran", async () => {
@@ -253,9 +393,13 @@ describe("startAccessibilityScan scan settings", () => {
       experimentalRules: false,
     });
 
-    expect(m.startScan).toHaveBeenCalledWith("checkout", ["https://shop.example/"], undefined, {
-      experimentalRules: false,
-    });
+    expect(m.startScan).toHaveBeenCalledWith(
+      "checkout",
+      ["https://shop.example/"],
+      undefined,
+      { experimentalRules: false },
+      undefined,
+    );
     expect(text(result)).toContain(
       "Scan settings, as the scan ran: WCAG 2.1 AA, best practices off, needs review on, advanced rules on, experimental rules off.",
     );

@@ -7,6 +7,7 @@ import { fetchLatestBuildId } from "../rca-agent-utils/tra-builds.js";
 import { sessionsListUrl } from "./list-session-ids.js";
 import {
   resolveHashedBuildId,
+  SessionNotOnFirstPageError,
   sessionDetailsUrl,
 } from "./resolve-hashed-build-id.js";
 
@@ -116,6 +117,13 @@ export async function resolveTraBuildIdFromHashed(
       sessionType,
     ).catch((error) => {
       if (error instanceof HttpError && !isNotFoundError(error)) throw error;
+      if (error instanceof SessionNotOnFirstPageError) {
+        throw new TraBuildNotFoundError(
+          `Could not confirm that TRA build ${traBuildId} is ${sessionType} build "${id}": ` +
+            "no test on its first page has a session. Use listSessions with " +
+            `"${id}" for its sessions.`,
+        );
+      }
       return undefined;
     });
     if (confirmed?.hashedBuildId !== id) {

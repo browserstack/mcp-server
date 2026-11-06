@@ -3,7 +3,6 @@ import { SessionType } from "../../lib/constants.js";
 import { getBrowserStackAuth } from "../../lib/get-auth.js";
 import { BrowserStackConfig } from "../../lib/types.js";
 import { apiClient } from "../../lib/apiClient.js";
-import logger from "../../logger.js";
 import { extractTestIds } from "../rca-agent-utils/get-failed-test-id.js";
 import { TestRun } from "../rca-agent-utils/types.js";
 import { getRegionalHost, sessionApiHost } from "../../lib/regional-host.js";
@@ -14,9 +13,6 @@ const OBSERVABILITY_UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const HASHED_BUILD_ID_RE = /^[a-f0-9]{40}$/i;
 const TRA_BUILD_ID_RE = /^[a-z0-9]{40}$/i;
-
-// Only the first session id is needed; most builds surface one on page one.
-const MAX_TEST_RUN_PAGES = 5;
 
 export function isObservabilityBuildUuid(id: string): boolean {
   return OBSERVABILITY_UUID_RE.test(id.trim());
@@ -36,6 +32,18 @@ export function otherSessionType(sessionType: SessionType): SessionType {
   return sessionType === SessionType.Automate
     ? SessionType.AppAutomate
     : SessionType.Automate;
+}
+
+/** The first page of a build's tests has no session; later pages were not read. */
+export class SessionNotOnFirstPageError extends Error {
+  constructor(buildId: string) {
+    super(
+      `No test on the first page of TRA build "${buildId}" has a BrowserStack session, ` +
+        "so its Automate build was not looked up further. Pass the Automate build " +
+        "link from the dashboard (.../builds/<build id>) instead.",
+    );
+    this.name = "SessionNotOnFirstPageError";
+  }
 }
 
 export class NoSessionsError extends Error {
@@ -121,9 +129,10 @@ export async function resolveBuildIdFromSession(
 }
 
 /**
- * Find any BrowserStack session id attached to an observability build by
- * walking its test runs. Returns undefined when no test reports a session
- * (e.g. JUnit-uploaded builds that never ran on BrowserStack).
+ * Session id of any test in the first page of a TRA build's test runs. Returns
+ * undefined when the build has no sessions at all (uploaded results). Reads one
+ * page only: if that page has no session but more exist, it throws rather than
+ * paging on.
  */
 export async function findSessionIdForObservabilityBuild(
   observabilityBuildId: string,
@@ -131,45 +140,31 @@ export async function findSessionIdForObservabilityBuild(
 ): Promise<string | undefined> {
   const authString = getBrowserStackAuth(config);
   const auth = Buffer.from(authString).toString("base64");
-  const baseUrl = `${getRegionalHost("automationApi")}/ext/v1/builds/${encodeURIComponent(observabilityBuildId)}/testRuns`;
+  const response = await apiClient.get<TestRun>({
+    url: `${getRegionalHost("automationApi")}/ext/v1/builds/${encodeURIComponent(observabilityBuildId)}/testRuns`,
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Basic ${auth}`,
+    },
+    raise_error: false,
+  });
 
-  let nextPage: string | undefined;
-  for (let page = 0; page < MAX_TEST_RUN_PAGES; page++) {
-    const response = await apiClient.get<TestRun>({
-      url: baseUrl,
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Basic ${auth}`,
-      },
-      ...(nextPage ? { params: { next_page: nextPage } } : {}),
-      raise_error: false,
-    });
-
-    if (!response.ok) {
-      throw new HttpError(
-        `Failed to fetch test runs for observability build "${observabilityBuildId}": ` +
-          `${response.status} ${response.statusText}`,
-        response.status,
-      );
-    }
-
-    const data = response.data;
-    const withSession = extractTestIds(data?.hierarchy ?? []).find(
-      (test) => test.session_id,
+  if (!response.ok) {
+    throw new HttpError(
+      `Failed to fetch test runs for observability build "${observabilityBuildId}": ` +
+        `${response.status} ${response.statusText}`,
+      response.status,
     );
-    if (withSession?.session_id) {
-      return withSession.session_id;
-    }
-
-    if (!data?.pagination?.has_next || !data.pagination.next_page) {
-      return undefined;
-    }
-    nextPage = data.pagination.next_page;
   }
 
-  logger.warn(
-    `resolveHashedBuildId: no session id in first ${MAX_TEST_RUN_PAGES} pages of build ${observabilityBuildId}`,
+  const data = response.data;
+  const withSession = extractTestIds(data?.hierarchy ?? []).find(
+    (test) => test.session_id,
   );
+  if (withSession?.session_id) return withSession.session_id;
+  if (data?.pagination?.has_next) {
+    throw new SessionNotOnFirstPageError(observabilityBuildId);
+  }
   return undefined;
 }
 

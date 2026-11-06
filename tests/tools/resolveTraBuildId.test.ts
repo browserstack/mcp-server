@@ -154,6 +154,27 @@ describe("resolveTraBuildIdFromHashed: only 404 means another product", () => {
   });
 });
 
+describe("resolveTraBuildIdFromHashed: one page of tests", () => {
+  beforeEach(() => vi.resetAllMocks());
+
+  it("says it could not confirm when the first page has no session", async () => {
+    const { SessionNotOnFirstPageError } =
+      await import("../../src/tools/automate-utils/resolve-hashed-build-id");
+    (apiClient.get as Mock).mockImplementation(async ({ url }) =>
+      url.endsWith("/builds/latest") ? ok({ build_id: TRA_ID }) : sessionList,
+    );
+    (resolveHashedBuildId as Mock).mockRejectedValue(
+      new SessionNotOnFirstPageError(TRA_ID),
+    );
+
+    const error = await resolveTraBuildIdFromHashed(HASHED, config).catch(
+      (e) => e,
+    );
+    expect(error).toBeInstanceOf(TraBuildNotFoundError);
+    expect(error.message).toMatch(/Could not confirm[\s\S]*listSessions/);
+  });
+});
+
 describe("mapHashedToTra", () => {
   beforeEach(() => vi.resetAllMocks());
 

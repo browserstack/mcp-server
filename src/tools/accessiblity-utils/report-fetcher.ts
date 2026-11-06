@@ -1,6 +1,7 @@
 import { apiClient } from "../../lib/apiClient.js";
 import {
   AppAccessibilityApi,
+  BuildLookupError,
   manualReportIdFromDashboardLink,
   manualReportStatus,
   type AppBuildIssues,
@@ -101,6 +102,14 @@ export function scanRunLink(source: ScanBuildSource): string {
  * at limit=50 or 100 the cursor skips scans, so a larger page cannot be used to go faster.
  */
 export const MAX_SCAN_LIST_PAGES = 25;
+/**
+ * Runs already found by their build id. A build id names one fixed run, so the mapping never
+ * changes: a link read again, or both sides of a compare, skip the scan-list walk. Keyed by
+ * the account, so one account never sees another's, and bounded, oldest dropped first.
+ */
+export const foundScanRuns = new Map<string, { scanId: string; scanRunId: string }>();
+const MAX_FOUND_SCAN_RUNS = 200;
+
 /** How many pages of a scan's runs are read to find the run before a given one. */
 const MAX_SCAN_RUN_PAGES = 10;
 
@@ -147,8 +156,9 @@ interface ScanListPage {
 
 /**
  * How long one call waits on a CSV export. Export time grows with the report's rows: a few
- * seconds for hundreds, ~17 s for 18k rows, over 2 minutes for 30k issues. A call stays well
- * under the 60 s request timeout MCP clients default to; an export still running after this
+ * seconds for hundreds, ~17 s for 18k rows, over 2 minutes for 30k issues. The wait itself
+ * stays under the 60 s request timeout MCP clients default to, though finding a link's run
+ * and comparing two reports can add to a call's time; an export still running after this
  * is handed back to be continued by the next call rather than started again.
  */
 export const EXPORT_WAIT_MS = 45_000;
@@ -514,19 +524,41 @@ export class AccessibilityReportFetcher {
     // An Automate or App Automate build's own id, its hashed_id (40 hex characters; a TestHub
     // id has other letters too), as the SDK prints it at the end of a run: its sessions name
     // the accessibility build they ran in, as for the build's link. Asked before the scan list.
+    // A probe that could not be answered (not a 404) moves on to the next API, and is said
+    // if none knows the id; once a session is found, what it says is the answer.
+    const probeFailures: string[] = [];
     if (/^[0-9a-f]{40}$/.test(source.buildId)) {
-      const session = await this.automateSession(source.buildId);
+      let session: string | undefined;
+      try {
+        session = await this.automateSession(source.buildId);
+      } catch (error) {
+        probeFailures.push(
+          error instanceof Error ? error.message : String(error),
+        );
+      }
       if (session) return this.buildOfAutomateSession(session);
-      const appBuildId = await this.app.buildIdOfAppAutomateBuild(
-        source.buildId,
-      );
+      let appBuildId: string | undefined;
+      try {
+        appBuildId = await this.app.buildIdOfAppAutomateBuild(source.buildId);
+      } catch (error) {
+        if (!(error instanceof BuildLookupError)) throw error;
+        probeFailures.push(error.message);
+      }
       if (appBuildId) return { kind: "appBuild", buildId: appBuildId };
     }
     // A Website Scanner run's build id (a scanner link's thBuildId) is a TestHub id too, which
     // only the scanner's issues route knows: the caller reads it there, and says so if not.
-    if (orScanRun) return { kind: "scanBuild", thBuildId: source.buildId };
+    // A 40-hex id is an Automate id, not a TestHub one: when Automate could not be asked about
+    // it, that is the answer, not a missing scan run.
+    if (orScanRun && !probeFailures.length) {
+      return { kind: "scanBuild", thBuildId: source.buildId };
+    }
     throw new Error(
-      `No Automated Tests (web) or App Accessibility build with id "${source.buildId}". Pass the id the BrowserStack SDK printed as "testhub id" at the end of the run (40 lowercase letters and digits), or the report's dashboard link as reportUrl`,
+      `No Automated Tests (web) or App Accessibility build with id "${source.buildId}". Pass the id the BrowserStack SDK printed as "testhub id" at the end of the run (40 lowercase letters and digits), or the report's dashboard link as reportUrl${
+        probeFailures.length
+          ? ` (Automate could not be asked about it: ${probeFailures.join("; ")})`
+          : ""
+      }`,
     );
   }
 
@@ -646,6 +678,9 @@ export class AccessibilityReportFetcher {
     scanId: string;
     scanRunId: string;
   }> {
+    const cacheKey = `${this.auth?.username ?? ""}|${thBuildId}`;
+    const found = foundScanRuns.get(cacheKey);
+    if (found) return { kind: "scan", ...found };
     let nextPage: string | undefined;
     let sameName: number | undefined;
     for (let page = 0; page < MAX_SCAN_LIST_PAGES; page++) {
@@ -664,11 +699,14 @@ export class AccessibilityReportFetcher {
               `Website Scanner scan ${scan.id} has no completed run to read yet; wait for it to finish, or pass scanId and scanRunId`,
             );
           }
-          return {
-            kind: "scan",
-            scanId: String(scan.id),
-            scanRunId: String(scanRunId),
-          };
+          const run = { scanId: String(scan.id), scanRunId: String(scanRunId) };
+          foundScanRuns.delete(cacheKey);
+          foundScanRuns.set(cacheKey, run);
+          for (const oldest of foundScanRuns.keys()) {
+            if (foundScanRuns.size <= MAX_FOUND_SCAN_RUNS) break;
+            foundScanRuns.delete(oldest);
+          }
+          return { kind: "scan", ...run };
         }
         if (sameName === undefined && scanName && scan.name === scanName) {
           sameName = scan.id;
@@ -731,7 +769,10 @@ export class AccessibilityReportFetcher {
       }
       taskId = initData.data.task_id;
     }
-    rememberExport(key, { taskId });
+    // The task of a report still adding issues is not kept either: continued after the report
+    // finished, it would hand back the snapshot taken while it was processing as final.
+    if (options.stillProcessing) reportExports.delete(key);
+    else rememberExport(key, { taskId });
 
     const started = Date.now();
     for (let attempt = 0; ; attempt++) {

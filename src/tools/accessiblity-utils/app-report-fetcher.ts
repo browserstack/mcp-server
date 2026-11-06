@@ -772,6 +772,17 @@ function buildOfDashboardLink(
   };
 }
 
+/**
+ * A lookup that could not be answered (an HTTP failure other than the API's 404), as opposed
+ * to an answer about the build: a caller probing an id can try the next API instead.
+ */
+export class BuildLookupError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "BuildLookupError";
+  }
+}
+
 export class AppAccessibilityApi {
   constructor(
     private readonly headers: () => Record<string, string> | undefined,
@@ -890,7 +901,7 @@ export class AppAccessibilityApi {
       raise_error: false,
     });
     if (!resp.ok && resp.status !== 404) {
-      throw new Error(
+      throw new BuildLookupError(
         `Could not list the sessions of App Automate build ${buildId}: HTTP ${resp.status}`,
       );
     }
@@ -960,7 +971,7 @@ export class AppAccessibilityApi {
       }
       // Each framework's API answers 404 for the other's builds.
       if (resp.status !== 404) {
-        throw new Error(
+        throw new BuildLookupError(
           `Could not read App Automate build ${buildId} from the ${framework} API: HTTP ${resp.status}`,
         );
       }

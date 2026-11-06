@@ -14,7 +14,11 @@ import {
   MAX_SCAN_LIST_PAGES,
   reportExports,
   MAX_REPORT_EXPORTS,
+  foundScanRuns,
 } from "../../src/tools/accessiblity-utils/report-fetcher.js";
+
+// Runs found by build id are cached for the process; each test starts without them.
+beforeEach(() => foundScanRuns.clear());
 
 const get = apiClient.get as Mock;
 const API = "https://api-accessibility.browserstack.com/api";

@@ -1,4 +1,3 @@
-import { callCapability } from "../capability-registry/call.js";
 import { HttpError } from "../../lib/error.js";
 import { SessionType } from "../../lib/constants.js";
 import { getBrowserStackAuth } from "../../lib/get-auth.js";
@@ -132,8 +131,8 @@ export async function resolveBuildIdFromSession(
 /**
  * Session id of any test in the first page of a TRA build's test runs. Returns
  * undefined when the build has no sessions at all (uploaded results). Reads one
- * page only: if that page has no session but more exist, the build's session count
- * decides between "uploaded" and throwing, rather than paging on.
+ * page only: if that page has no session but more exist, it throws rather than
+ * paging on.
  */
 export async function findSessionIdForObservabilityBuild(
   observabilityBuildId: string,
@@ -163,35 +162,10 @@ export async function findSessionIdForObservabilityBuild(
     (test) => test.session_id,
   );
   if (withSession?.session_id) return withSession.session_id;
-  if (
-    data?.pagination?.has_next &&
-    !(await hasNoSessions(observabilityBuildId, config))
-  ) {
+  if (data?.pagination?.has_next) {
     throw new SessionNotOnFirstPageError(observabilityBuildId);
   }
   return undefined;
-}
-
-// One call instead of more pages: the build's session count says whether it is an
-// upload. False when the count cannot be read, so the caller asks for a link instead.
-async function hasNoSessions(
-  buildId: string,
-  config: BrowserStackConfig,
-): Promise<boolean> {
-  try {
-    const result = await callCapability(
-      "tra",
-      "get_build_summary_stats",
-      { path_params: { uuid: buildId } },
-      config,
-    );
-    const body = result.http_response.body as {
-      sessionStats?: { totalSessions?: unknown };
-    } | null;
-    return result.ok && body?.sessionStats?.totalSessions === 0;
-  } catch {
-    return false;
-  }
 }
 
 export interface ResolvedHashedBuildId {

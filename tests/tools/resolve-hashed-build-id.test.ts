@@ -24,11 +24,6 @@ vi.mock("../../src/logger", () => ({
 vi.mock("../../src/tools/rca-agent-utils/constants", () => ({
   getAutomationBaseUrl: () => "https://api-automation.browserstack.com",
 }));
-vi.mock("../../src/tools/capability-registry/call", () => ({
-  callCapability: vi.fn(async () => {
-    throw new Error("capability unavailable in tests");
-  }),
-}));
 
 const config = {
   "browserstack-username": "user",
@@ -166,48 +161,6 @@ describe("findSessionIdForObservabilityBuild", () => {
       findSessionIdForObservabilityBuild(OBS_UUID, config),
     ).rejects.toThrow(/first page of TRA build[\s\S]*Automate build link/);
     expect(apiClient.get).toHaveBeenCalledTimes(1);
-  });
-
-  it("reports an upload when the build's session count is zero", async () => {
-    const { callCapability } = await import(
-      "../../src/tools/capability-registry/call"
-    );
-    (callCapability as Mock).mockResolvedValueOnce({
-      ok: true,
-      completed: true,
-      http_response: { status: 200, body: { sessionStats: { totalSessions: 0 } } },
-    });
-    (apiClient.get as Mock).mockResolvedValueOnce(
-      testRunsPage([{ id: 1, session_id: null }], "p2"),
-    );
-
-    await expect(
-      findSessionIdForObservabilityBuild(OBS_UUID, config),
-    ).resolves.toBeUndefined();
-    expect((callCapability as Mock).mock.calls[0].slice(0, 3)).toEqual([
-      "tra",
-      "get_build_summary_stats",
-      { path_params: { uuid: OBS_UUID } },
-    ]);
-    expect(apiClient.get).toHaveBeenCalledTimes(1);
-  });
-
-  it("asks for a link when the build has sessions beyond the first page", async () => {
-    const { callCapability } = await import(
-      "../../src/tools/capability-registry/call"
-    );
-    (callCapability as Mock).mockResolvedValueOnce({
-      ok: true,
-      completed: true,
-      http_response: { status: 200, body: { sessionStats: { totalSessions: 4 } } },
-    });
-    (apiClient.get as Mock).mockResolvedValueOnce(
-      testRunsPage([{ id: 1, session_id: null }], "p2"),
-    );
-
-    await expect(
-      findSessionIdForObservabilityBuild(OBS_UUID, config),
-    ).rejects.toThrow(/Automate build link/);
   });
 
   it("returns undefined when no test carries a session id", async () => {

@@ -107,7 +107,10 @@ export const MAX_SCAN_LIST_PAGES = 25;
  * changes: a link read again, or both sides of a compare, skip the scan-list walk. Keyed by
  * the account, so one account never sees another's, and bounded, oldest dropped first.
  */
-export const foundScanRuns = new Map<string, { scanId: string; scanRunId: string }>();
+export const foundScanRuns = new Map<
+  string,
+  { scanId: string; scanRunId: string }
+>();
 const MAX_FOUND_SCAN_RUNS = 200;
 
 /** How many pages of a scan's runs are read to find the run before a given one. */

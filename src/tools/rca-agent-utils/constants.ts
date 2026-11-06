@@ -21,13 +21,13 @@ export const GET_BUILD_ID_PARAMS = {
   browserStackBuildName: z
     .string()
     .optional()
-    .describe("SDK or dashboard build name; latest run unless buildNumber."),
+    .describe("Build name from browserstack.yml; latest run."),
   buildNumber: z
     .number()
     .int()
     .positive()
     .optional()
-    .describe("Build number (#N) from the dashboard."),
+    .describe("Build #N; then use the dashboard build name."),
   buildUrl: z
     .string()
     .optional()

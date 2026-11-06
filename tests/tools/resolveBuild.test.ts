@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, Mock } from "vitest";
 import { apiClient } from "../../src/lib/apiClient";
 import { SessionType } from "../../src/lib/constants";
+import { HttpError } from "../../src/lib/error";
 import {
   BuildLookupError,
   parseBuildUrl,
@@ -37,79 +38,21 @@ const config = {
 const TRA_ID = "jlcb5jo8xakocnjyll3n10b1rx5sqnrprh3y6zsp";
 const HASHED = "df9fde1187c547ea157e6e683289ed17ad58452c";
 
-// Real rows from the "Checking Project Name" project: the dashboard shows
-// "junit", the SDK sent a size-suffixed name, and each run has its own number.
-const JUNIT_ROWS = [
-  {
-    build_id: "yeym4xchfkryrxfpl8wjifacddkbs7wqeuscb2ze",
-    name: "junit",
-    original_name: "patc204-junit-21mb",
-    build_number: 1,
-    started_at: "2026-08-21T10:00:00.000+00:00",
-    status: "passed",
-  },
-  {
-    build_id: "e9tdlmcerew3j7bbob4ghuvfuu6aztjrm7pm0rkl",
-    name: "junit",
-    original_name: "patc204-junit-25mb",
-    build_number: 2,
-    started_at: "2026-08-21T10:00:00.000+00:00",
-    status: "passed",
-  },
-  {
-    build_id: TRA_ID,
-    name: "junit",
-    original_name: "patc204-junit-105mb",
-    build_number: 3,
-    started_at: "2026-08-21T10:00:00.000+00:00",
-    status: "passed",
-    observability_url:
-      "https://observability.browserstack.com/projects/Checking+Project+Name/builds/junit/3",
-  },
-];
-
 const ok = (data: unknown) => ({ ok: true, status: 200, data });
 const notFound = { ok: false, status: 404, statusText: "Not Found", data: {} };
 
-/** Route apiClient.get by URL, the way the TRA public API answers. */
-function routeTra(options: {
-  latest?: Record<string, string>;
-  projects?: Array<{ id: number; name: string }>;
-  builds?: any[];
-  automateBuilds?: { automate?: any[]; app?: any[] };
-}) {
+/** Answers /builds/latest by SDK build name; any other URL is unexpected. */
+function routeLatest(latest: Record<string, string>) {
   (apiClient.get as Mock).mockImplementation(async ({ url, params }) => {
     if (url.endsWith("/ext/v1/builds/latest")) {
-      const id = options.latest?.[params.build_name];
+      const id = latest[params.build_name];
       return id ? ok({ build_id: id }) : notFound;
-    }
-    if (url.endsWith("/ext/v1/projects")) {
-      // One page, then the empty page the API really sends at the end.
-      return params?.next_page
-        ? ok({ projects: [], pagination: { has_next: false } })
-        : ok({
-            projects: options.projects ?? [],
-            pagination: { has_next: true, next_page: "p2" },
-          });
-    }
-    if (url.endsWith("/builds.json")) {
-      const product = url.includes("app-automate") ? "app" : "automate";
-      return params.offset
-        ? ok([])
-        : ok(options.automateBuilds?.[product] ?? []);
-    }
-    if (/\/ext\/v1\/projects\/\d+\/builds$/.test(url)) {
-      const all = options.builds ?? [];
-      const rows = params.unique_build_names
-        ? all.filter((b) => b.name === params.unique_build_names)
-        : all;
-      return ok({ builds: rows, pagination: { has_next: false } });
     }
     throw new Error(`unexpected url ${url}`);
   });
 }
 
-const PROJECT = { id: 1483919, name: "Checking Project Name" };
+const PROJECT = "Checking Project Name";
 
 describe("parseBuildUrl", () => {
   it("reads project, dashboard name and number from a TRA link", () => {
@@ -156,13 +99,13 @@ describe("parseBuildUrl", () => {
 describe("resolveBuild", () => {
   beforeEach(() => vi.resetAllMocks());
 
-  it("returns the exact SDK-name match with no note (unchanged fast path)", async () => {
-    routeTra({ latest: { "patc204-junit-105mb": TRA_ID } });
+  it("returns the latest run for the SDK build name in one request", async () => {
+    routeLatest({ "patc204-junit-105mb": TRA_ID });
 
     await expect(
       resolveBuild(
         {
-          browserStackProjectName: PROJECT.name,
+          browserStackProjectName: PROJECT,
           browserStackBuildName: "patc204-junit-105mb",
         },
         config,
@@ -171,132 +114,83 @@ describe("resolveBuild", () => {
     expect(apiClient.get).toHaveBeenCalledTimes(1);
   });
 
-  it("finds the latest run by its dashboard name when the SDK name misses", async () => {
-    routeTra({ projects: [PROJECT], builds: JUNIT_ROWS });
+  it("explains the name mismatch after one request instead of searching", async () => {
+    routeLatest({});
 
-    const result = await resolveBuild(
-      { browserStackProjectName: PROJECT.name, browserStackBuildName: "junit" },
-      config,
+    await expect(
+      resolveBuild(
+        { browserStackProjectName: PROJECT, browserStackBuildName: "junit" },
+        config,
+      ),
+    ).rejects.toThrow(
+      /matches the name from browserstack.yml[\s\S]*build number or dashboard link/,
     );
-
-    expect(result.buildId).toBe(TRA_ID);
-    expect(result.note).toContain('"junit" #3');
-    expect(result.note).toContain('the SDK sent it as "patc204-junit-105mb"');
+    expect(apiClient.get).toHaveBeenCalledTimes(1);
   });
 
-  it("picks the requested build number", async () => {
-    routeTra({ projects: [PROJECT], builds: JUNIT_ROWS });
-
+  it("hands a build number to the capability without calling any API", async () => {
     const result = await resolveBuild(
       {
-        browserStackProjectName: "checking project name",
+        browserStackProjectName: PROJECT,
         browserStackBuildName: "junit",
         buildNumber: 2,
       },
       config,
     );
 
-    expect(result.buildId).toBe("e9tdlmcerew3j7bbob4ghuvfuu6aztjrm7pm0rkl");
-    // A build number skips /builds/latest, which only knows the latest run.
-    const urls = (apiClient.get as Mock).mock.calls.map((c) => c[0].url);
-    expect(urls.some((u: string) => u.endsWith("/builds/latest"))).toBe(false);
+    expect(result).toMatchObject({
+      capability: {
+        name: "get_build_id_from_build_coordinates",
+        product: "tra",
+        query: {
+          projectNormalisedName: PROJECT,
+          buildNormalisedName: "junit",
+          buildSerialId: 2,
+        },
+      },
+    });
+    expect("note" in result && result.note).toContain("call invokeCapability");
+    expect(apiClient.get).not.toHaveBeenCalled();
   });
 
-  it("resolves a TRA dashboard link end to end", async () => {
-    routeTra({ projects: [PROJECT], builds: JUNIT_ROWS });
-
-    const result = await resolveBuild(
+  it("hands TRA and Automate dashboard project links to the capability", async () => {
+    for (const link of [
+      "https://observability.browserstack.com/projects/Checking+Project+Name/builds/junit/2",
+      "https://automate.browserstack.com/projects/Default+Project+4/builds/TC-LCA+agentic+run++default/1022",
+    ]) {
+      const result = await resolveBuild({ buildUrl: link }, config);
+      expect(result).toHaveProperty(
+        "capability.name",
+        "get_build_id_from_build_coordinates",
+      );
+    }
+    const automate = await resolveBuild(
       {
         buildUrl:
-          "https://observability.browserstack.com/projects/Checking+Project+Name/builds/junit/1",
+          "https://automate.browserstack.com/projects/Default+Project+4/builds/TC-LCA+agentic+run++default/1022",
       },
       config,
     );
-
-    expect(result.buildId).toBe("yeym4xchfkryrxfpl8wjifacddkbs7wqeuscb2ze");
-  });
-
-  it("matches a differently cased SDK name over recent builds", async () => {
-    routeTra({ projects: [PROJECT], builds: JUNIT_ROWS });
-
-    const result = await resolveBuild(
-      {
-        browserStackProjectName: PROJECT.name,
-        browserStackBuildName: "PATC204-JUNIT-25MB",
-      },
-      config,
-    );
-
-    expect(result.buildId).toBe("e9tdlmcerew3j7bbob4ghuvfuu6aztjrm7pm0rkl");
-  });
-
-  it("lists close matches instead of a bare 404", async () => {
-    routeTra({ projects: [PROJECT], builds: JUNIT_ROWS });
-
-    const error = await resolveBuild(
-      {
-        browserStackProjectName: PROJECT.name,
-        browserStackBuildName: "patc204",
-      },
-      config,
-    ).catch((e) => e);
-
-    expect(error).toBeInstanceOf(BuildLookupError);
-    expect(error.message).toContain('No build named "patc204"');
-    expect(error.message).toContain("Close matches");
-    expect(error.message).toContain(TRA_ID);
-  });
-
-  it("names similar projects when the project is unknown", async () => {
-    routeTra({ projects: [PROJECT, { id: 763, name: "Tcm Sanity" }] });
-
-    await expect(
-      resolveBuild(
-        { browserStackProjectName: "Checking", browserStackBuildName: "junit" },
-        config,
-      ),
-    ).rejects.toThrow(
-      /No TRA project named "Checking" found. Similar projects: "Checking Project Name"/,
-    );
-  });
-
-  it("asks for a name when a build number matches several builds", async () => {
-    routeTra({
-      projects: [PROJECT],
-      builds: [
-        ...JUNIT_ROWS,
-        { ...JUNIT_ROWS[0], build_id: "other", name: "smoke", build_number: 3 },
-      ],
+    expect(automate).toHaveProperty("capability.query", {
+      projectNormalisedName: "Default Project 4",
+      buildNormalisedName: "TC-LCA agentic run  default",
+      buildSerialId: 1022,
     });
+    expect(apiClient.get).not.toHaveBeenCalled();
+  });
+
+  it("looks up the latest run for a project link without a number", async () => {
+    routeLatest({ junit: TRA_ID });
 
     await expect(
       resolveBuild(
-        { browserStackProjectName: PROJECT.name, buildNumber: 3 },
-        config,
-      ),
-    ).rejects.toThrow(/Several builds .* are #3; pass browserStackBuildName/);
-  });
-
-  it("returns the project's most recent build when only the project is given", async () => {
-    routeTra({
-      projects: [PROJECT],
-      builds: [
-        ...JUNIT_ROWS,
         {
-          build_id: "newest",
-          name: "smoke",
-          build_number: 9,
-          started_at: "2026-11-01T00:00:00.000+00:00",
+          buildUrl:
+            "https://observability.browserstack.com/projects/Checking+Project+Name/builds/junit",
         },
-      ],
-    });
-
-    const result = await resolveBuild(
-      { browserStackProjectName: PROJECT.name },
-      config,
-    );
-    expect(result.buildId).toBe("newest");
-    expect(result.note).toContain("Other recent builds");
+        config,
+      ),
+    ).resolves.toEqual({ buildId: TRA_ID });
   });
 
   it("prefers the caller's own build, then anyone's, for getBuildId", async () => {
@@ -305,7 +199,7 @@ describe("resolveBuild", () => {
     );
 
     const result = await resolveBuild(
-      { browserStackProjectName: PROJECT.name, browserStackBuildName: "b" },
+      { browserStackProjectName: PROJECT, browserStackBuildName: "b" },
       config,
       { userName: "user" },
     );
@@ -338,8 +232,10 @@ describe("resolveBuild", () => {
       config,
       SessionType.AppAutomate,
     );
-    expect(result.buildId).toBe(TRA_ID);
-    expect(result.note).toContain("listSessions takes either id");
+    expect(result).toMatchObject({
+      buildId: TRA_ID,
+      note: expect.stringContaining("listSessions takes either id"),
+    });
   });
 
   it("returns the hashed id with the reason when the Automate build has no TRA build", async () => {
@@ -351,223 +247,15 @@ describe("resolveBuild", () => {
 
     const result = await resolveBuild({ buildUrl: HASHED }, config);
 
-    expect(result.buildId).toBe(HASHED);
-    expect(result.note).toContain(
-      "listTestIds and fetchRCA need a TRA build id",
-    );
-  });
-
-  it("explains what to pass when nothing identifies a project", async () => {
-    (apiClient.get as Mock).mockResolvedValue(ok([]));
-    await expect(
-      resolveBuild({ browserStackBuildName: "junit" }, config),
-    ).rejects.toThrow(/Pass browserStackProjectName/);
-    await expect(
-      resolveBuild({ buildUrl: "https://example.com/x" }, config),
-    ).rejects.toThrow(/Could not read a build from that link/);
-  });
-
-  it("retries a dropped connection once", async () => {
-    (apiClient.get as Mock)
-      .mockRejectedValueOnce(new Error("socket hang up"))
-      .mockResolvedValueOnce(ok({ build_id: TRA_ID }));
-
-    await expect(
-      resolveBuild(
-        { browserStackProjectName: "P", browserStackBuildName: "b" },
-        config,
+    expect(result).toMatchObject({
+      buildId: HASHED,
+      note: expect.stringContaining(
+        "listTestIds and fetchRCA need a TRA build id",
       ),
-    ).resolves.toEqual({ buildId: TRA_ID });
-  });
-});
-
-describe("resolveBuild: Automate builds TRA never saw", () => {
-  beforeEach(() => vi.resetAllMocks());
-
-  const automateBuild = (name: string, hashed: string, created: string) => ({
-    automation_build: { name, hashed_id: hashed, created_at: created },
-  });
-
-  it("finds an Automate build by name when TRA has none, listing the others", async () => {
-    routeTra({
-      projects: [PROJECT],
-      builds: JUNIT_ROWS,
-      automateBuilds: {
-        automate: [
-          automateBuild("Smoke Suite", "a".repeat(40), "2026-10-01T00:00:00Z"),
-        ],
-        app: [automateBuild("smoke suite", HASHED, "2026-11-02T00:00:00Z")],
-      },
-    });
-    (resolveTraBuildIdFromHashed as Mock).mockRejectedValue(
-      new TraBuildNotFoundError(
-        "has no TRA build: only runs through the BrowserStack SDK report tests to TRA.",
-      ),
-    );
-
-    const result = await resolveBuild(
-      {
-        browserStackProjectName: PROJECT.name,
-        browserStackBuildName: "smoke suite",
-      },
-      config,
-    );
-    expect(result.buildId).toBe("a".repeat(40));
-    expect(result.note).toContain(
-      'Found automate build "Smoke Suite" by name (first match)',
-    );
-    expect(result.note).toContain("has no TRA build");
-    expect(result.note).toContain(`app-automate: ${HASHED}`);
-  });
-
-  it("returns the TRA id when the Automate build did report to TRA", async () => {
-    routeTra({
-      projects: [],
-      automateBuilds: {
-        automate: [automateBuild("nightly", HASHED, "2026-11-02T00:00:00Z")],
-      },
-    });
-    (resolveTraBuildIdFromHashed as Mock).mockResolvedValue({
-      traBuildId: TRA_ID,
-      hashedBuildId: HASHED,
-      sessionType: SessionType.Automate,
-      projectName: "Other",
-      buildName: "nightly",
-    });
-
-    const result = await resolveBuild(
-      { browserStackBuildName: "nightly" },
-      config,
-    );
-    expect(result.buildId).toBe(TRA_ID);
-    expect(result.note).toContain("TRA build for automate build");
-  });
-
-  it("keeps the TRA explanation when no Automate build matches either", async () => {
-    routeTra({ projects: [PROJECT], builds: JUNIT_ROWS });
-
-    await expect(
-      resolveBuild(
-        {
-          browserStackProjectName: PROJECT.name,
-          browserStackBuildName: "patc204",
-        },
-        config,
-      ),
-    ).rejects.toThrow(
-      /Close matches[\s\S]*None of the latest Automate or App Automate builds is named "patc204" either/,
-    );
-  });
-
-  it("does not search Automate for a TRA build number", async () => {
-    routeTra({ projects: [PROJECT], builds: JUNIT_ROWS });
-
-    await expect(
-      resolveBuild(
-        {
-          browserStackProjectName: PROJECT.name,
-          browserStackBuildName: "junit",
-          buildNumber: 9,
-        },
-        config,
-      ),
-    ).rejects.toThrow(BuildLookupError);
-    expect(
-      (apiClient.get as Mock).mock.calls.some(([req]) =>
-        req.url.endsWith("/builds.json"),
-      ),
-    ).toBe(false);
-  });
-});
-
-describe("resolveBuild: request budget", () => {
-  beforeEach(() => vi.resetAllMocks());
-
-  it("stops the project lookup after 5 pages and says the search was partial", async () => {
-    (apiClient.get as Mock).mockImplementation(async ({ url, params }) => {
-      if (url.endsWith("/ext/v1/builds/latest")) return notFound;
-      if (url.endsWith("/builds.json")) return ok([]);
-      if (url.endsWith("/ext/v1/projects")) {
-        // Always another page: the cap, not the data, must end the walk.
-        return ok({
-          projects: [{ id: Number(params?.next_page ?? 0), name: "Unrelated" }],
-          pagination: {
-            has_next: true,
-            next_page: String(Number(params?.next_page ?? 0) + 1),
-          },
-        });
-      }
-      throw new Error(`unexpected url ${url}`);
-    });
-
-    await expect(
-      resolveBuild(
-        {
-          browserStackProjectName: "Missing",
-          browserStackBuildName: "nightly",
-        },
-        config,
-      ),
-    ).rejects.toThrow(
-      // Counts the projects actually seen: one per fake page here.
-      /"Missing" is not among the first 5 TRA projects[\s\S]*Pass the TRA build id/,
-    );
-    const urls = (apiClient.get as Mock).mock.calls.map(
-      ([req]) => req.url as string,
-    );
-    expect(urls.filter((u) => u.endsWith("/ext/v1/projects"))).toHaveLength(5);
-    expect(urls.filter((u) => u.endsWith("/builds.json"))).toHaveLength(2);
-    expect(urls.length).toBeLessThanOrEqual(8);
-  });
-
-  it("reads one page of builds when a build number is not among the latest runs", async () => {
-    routeTra({ projects: [PROJECT], builds: JUNIT_ROWS });
-
-    await expect(
-      resolveBuild(
-        {
-          browserStackProjectName: PROJECT.name,
-          browserStackBuildName: "junit",
-          buildNumber: 9,
-        },
-        config,
-      ),
-    ).rejects.toThrow(/no build #9 among its latest runs/);
-    const buildPages = (apiClient.get as Mock).mock.calls.filter(([req]) =>
-      /\/projects\/\d+\/builds$/.test(req.url),
-    );
-    expect(buildPages).toHaveLength(1);
-  });
-});
-
-describe("resolveBuild: Automate project links", () => {
-  beforeEach(() => vi.resetAllMocks());
-
-  // The Automate dashboard serves TRA build pages, with TRA's names and numbers.
-  const link =
-    "https://automate.browserstack.com/projects/Checking+Project+Name/builds/junit/2";
-
-  it("parses the link like a TRA link", () => {
-    expect(parseBuildUrl(link)).toEqual({
-      projectName: "Checking Project Name",
-      buildName: "junit",
-      buildNumber: 2,
     });
   });
-
-  it("resolves it to the TRA build with that number", async () => {
-    routeTra({ projects: [PROJECT], builds: JUNIT_ROWS });
-
-    const result = await resolveBuild({ buildUrl: link }, config);
-    expect(result.buildId).toBe("e9tdlmcerew3j7bbob4ghuvfuu6aztjrm7pm0rkl");
-  });
-});
-
-describe("resolveBuild: Automate outages", () => {
-  beforeEach(() => vi.resetAllMocks());
 
   it("surfaces a server error instead of returning the Automate id as a TRA id", async () => {
-    const { HttpError } = await import("../../src/lib/error");
     (resolveTraBuildIdFromHashed as Mock).mockRejectedValue(
       new HttpError(
         "Failed to read automate build: 503 Service Unavailable",
@@ -584,70 +272,30 @@ describe("resolveBuild: Automate outages", () => {
       ),
     ).rejects.toThrow(/503/);
   });
-});
 
-describe("resolveBuild: Automate name search outages", () => {
-  beforeEach(() => vi.resetAllMocks());
+  it("asks for both names when either is missing", async () => {
+    await expect(
+      resolveBuild({ browserStackBuildName: "junit" }, config),
+    ).rejects.toThrow(BuildLookupError);
+    await expect(
+      resolveBuild({ browserStackProjectName: PROJECT }, config),
+    ).rejects.toThrow(/browserStackBuildName/);
+    await expect(
+      resolveBuild({ buildUrl: "https://example.com/x" }, config),
+    ).rejects.toThrow(/Could not read a build from that link/);
+    expect(apiClient.get).not.toHaveBeenCalled();
+  });
 
-  it("surfaces a server error from the builds list", async () => {
-    routeTra({ projects: [] });
-    const route = (apiClient.get as Mock).getMockImplementation()!;
-    (apiClient.get as Mock).mockImplementation(async (req) =>
-      req.url.endsWith("/builds.json")
-        ? {
-            ok: false,
-            status: 503,
-            statusText: "Service Unavailable",
-            data: {},
-          }
-        : route(req),
-    );
+  it("retries a dropped connection once", async () => {
+    (apiClient.get as Mock)
+      .mockRejectedValueOnce(new Error("socket hang up"))
+      .mockResolvedValueOnce(ok({ build_id: TRA_ID }));
 
     await expect(
-      resolveBuild({ browserStackBuildName: "nightly" }, config),
-    ).rejects.toThrow(/Failed to list automate builds: 503/);
-  });
-
-  it("skips a product the account cannot access", async () => {
-    routeTra({ projects: [] });
-    (apiClient.get as Mock).mockImplementation(async ({ url }) => {
-      if (url.includes("app-automate/builds.json"))
-        return { ok: false, status: 401, statusText: "Unauthorized", data: {} };
-      if (url.endsWith("/builds.json"))
-        return ok([
-          { automation_build: { name: "nightly", hashed_id: HASHED } },
-        ]);
-      throw new Error(`unexpected url ${url}`);
-    });
-    (resolveTraBuildIdFromHashed as Mock).mockRejectedValue(
-      new TraBuildNotFoundError("has no TRA build."),
-    );
-
-    const result = await resolveBuild(
-      { browserStackBuildName: "nightly" },
-      config,
-    );
-    expect(result.buildId).toBe(HASHED);
-  });
-
-  it("surfaces a server error while mapping the match to TRA", async () => {
-    const { HttpError } = await import("../../src/lib/error");
-    routeTra({
-      automateBuilds: {
-        automate: [
-          { automation_build: { name: "nightly", hashed_id: HASHED } },
-        ],
-      },
-    });
-    (resolveTraBuildIdFromHashed as Mock).mockRejectedValue(
-      new HttpError(
-        "Failed to read automate build: 503 Service Unavailable",
-        503,
+      resolveBuild(
+        { browserStackProjectName: "P", browserStackBuildName: "b" },
+        config,
       ),
-    );
-
-    await expect(
-      resolveBuild({ browserStackBuildName: "nightly" }, config),
-    ).rejects.toThrow(/503/);
+    ).resolves.toEqual({ buildId: TRA_ID });
   });
 });

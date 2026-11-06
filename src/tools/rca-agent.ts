@@ -25,6 +25,9 @@ import {
 } from "./rca-agent-utils/constants.js";
 
 function buildLookupResult(result: BuildLookupResult): CallToolResult {
+  if ("capability" in result) {
+    return { content: [{ type: "text", text: result.note }] };
+  }
   const content: CallToolResult["content"] = [
     { type: "text", text: result.buildId },
   ];
@@ -222,7 +225,7 @@ export default function addRCATools(
 
   tools.listBuildId = server.tool(
     "listBuildId",
-    "Find a TRA or Automate build id from project + build name, build number or dashboard link. Searches all users.",
+    "Find a TRA build id, any user: project + build name (latest run) or dashboard link. Build numbers need one more call.",
     GET_BUILD_ID_PARAMS,
     {
       title: "List Build IDs",

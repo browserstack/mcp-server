@@ -1878,9 +1878,9 @@ async function rerunAccessibilityScan(
     return createSuccessResponse([
       [
         `Scan ${scanId} was not re-run: a re-run uses the scan's saved settings, and ${one ? "this one differs" : "these differ"} from what was passed:`,
-        ...nameLine,
         ...differences.map((difference) => `- ${difference}`),
         `To re-run it with its saved settings, call startAccessibilityScan again with scanId "${scanId}" and without ${one ? "that setting" : "those settings"}. To scan with the settings passed, call it without scanId: that starts a new scan, whose runs can't be compared with this scan's.`,
+        ...nameLine,
       ].join("\n"),
     ]);
   }

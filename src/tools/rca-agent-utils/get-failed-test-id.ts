@@ -1,3 +1,4 @@
+import { HttpError } from "../../lib/error.js";
 import logger from "../../logger.js";
 import { getAutomationBaseUrl } from "./constants.js";
 import {
@@ -13,6 +14,17 @@ const ERROR_SUMMARY_MAX = 200;
 
 // Safety bound on pagination; hitting it is logged, never silent.
 const MAX_PAGES = 100;
+
+async function fetchWithRetry(
+  url: string,
+  init: RequestInit,
+): Promise<Response> {
+  try {
+    return await fetch(url, init);
+  } catch {
+    return await fetch(url, init);
+  }
+}
 
 export async function getTestIds(
   buildId: string,
@@ -35,7 +47,7 @@ export async function getTestIds(
     while (true) {
       requestNumber++;
 
-      const response = await fetch(url, {
+      const response = await fetchWithRetry(url, {
         headers: {
           Authorization: authHeader,
           "Content-Type": "application/json",
@@ -43,8 +55,9 @@ export async function getTestIds(
       });
 
       if (!response.ok) {
-        throw new Error(
+        throw new HttpError(
           `Failed to fetch test runs: ${response.status} ${response.statusText}`,
+          response.status,
         );
       }
 

@@ -29,6 +29,7 @@ import {
 } from "../../src/tools/accessiblity-utils/fp-memory.js";
 
 const AUTH = { username: "u", password: "k" };
+const ON_SITE = "https://www.shop.example/de/angebote";
 
 function entry(id: number, extra: Partial<FpEntry> = {}): FpEntry {
   return {
@@ -89,6 +90,40 @@ describe("memoryForReport", () => {
     expect(call.timeout).toBeGreaterThan(0);
   });
 
+  it("reads only the page's site (and all-sites entries) when the page is known", async () => {
+    get.mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: { success: true, data: memory([entry(1)]) },
+    });
+
+    await memoryForReport(AUTH, ["role-required"], ON_SITE);
+
+    expect(get.mock.calls[0][0].url).toContain(
+      `&site=${encodeURIComponent(ON_SITE)}`,
+    );
+  });
+
+  it("answers without memory when the response has no rules, and reads a rule without entries as empty", async () => {
+    get.mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: { success: true, data: {} },
+    });
+    expect(await memoryForReport(AUTH, ["role-required"])).toBeUndefined();
+
+    get.mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: { success: true, data: { rules: [{ ruleCode: "role-required" }] } },
+    });
+    const result = await memoryForReport(AUTH, ["role-required"]);
+    expect(result).toEqual({
+      nextCursor: null,
+      rules: [{ ruleCode: "role-required", entries: [] }],
+    });
+  });
+
   it("does not ask when the answer names no rules", async () => {
     expect(await memoryForReport(AUTH, [])).toBeUndefined();
     expect(get).not.toHaveBeenCalled();
@@ -107,7 +142,6 @@ describe("memoryForReport", () => {
   });
 });
 
-const ON_SITE = "https://www.shop.example/de/angebote";
 const issue = (issue_type: string, affected_page = ON_SITE) => ({
   issue_type,
   affected_page,
@@ -211,6 +245,17 @@ describe("applyMemory with more entries than one read returns", () => {
     const note = view.notes.find((n) => n.startsWith("Not all entries fit"));
     expect(note).toContain(READ_CAPABILITY);
     expect(note).toContain("nextCursor");
+  });
+
+  it("says so even when no issue here is covered by the page read", () => {
+    const view = applyMemory(
+      { ...memory([entry(1, { site: "other.example" })]), nextCursor: "fp_1" },
+      [issue("role-required")],
+    );
+    expect(view.marked).toBe(0);
+    expect(view.notes[0]).toMatch(/Not all saved false positives were read/);
+    expect(view.notes[0]).toContain(READ_CAPABILITY);
+    expect(view.notes.at(-1)).toBe(FP_FILING_GUIDE);
   });
 });
 

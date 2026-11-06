@@ -64,11 +64,14 @@ export interface FpMemory {
 export async function memoryForReport(
   auth: { username: string; password: string },
   ruleCodes: string[],
+  page?: string,
 ): Promise<FpMemory | undefined> {
   if (ruleCodes.length === 0) return undefined;
+  // With the page known, other sites' entries stay out of the page of entries read.
+  const site = page ? `&site=${encodeURIComponent(page)}` : "";
   try {
     const resp = await apiClient.get({
-      url: `${getRegionalHost("accessibilityApi")}/api/fp-memory/v1/memory?ruleCodes=${encodeURIComponent(ruleCodes.join(","))}&limit=${MEMORY_PAGE_SIZE}`,
+      url: `${getRegionalHost("accessibilityApi")}/api/fp-memory/v1/memory?ruleCodes=${encodeURIComponent(ruleCodes.join(","))}&limit=${MEMORY_PAGE_SIZE}${site}`,
       headers: {
         Authorization:
           "Basic " +
@@ -82,7 +85,18 @@ export async function memoryForReport(
       logger.warn(`False-positive memory not read: HTTP ${resp.status}`);
       return undefined;
     }
-    return resp.data.data as FpMemory;
+    const memory = resp.data.data;
+    if (!Array.isArray(memory?.rules)) {
+      logger.warn("False-positive memory not read: no rules in the response");
+      return undefined;
+    }
+    return {
+      nextCursor: memory.nextCursor ?? null,
+      rules: memory.rules.map((rule: FpRuleMemory) => ({
+        ...rule,
+        entries: Array.isArray(rule.entries) ? rule.entries : [],
+      })),
+    };
   } catch (error) {
     logger.warn(
       `False-positive memory not read: ${error instanceof Error ? error.message : String(error)}`,
@@ -214,7 +228,18 @@ export function applyMemory<T extends IssueLike>(
     return { ...record, saved_fp_entries: ids };
   });
   if (marked === 0) {
-    return { records, marked, lead: [], notes: [FP_FILING_GUIDE], closing: [] };
+    const unread = memory.nextCursor
+      ? [
+          `Not all saved false positives were read here. Before you tell the user an issue is real when they say it is a known false positive, read its rule's entries with the web_accessibility capability ${READ_CAPABILITY} (ruleCodes set to its rule; pass each page's nextCursor as cursor for the next).`,
+        ]
+      : [];
+    return {
+      records,
+      marked,
+      lead: [],
+      notes: [...unread, FP_FILING_GUIDE],
+      closing: [],
+    };
   }
   const shown: FpMemory = {
     nextCursor: memory.nextCursor,

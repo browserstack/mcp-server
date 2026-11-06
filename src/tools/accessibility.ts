@@ -1056,7 +1056,7 @@ async function fetchAccessibilityIssues(
   // The memory for this page's rules comes with the issues, so it is applied whether or
   // not the agent thinks to ask for it.
   const fp = applyMemory(
-    await memoryForReport(setupAuth(config), Object.keys(rules ?? {})),
+    await memoryForReport(setupAuth(config), Object.keys(rules ?? {}), pageUrl),
     records,
     pageUrl,
   );
@@ -1603,7 +1603,11 @@ async function runAccessibilityScan(
     settings,
     applied,
     applyMemory(
-      await memoryForReport(setupAuth(config), Object.keys(report.rules ?? {})),
+      await memoryForReport(
+        setupAuth(config),
+        Object.keys(report.rules ?? {}),
+        pageURL,
+      ),
       report.records,
       pageURL,
     ),

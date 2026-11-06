@@ -22,7 +22,7 @@ import {
   READ_CAPABILITY,
   SUBMIT_CAPABILITY,
   memoryForReport,
-  memoryMessages,
+  applyMemory,
   memoryPayload,
   type FpEntry,
   type FpMemory,
@@ -109,34 +109,98 @@ describe("memoryForReport", () => {
   });
 });
 
-describe("memoryMessages", () => {
-  it("says nothing when the account has no memory", () => {
-    expect(memoryMessages(undefined)).toEqual([]);
+const ON_SITE = "https://www.shop.example/de/angebote";
+const issue = (issue_type: string, affected_page = ON_SITE) => ({
+  issue_type,
+  affected_page,
+  component: "acme-header-button#",
+});
+
+describe("applyMemory", () => {
+  it("leaves an answer as it was when the account has no memory", () => {
+    const records = [issue("role-required")];
+    const view = applyMemory(undefined, records);
+    expect(view).toEqual({
+      records,
+      marked: 0,
+      lead: [],
+      notes: [],
+      closing: [],
+    });
   });
 
-  it("only says how to save one when no rule of the answer has any yet", () => {
-    expect(memoryMessages({ rules: [], truncated: false })).toEqual([
-      FP_FILING_GUIDE,
+  it("only says how to save one when no saved entry covers these issues", () => {
+    const view = applyMemory({ rules: [], truncated: false }, [
+      issue("role-required"),
     ]);
+    expect(view.marked).toBe(0);
+    expect(view.notes).toEqual([FP_FILING_GUIDE]);
+    expect(view.lead).toEqual([]);
   });
 
-  it("says how to apply the memory, quotes it as untrusted, then how to add to it", () => {
-    const messages = memoryMessages(memory([entry(1)]));
+  it("marks each issue with the entries saved for its rule on its site", () => {
+    const view = applyMemory(memory([entry(1), entry(2)]), [
+      issue("role-required"),
+      issue("image-alt"),
+      issue("role-required", "https://other.example/page"),
+    ]);
 
-    expect(messages[0]).toBe(FP_APPLY_NOTE);
-    expect(messages[1]).toMatch(/<untrusted|untrusted/i);
-    expect(messages[1]).toContain("role-required");
-    expect(messages[1]).toContain(
+    expect(view.marked).toBe(1);
+    expect(view.records[0].saved_fp_entries).toEqual([1, 2]);
+    expect(view.records[1].saved_fp_entries).toBeUndefined();
+    expect(view.records[2].saved_fp_entries).toBeUndefined();
+  });
+
+  it("applies an entry saved for all sites on every site", () => {
+    const view = applyMemory(memory([entry(1, { global: true })]), [
+      issue("role-required", "https://other.example/page"),
+    ]);
+    expect(view.records[0].saved_fp_entries).toEqual([1]);
+    expect(view.notes[1]).toContain("all sites");
+  });
+
+  it("takes the page an answer is about for issues that do not name one", () => {
+    const view = applyMemory(
+      memory([entry(1)]),
+      [{ issue_type: "role-required" }],
+      ON_SITE,
+    );
+    expect(view.records[0].saved_fp_entries).toEqual([1]);
+  });
+
+  it("opens by saying to remove the marked issues before giving any list or count", () => {
+    const view = applyMemory(memory([entry(1)]), [
+      issue("role-required"),
+      issue("image-alt"),
+    ]);
+
+    expect(view.lead).toHaveLength(1);
+    expect(view.lead[0]).toContain("1 of the 2 issues below");
+    expect(view.lead[0]).toMatch(/Before you give the user any list, count/);
+    expect(view.lead[0]).toMatch(/from before that removal/);
+    expect(view.closing[0]).toMatch(/only the issues left/);
+  });
+
+  it("shows only the entries of the marked issues, quoted as untrusted, then how to add one", () => {
+    const view = applyMemory(
+      memory([entry(1), entry(2, { site: "other.example" })]),
+      [issue("role-required")],
+    );
+
+    expect(view.notes[0]).toBe(FP_APPLY_NOTE);
+    expect(view.notes[1]).toMatch(/untrusted/i);
+    expect(view.notes[1]).toContain(
       "https://www.browserstack.com/docs/accessibility/rules/a11y-engine/role-required/",
     );
-    expect(messages[1]).toContain("div.to_sign_in");
-    expect(messages.at(-1)).toBe(FP_FILING_GUIDE);
-  });
-
-  it("says an entry saved for all sites applies to all sites", () => {
-    expect(memoryMessages(memory([entry(1, { global: true })]))[1]).toContain(
-      "all sites",
+    expect(view.notes[1]).toContain("div.to_sign_in");
+    const shown = JSON.parse(
+      view.notes[1].slice(
+        view.notes[1].indexOf("[{"),
+        view.notes[1].lastIndexOf("}]") + 2,
+      ),
     );
+    expect(shown[0].entries.map((e: any) => e.id)).toEqual([1]);
+    expect(view.notes.at(-1)).toBe(FP_FILING_GUIDE);
   });
 });
 

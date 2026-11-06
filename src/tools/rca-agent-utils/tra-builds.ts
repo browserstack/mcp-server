@@ -1,4 +1,5 @@
 import { apiClient } from "../../lib/apiClient.js";
+import { HttpError } from "../../lib/error.js";
 import { getBrowserStackAuth } from "../../lib/get-auth.js";
 import { BrowserStackConfig } from "../../lib/types.js";
 import { getAutomationBaseUrl } from "./constants.js";
@@ -27,6 +28,7 @@ export const BUILD_LOOKUP_WINDOW_DAYS = 365;
 
 // The project list has no name filter; kept low because clients retry failed lookups.
 const MAX_PROJECT_PAGES = 5;
+export const PROJECTS_SEARCHED = MAX_PROJECT_PAGES * 10;
 
 function authHeaders(config: BrowserStackConfig): Record<string, string> {
   const auth = Buffer.from(getBrowserStackAuth(config)).toString("base64");
@@ -56,7 +58,10 @@ async function getWithRetry(
 }
 
 function httpError(what: string, status: number, statusText: string): Error {
-  return new Error(`Failed to ${what}: ${status} ${statusText}`.trim());
+  return new HttpError(
+    `Failed to ${what}: ${status} ${statusText}`.trim(),
+    status,
+  );
 }
 
 export function normaliseName(value: string | undefined): string {
@@ -95,7 +100,12 @@ export async function fetchLatestBuildId(
 export async function findProject(
   projectName: string,
   config: BrowserStackConfig,
-): Promise<{ project?: TraProject; similar: TraProject[] }> {
+): Promise<{
+  project?: TraProject;
+  similar: TraProject[];
+  /** The page cap ended the search, so the project may still exist. */
+  truncated: boolean;
+}> {
   const wanted = normaliseName(projectName);
   const similar: TraProject[] = [];
   let nextPage: string | undefined;
@@ -111,22 +121,24 @@ export async function findProject(
     }
     const projects: any[] = response.data?.projects ?? [];
     // The last full page still reports has_next; an empty page is the real end.
-    if (projects.length === 0) break;
+    if (projects.length === 0) return { similar, truncated: false };
 
     for (const row of projects) {
       if (typeof row?.id !== "number" || typeof row?.name !== "string")
         continue;
       const project = { id: row.id, name: row.name };
       const name = normaliseName(row.name);
-      if (name === wanted) return { project, similar };
+      if (name === wanted) return { project, similar, truncated: false };
       if (name.includes(wanted) || wanted.includes(name)) similar.push(project);
     }
 
     const cursor = response.data?.pagination?.next_page;
-    if (!response.data?.pagination?.has_next || !cursor) break;
+    if (!response.data?.pagination?.has_next || !cursor) {
+      return { similar, truncated: false };
+    }
     nextPage = cursor;
   }
-  return { similar };
+  return { similar, truncated: nextPage !== undefined };
 }
 
 function toRow(raw: any): TraBuildRow | undefined {

@@ -14,6 +14,7 @@ import {
   fetchLatestBuildId,
   findProject,
   listProjectBuilds,
+  PROJECTS_SEARCHED,
   normaliseName,
   TraBuildRow,
 } from "./tra-builds.js";
@@ -182,7 +183,10 @@ async function resolveInProject(
   buildNumber: number | undefined,
   config: BrowserStackConfig,
 ): Promise<BuildLookupResult> {
-  const { project, similar } = await findProject(projectName, config);
+  const { project, similar, truncated } = await findProject(
+    projectName,
+    config,
+  );
   if (!project) {
     const hint = similar.length
       ? ` Similar projects: ${similar
@@ -190,6 +194,13 @@ async function resolveInProject(
           .map((p) => `"${p.name}"`)
           .join(", ")}.`
       : "";
+    if (truncated) {
+      throw new BuildLookupError(
+        `"${projectName}" is not among the first ${PROJECTS_SEARCHED} TRA projects, and ` +
+          `the project list cannot be searched by name.${hint} Pass the TRA build id, ` +
+          "or an Automate build link (.../builds/<build id>).",
+      );
+    }
     throw new BuildLookupError(
       `No TRA project named "${projectName}" found.${hint} Use the project name shown on the dashboard, or pass the TRA build id.`,
     );

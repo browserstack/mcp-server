@@ -108,7 +108,7 @@ describe("resolveBuildIdFromSession", () => {
     );
   });
 
-  it("returns undefined on HTTP failure or a missing field", async () => {
+  it("returns undefined on a 404 or a missing field", async () => {
     (apiClient.get as Mock).mockResolvedValueOnce({ ok: false, status: 404 });
     await expect(
       resolveBuildIdFromSession(SESSION_ID, SessionType.Automate, config),
@@ -118,6 +118,17 @@ describe("resolveBuildIdFromSession", () => {
     await expect(
       resolveBuildIdFromSession(SESSION_ID, SessionType.AppAutomate, config),
     ).resolves.toBeUndefined();
+  });
+
+  it("throws on other failures so an outage is not read as an unknown session", async () => {
+    (apiClient.get as Mock).mockResolvedValueOnce({
+      ok: false,
+      status: 502,
+      statusText: "Bad Gateway",
+    });
+    await expect(
+      resolveBuildIdFromSession(SESSION_ID, SessionType.Automate, config),
+    ).rejects.toThrow(/502 Bad Gateway/);
   });
 });
 

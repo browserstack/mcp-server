@@ -1,3 +1,4 @@
+import { HttpError } from "../../src/lib/error";
 import { describe, it, expect, vi, beforeEach, Mock } from "vitest";
 import { apiClient } from "../../src/lib/apiClient";
 import { SessionType } from "../../src/lib/constants";
@@ -114,6 +115,42 @@ describe("resolveTraBuildIdFromHashed", () => {
     );
     expect(error).toBeInstanceOf(TraBuildNotFoundError);
     expect(error.unknownToAutomate).toBe(true);
+  });
+});
+
+describe("resolveTraBuildIdFromHashed: only 404 means another product", () => {
+  beforeEach(() => vi.resetAllMocks());
+
+  it("throws on a server error rather than trying the other product", async () => {
+    (apiClient.get as Mock).mockResolvedValue({
+      ok: false,
+      status: 503,
+      statusText: "Service Unavailable",
+      data: {},
+    });
+
+    const error = await resolveTraBuildIdFromHashed(HASHED, config).catch(
+      (e) => e,
+    );
+    expect(error).toBeInstanceOf(HttpError);
+    expect(error.status).toBe(503);
+    expect(apiClient.get).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not hide an outage behind the confirmation step", async () => {
+    (apiClient.get as Mock).mockImplementation(async ({ url }) =>
+      url.endsWith("/builds/latest") ? ok({ build_id: TRA_ID }) : sessionList,
+    );
+    (resolveHashedBuildId as Mock).mockRejectedValue(
+      new HttpError(
+        "Failed to fetch test runs: 500 Internal Server Error",
+        500,
+      ),
+    );
+
+    await expect(resolveTraBuildIdFromHashed(HASHED, config)).rejects.toThrow(
+      /500/,
+    );
   });
 });
 

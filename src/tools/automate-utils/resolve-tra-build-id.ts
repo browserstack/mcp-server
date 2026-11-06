@@ -2,6 +2,7 @@ import { SessionType } from "../../lib/constants.js";
 import { getBrowserStackAuth } from "../../lib/get-auth.js";
 import { BrowserStackConfig } from "../../lib/types.js";
 import { apiClient } from "../../lib/apiClient.js";
+import { HttpError, isNotFoundError } from "../../lib/error.js";
 import { fetchLatestBuildId } from "../rca-agent-utils/tra-builds.js";
 import { sessionsListUrl } from "./list-session-ids.js";
 import {
@@ -42,7 +43,13 @@ async function readAutomateBuild(
     params: { limit: 1 },
     raise_error: false,
   });
-  if (!response.ok) return undefined;
+  if (response.status === 404) return undefined;
+  if (!response.ok) {
+    throw new HttpError(
+      `Failed to read ${sessionType} build "${hashedBuildId}": ${response.status} ${response.statusText}`.trim(),
+      response.status,
+    );
+  }
   const items = Array.isArray(response.data) ? response.data : [];
   let session = items[0]?.automation_session;
   if (!session) return {};
@@ -53,6 +60,12 @@ async function readAutomateBuild(
       headers,
       raise_error: false,
     });
+    if (!detail.ok && detail.status !== 404) {
+      throw new HttpError(
+        `Failed to read ${sessionType} session "${session.hashed_id}": ${detail.status} ${detail.statusText}`.trim(),
+        detail.status,
+      );
+    }
     if (detail.ok) session = detail.data?.automation_session ?? session;
   }
   return {
@@ -101,7 +114,10 @@ export async function resolveTraBuildIdFromHashed(
       traBuildId,
       config,
       sessionType,
-    ).catch(() => undefined);
+    ).catch((error) => {
+      if (error instanceof HttpError && !isNotFoundError(error)) throw error;
+      return undefined;
+    });
     if (confirmed?.hashedBuildId !== id) {
       throw new TraBuildNotFoundError(
         `${sessionType} build "${id}" is not the latest TRA build named ` +
@@ -133,9 +149,8 @@ export async function mapHashedToTra(
   try {
     return await resolveTraBuildIdFromHashed(hashedBuildId, config);
   } catch (error) {
-    if (error instanceof TraBuildNotFoundError && !error.unknownToAutomate) {
-      throw error;
-    }
+    if (!(error instanceof TraBuildNotFoundError)) throw error;
+    if (!error.unknownToAutomate) throw error;
     throw new Error(
       `${original instanceof Error ? original.message : String(original)}. ` +
         "No TRA build has this id; get one with listBuildId.",

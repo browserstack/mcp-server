@@ -482,7 +482,7 @@ describe("resolveBuild: Automate builds TRA never saw", () => {
 describe("resolveBuild: request budget", () => {
   beforeEach(() => vi.resetAllMocks());
 
-  it("stops the project lookup after 5 pages and builds after 1", async () => {
+  it("stops the project lookup after 5 pages and says the search was partial", async () => {
     (apiClient.get as Mock).mockImplementation(async ({ url, params }) => {
       if (url.endsWith("/ext/v1/builds/latest")) return notFound;
       if (url.endsWith("/builds.json")) return ok([]);
@@ -507,7 +507,9 @@ describe("resolveBuild: request budget", () => {
         },
         config,
       ),
-    ).rejects.toThrow(/No TRA project named "Missing" found/);
+    ).rejects.toThrow(
+      /"Missing" is not among the first 50 TRA projects[\s\S]*Pass the TRA build id/,
+    );
     const urls = (apiClient.get as Mock).mock.calls.map(
       ([req]) => req.url as string,
     );
@@ -556,5 +558,28 @@ describe("resolveBuild: Automate project links", () => {
 
     const result = await resolveBuild({ buildUrl: link }, config);
     expect(result.buildId).toBe("e9tdlmcerew3j7bbob4ghuvfuu6aztjrm7pm0rkl");
+  });
+});
+
+describe("resolveBuild: Automate outages", () => {
+  beforeEach(() => vi.resetAllMocks());
+
+  it("surfaces a server error instead of returning the Automate id as a TRA id", async () => {
+    const { HttpError } = await import("../../src/lib/error");
+    (resolveTraBuildIdFromHashed as Mock).mockRejectedValue(
+      new HttpError(
+        "Failed to read automate build: 503 Service Unavailable",
+        503,
+      ),
+    );
+
+    await expect(
+      resolveBuild(
+        {
+          buildUrl: `https://automate.browserstack.com/dashboard/v2/builds/${HASHED}`,
+        },
+        config,
+      ),
+    ).rejects.toThrow(/503/);
   });
 });

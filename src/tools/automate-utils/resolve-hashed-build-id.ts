@@ -1,3 +1,4 @@
+import { HttpError } from "../../lib/error.js";
 import { SessionType } from "../../lib/constants.js";
 import { getBrowserStackAuth } from "../../lib/get-auth.js";
 import { BrowserStackConfig } from "../../lib/types.js";
@@ -84,8 +85,8 @@ export async function detectSession(
 
 /**
  * Resolve the hashed build id that a session belongs to via the Automate /
- * App Automate session detail endpoint. Returns undefined when the session
- * cannot be fetched or does not report a build.
+ * App Automate session detail endpoint. Returns undefined when the product does
+ * not know the session (404) or it reports no build; other failures throw.
  */
 export async function resolveBuildIdFromSession(
   sessionId: string,
@@ -104,11 +105,12 @@ export async function resolveBuildIdFromSession(
     raise_error: false,
   });
 
+  if (response.status === 404) return undefined;
   if (!response.ok) {
-    logger.warn(
-      `Could not resolve build id for ${sessionType} session ${sessionId}: ${response.status}`,
+    throw new HttpError(
+      `Failed to read ${sessionType} session "${sessionId}": ${response.status} ${response.statusText}`.trim(),
+      response.status,
     );
-    return undefined;
   }
 
   const session = (response.data as any)?.automation_session;
@@ -144,9 +146,10 @@ export async function findSessionIdForObservabilityBuild(
     });
 
     if (!response.ok) {
-      throw new Error(
+      throw new HttpError(
         `Failed to fetch test runs for observability build "${observabilityBuildId}": ` +
           `${response.status} ${response.statusText}`,
+        response.status,
       );
     }
 

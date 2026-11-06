@@ -157,6 +157,12 @@ const EXPORT_POLL_MS = [1000, 2000, 3000, 5000];
 /** A finished export's link is reused until shortly before it expires (about 12 hours). */
 const LINK_EXPIRY_MARGIN_MS = 10 * 60 * 1000;
 const LINK_FALLBACK_TTL_MS = 60 * 60 * 1000;
+/**
+ * A run read by its build id (`scanBuild`) has no status check: its export may be a snapshot
+ * of a run still adding issues, so its link is reused only briefly. Long enough that paging
+ * through the report reuses it; short enough that a later read sees the finished run.
+ */
+const SCAN_BUILD_LINK_TTL_MS = 5 * 60 * 1000;
 
 /**
  * Exports per report: the finished link to reuse for later pages, or the task of an export
@@ -422,7 +428,15 @@ export class AccessibilityReportFetcher {
     }
     const reportIds = reportPage ? url?.searchParams.get("ids") : null;
     if (reportIds) {
-      const ids = reportIds.split(",").map((id) => id.trim());
+      const ids = reportIds
+        .split(",")
+        .map((id) => id.trim())
+        .filter(Boolean);
+      if (!ids.length) {
+        throw new Error(
+          "This Workflow Analyzer link's ids parameter names no report. Pass the report's id as workflowReportId, or copy the link again",
+        );
+      }
       if (ids.length > 1) {
         throw new Error(
           `This link opens several Workflow Analyzer reports (${ids.length}). Pass the one to read as workflowReportId`,
@@ -734,7 +748,13 @@ export class AccessibilityReportFetcher {
       const link = reportData.data?.reportLink;
       if (link) {
         if (options.stillProcessing) reportExports.delete(key);
-        else rememberExport(key, { link, expiresAt: linkExpiry(link) });
+        else {
+          const expiresAt =
+            source.kind === "scanBuild"
+              ? Math.min(linkExpiry(link), Date.now() + SCAN_BUILD_LINK_TTL_MS)
+              : linkExpiry(link);
+          rememberExport(key, { link, expiresAt });
+        }
         return link;
       }
       const message = reportData.data?.message ?? "";

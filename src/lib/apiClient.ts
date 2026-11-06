@@ -77,6 +77,13 @@ const directAgent = new https.Agent({
   autoSelectFamilyAttemptTimeout: CONNECT_ATTEMPT_TIMEOUT_MS,
 });
 
+/**
+ * A connect failure is retried only when it came within this long. A slower one means every
+ * address already timed out, so the host is down: failing now keeps loops (scan-list walks,
+ * polling) from stalling twice as long on it.
+ */
+export const CONNECT_RETRY_WINDOW_MS = 5000;
+
 /** Failures to open the connection at all: nothing was sent, so a request can be repeated. */
 const CONNECT_FAILURE =
   /\bconnect (ETIMEDOUT|ENETUNREACH|EHOSTUNREACH|ECONNREFUSED)\b/;
@@ -184,12 +191,17 @@ class ApiClient {
       this.validateUrl(url, config);
 
       let res: AxiosResponse<T>;
+      const started = Date.now();
       try {
         res = await fn(this.axiosAgent);
       } catch (error: any) {
         // A connection that never opened sent nothing, so one more try is safe even for a
-        // POST; a second failure is reported as before.
-        if (!isConnectFailure(error)) throw error;
+        // POST; a second failure is reported as before. Only a fast failure is retried.
+        if (
+          !isConnectFailure(error) ||
+          Date.now() - started >= CONNECT_RETRY_WINDOW_MS
+        )
+          throw error;
         res = await fn(this.axiosAgent);
       }
       return new ApiResponse<T>(res);

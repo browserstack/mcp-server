@@ -1,6 +1,7 @@
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import type { SavedScan, ScanSettings } from "./scanner.js";
 import { onOff, wcagName } from "./shared.js";
+import { wrapUntrusted } from "../../lib/untrusted-content.js";
 
 /*
  * Re-running a scan by its scanId: whether it is for the page asked for, how the settings
@@ -62,12 +63,16 @@ export function otherPageNote(
   if (!urlList.length) {
     return `Scan ${scanId}'s pages could not be read, so it could not be checked to be for ${pageURL}; a new scan was started.`;
   }
+  // The saved pages are the account's, which another user may have set: quoted as data.
+  const pages = wrapUntrusted(
+    "saved scan pages",
+    JSON.stringify(urlList.slice(0, 3)),
+  );
   if (urlList.length === 1) {
-    return `Scan ${scanId} is for ${urlList[0]}, not ${pageURL}, so a new scan was started.`;
+    return `Scan ${scanId} is for another page, not ${pageURL}, so a new scan was started. Its page: ${pages}`;
   }
-  const shown = urlList.slice(0, 3).join(", ");
-  const more = urlList.length > 3 ? `, and ${urlList.length - 3} more` : "";
-  return `Scan ${scanId} is for ${urlList.length} pages (${shown}${more}), not just ${pageURL}, so a new scan was started.`;
+  const more = urlList.length > 3 ? ` (the first 3 of ${urlList.length})` : "";
+  return `Scan ${scanId} is for ${urlList.length} pages, not just ${pageURL}, so a new scan was started. Its pages${more}: ${pages}`;
 }
 
 /**
@@ -145,16 +150,41 @@ export function uncheckedSettings(args: ScanArgs, saved: SavedScan): string[] {
     args.needsReview !== undefined && settings.needsReview === undefined
       ? "needsReview"
       : "",
-    // Which login is saved is not given: only whether one is.
-    args.authConfigId !== undefined && saved.authEnabled !== false
-      ? `authConfigId ${args.authConfigId}`
-      : "",
-    // Said in the Local note when the scan is saved with a tunnel.
-    args.localIdentifier !== undefined &&
-    saved.localTestingEnabled === undefined
-      ? `localIdentifier "${args.localIdentifier}"`
-      : "",
   ].filter(Boolean);
+}
+
+/**
+ * A login or Local tunnel passed to a re-run, which the run cannot take: it logs in and
+ * tunnels with the scan's saved ones, which the overview does not name. Said plainly, so a
+ * run with the old login is not taken for one with the login passed.
+ */
+export function unusedLoginAndTunnel(
+  args: ScanArgs,
+  saved: SavedScan,
+): string[] {
+  return [
+    // Which login is saved is not given: only whether one is.
+    ...(args.authConfigId !== undefined && saved.authEnabled !== false
+      ? [
+          `authConfigId ${args.authConfigId} was not used: a re-run logs in with the scan's saved login, which the API does not name. To scan with login ${args.authConfigId}, call startAccessibilityScan without scanId (that starts a new scan).`,
+        ]
+      : []),
+    // Said in the Local note when the scan is saved with a tunnel.
+    ...(args.localIdentifier !== undefined &&
+    saved.localTestingEnabled === undefined
+      ? [
+          `localIdentifier "${args.localIdentifier}" was not used: a re-run uses the scan's saved BrowserStack Local settings, which the API does not give back. To scan through that tunnel, call startAccessibilityScan without scanId (that starts a new scan).`,
+        ]
+      : []),
+  ];
+}
+
+/**
+ * Why a scan saved with BrowserStack Local is not re-run when no localIdentifier is passed:
+ * its tunnel's identifier is not given back, and one this MCP started was never shown.
+ */
+export function localScanNotRerunNote(scanId: string): string {
+  return `Scan ${scanId} reaches its page through BrowserStack Local under an identifier the API does not give back, so it can't be re-run from here: a new scan was started, whose runs can't be compared with scan ${scanId}'s. To re-run scan ${scanId}, start BrowserStack Local yourself with the identifier the scan was created with and pass it as localIdentifier.`;
 }
 
 /**

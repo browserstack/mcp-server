@@ -36,6 +36,7 @@ import {
   type RunIssue,
 } from "./accessiblity-utils/report-parser.js";
 import { wrapUntrusted } from "../lib/untrusted-content.js";
+import { isLocalURL } from "../lib/local.js";
 import { queryAccessibilityRAG } from "./accessiblity-utils/accessibility-rag.js";
 import { BrowserStackConfig } from "../lib/types.js";
 import { elicitCredentialsIfSupported } from "../lib/elicit-credentials.js";
@@ -93,10 +94,12 @@ import { compareWebBuilds } from "./accessiblity-utils/web-build-compare.js";
 import {
   compareHint,
   localRerunNote,
+  localScanNotRerunNote,
   otherPageNote,
   rescanHint,
   savedSettingDifferences,
   uncheckedSettings,
+  unusedLoginAndTunnel,
   withNotes,
   type ScanArgs,
 } from "./accessiblity-utils/scan-rerun.js";
@@ -1824,7 +1827,9 @@ async function runAccessibilityScan(
       : [
           `${renameReason(name, startResp.nameChanges ?? ["taken"])}, so this scan was started as "${scanName}".`,
         ],
-    [rescanHint(String(scanId))],
+    // A local page this MCP tunnelled itself is saved with an identifier nobody was shown,
+    // so a re-run could not reach it: no hint to re-run it.
+    isLocalURL(pageURL) && !localIdentifier ? [] : [rescanHint(String(scanId))],
   );
 }
 
@@ -1848,7 +1853,19 @@ async function rerunAccessibilityScan(
     ]);
   }
 
+  // The saved scan reaches its page through a tunnel whose identifier the API does not give
+  // back: without one passed, the re-run could not reach the page.
+  if (saved.localTestingEnabled && args.localIdentifier === undefined) {
+    return withNotes(await startNewScan(args, context, config), [
+      localScanNotRerunNote(scanId),
+    ]);
+  }
+
   const name = saved.name ?? args.name;
+  // The saved name is the account's, which another user may have set: quoted, not inlined.
+  const nameLine = saved.name
+    ? [`Scan name: ${wrapUntrusted("saved scan name", saved.name)}`]
+    : [];
   const differences = savedSettingDifferences(args, saved);
   if (differences.length) {
     const one = differences.length === 1;
@@ -1856,7 +1873,8 @@ async function rerunAccessibilityScan(
     // the other.
     return createSuccessResponse([
       [
-        `Scan ${scanId} "${name}" was not re-run: a re-run uses the scan's saved settings, and ${one ? "this one differs" : "these differ"} from what was passed:`,
+        `Scan ${scanId} was not re-run: a re-run uses the scan's saved settings, and ${one ? "this one differs" : "these differ"} from what was passed:`,
+        ...nameLine,
         ...differences.map((difference) => `- ${difference}`),
         `To re-run it with its saved settings, call startAccessibilityScan again with scanId "${scanId}" and without ${one ? "that setting" : "those settings"}. To scan with the settings passed, call it without scanId: that starts a new scan, whose runs can't be compared with this scan's.`,
       ].join("\n"),
@@ -1867,12 +1885,13 @@ async function rerunAccessibilityScan(
   const passedName = args.name.trim();
   const unchecked = uncheckedSettings(args, saved);
   const lead = [
-    `Started a new run (${scanRunId}) of scan ${scanId} "${name}" with its saved settings.`,
+    `Started a new run (${scanRunId}) of scan ${scanId} with its saved settings.`,
+    ...nameLine,
     ...(passedName &&
     passedName !== name &&
     cleanScanName(passedName, "") !== name
       ? [
-          `The scan keeps its name "${name}"; the name "${passedName}" was not used.`,
+          `The scan keeps its saved name; the name "${passedName}" was not used.`,
         ]
       : []),
     ...(saved.localTestingEnabled
@@ -1883,6 +1902,7 @@ async function rerunAccessibilityScan(
           `${unchecked.join(", ")} could not be checked against the scan's saved settings, which the API does not give back; the run uses the saved ones.`,
         ]
       : []),
+    ...unusedLoginAndTunnel(args, saved),
   ];
   await notifyScanProgress(
     context,

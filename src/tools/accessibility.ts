@@ -1255,15 +1255,18 @@ async function compareScanRuns(
   }
   const run = (scanRunId: string): IssueSource => ({ ...source, scanRunId });
 
-  // A failed run scanned no page and exports an empty report: compared with it, every issue
-  // of the other run would read as resolved (or new).
+  // A failed or cancelled run has no results and exports an empty report: compared with it,
+  // every issue of the other run would read as resolved (or new).
   const [status, beforeStatus] = await Promise.all([
     reportFetcher.reportStatus(run(after)),
     reportFetcher.reportStatus(run(before)),
   ]);
-  if (status === "failed" || beforeStatus === "failed") {
-    const [failedRun, otherRun] =
-      status === "failed" ? [after, before] : [before, after];
+  const noResults = (runStatus: string | undefined) =>
+    runStatus === "failed" || runStatus === "cancelled";
+  if (noResults(status) || noResults(beforeStatus)) {
+    const [failedRun, otherRun, failedStatus] = noResults(status)
+      ? [after, before, status]
+      : [before, after, beforeStatus];
     return failedScanRunResponse(
       config,
       source.scanId,
@@ -1272,6 +1275,7 @@ async function compareScanRuns(
       () =>
         `compared with it, every issue of run ${otherRun} would read as ${failedRun === after ? "resolved" : "new"}, so the runs were not compared.`,
       "Compare two runs that completed, or fix the cause and scan again.",
+      failedStatus === "cancelled" ? "cancelled" : "failed",
     );
   }
   for (const [id, runStatus] of [

@@ -385,13 +385,13 @@ async function searchAutomateBuilds(
     );
   }
 
-  const [newest, ...others] = matches;
+  const [first, ...others] = matches;
   const resolved = await resolveFromHashed(
-    newest.hashedBuildId,
-    newest.sessionType,
+    first.hashedBuildId,
+    first.sessionType,
     config,
-  ).catch((): BuildLookupResult => ({ buildId: newest.hashedBuildId }));
-  const found = `Found ${newest.sessionType} build "${newest.name}" by name, not through TRA.`;
+  ).catch((): BuildLookupResult => ({ buildId: first.hashedBuildId }));
+  const found = `Found ${first.sessionType} build "${first.name}" by name (first match), not through TRA.`;
   const rest = others.length
     ? `\nOther builds with this name:\n${others
         .slice(0, MAX_CANDIDATES)

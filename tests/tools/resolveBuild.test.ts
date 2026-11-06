@@ -412,7 +412,9 @@ describe("resolveBuild: Automate builds TRA never saw", () => {
       config,
     );
     expect(result.buildId).toBe("a".repeat(40));
-    expect(result.note).toContain('Found automate build "Smoke Suite" by name');
+    expect(result.note).toContain(
+      'Found automate build "Smoke Suite" by name (first match)',
+    );
     expect(result.note).toContain("has no TRA build");
     expect(result.note).toContain(`app-automate: ${HASHED}`);
   });

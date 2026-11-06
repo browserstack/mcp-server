@@ -40,8 +40,11 @@ const queryNames = (name: string) =>
 
 describe("the Web Accessibility capability index", () => {
   it("ships the six lists, as paged reads, each on an entity that names it", () => {
-    const names = web.capabilities.map((c: any) => c.name).sort();
-    expect(names).toEqual([
+    // The false-positive memory capabilities are tested in fpMemory.test.ts.
+    const lists = web.capabilities.filter((c: any) =>
+      c.name.startsWith("list_"),
+    );
+    expect(lists.map((c: any) => c.name).sort()).toEqual([
       "list_assisted_test_reports",
       "list_automated_tests_builds",
       "list_automated_tests_projects",
@@ -49,7 +52,7 @@ describe("the Web Accessibility capability index", () => {
       "list_website_scanner_scans",
       "list_workflow_analyzer_reports",
     ]);
-    for (const c of web.capabilities) {
+    for (const c of lists) {
       expect(c.mode).toBe("read");
       expect(c.paginated).toBe(true);
       expect(c.max_page_size).toBeGreaterThan(0);
@@ -69,7 +72,7 @@ describe("the Web Accessibility capability index", () => {
     expect(limit("list_assisted_test_reports").maximum).toBe(99);
     // Above 25 the page holds 25 scans and the next one starts past the ones in between.
     expect(limit("list_website_scanner_scans").maximum).toBe(25);
-    for (const c of web.capabilities) {
+    for (const c of web.capabilities.filter((c: any) => c.paginated)) {
       expect(c.max_page_size).toBe(
         c.query.find((q: any) => q.name === "limit").maximum,
       );
@@ -154,9 +157,15 @@ describe("the Web Accessibility capability index", () => {
   it.each([
     ["list workflow analyzer reports", "list_workflow_analyzer_reports"],
     ["list website scanner scans", "list_website_scanner_scans"],
-    ["list the runs of a website scanner scan", "list_website_scanner_scan_runs"],
+    [
+      "list the runs of a website scanner scan",
+      "list_website_scanner_scan_runs",
+    ],
     ["list automated tests projects", "list_automated_tests_projects"],
-    ["list the builds of an automated tests project", "list_automated_tests_builds"],
+    [
+      "list the builds of an automated tests project",
+      "list_automated_tests_builds",
+    ],
     ["list assisted test reports", "list_assisted_test_reports"],
   ])("finds %j as %s", (query, expected) => {
     const { hits } = searchCapabilities(products, query, {

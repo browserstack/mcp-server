@@ -36,6 +36,11 @@ import { BrowserStackConfig } from "../lib/types.js";
 import { elicitCredentialsIfSupported } from "../lib/elicit-credentials.js";
 import logger from "../logger.js";
 import { NEEDS_A11Y_CONFIG_ID, NEEDS_A11Y_SCAN_ID } from "./tool-handoff.js";
+import {
+  applyMemory,
+  memoryForReport,
+  type MemoryView,
+} from "./accessiblity-utils/fp-memory.js";
 
 interface AuthCredentials {
   username: string;
@@ -1048,18 +1053,31 @@ async function fetchAccessibilityIssues(
     nextPage: cursor,
     pageUrl,
   });
+  // The memory for this page's rules comes with the issues, so it is applied whether or
+  // not the agent thinks to ask for it.
+  const fp = applyMemory(
+    await memoryForReport(setupAuth(config), Object.keys(rules ?? {}), pageUrl),
+    records,
+    pageUrl,
+  );
+  const beforeRemoval = fp.marked
+    ? ", before removing saved false positives"
+    : "";
 
   return createSuccessResponse([
+    ...fp.lead,
     ...preface,
     ...processingNote(processing),
     ...(page ? pageNote(page) : []),
-    `Retrieved ${page_length} accessibility issues (Total: ${total_issues})`,
+    `Retrieved ${page_length} accessibility issues (Total: ${total_issues}${beforeRemoval})`,
     // The whole report's counts, said on its first page.
     ...(cursor ? [] : webSummaryNote(summary, total_issues)),
     ...excludedIssuesNote(duplicate_issues, unlinked_duplicates, hidden_issues),
     fullReportLine(reportLink),
     WEB_ISSUES_NOTE,
-    `Issues: ${wrapUntrusted("accessibility scan results", JSON.stringify({ issues: records, rules }))}`,
+    ...fp.notes,
+    `Issues: ${wrapUntrusted("accessibility scan results", JSON.stringify({ issues: fp.records, rules }))}`,
+    ...fp.closing,
     closingMessage(next_page, remaining, source, stillProcessing, pageArg),
   ]);
 }
@@ -1474,14 +1492,22 @@ function createScanSuccessResponse(
   dashboardLink: string | undefined,
   settings: ScanSettings = {},
   applied?: ScanSettings,
+  fp: MemoryView<(typeof report.records)[number]> = applyMemory(
+    undefined,
+    report.records,
+  ),
 ): CallToolResult {
   const cursor = report.next_page;
+  const beforeRemoval = fp.marked
+    ? " (before removing saved false positives)"
+    : "";
   const messages = [
+    ...fp.lead,
     `Accessibility scan "${name}" completed. ${scanDashboardNote(dashboardLink, scanId)}`,
     `Scan ID: ${scanId} and Scan Run ID: ${scanRunId}`,
     scanSettingsNote(settings, applied),
     fullReportLine(reportUrl),
-    `We found ${report.total_issues} issues. Below are the details of the ${report.page_length} most critical issues.`,
+    `We found ${report.total_issues} issues${beforeRemoval}. Below are the details of the ${report.page_length} most critical issues.`,
     ...webSummaryNote(report.summary, report.total_issues),
     ...excludedIssuesNote(
       report.duplicate_issues,
@@ -1489,7 +1515,9 @@ function createScanSuccessResponse(
       report.hidden_issues,
     ),
     WEB_ISSUES_NOTE,
-    `Scan results: ${wrapUntrusted("accessibility scan results", JSON.stringify({ issues: report.records, rules: report.rules }))}`,
+    ...fp.notes,
+    `Scan results: ${wrapUntrusted("accessibility scan results", JSON.stringify({ issues: fp.records, rules: report.rules }))}`,
+    ...fp.closing,
   ];
 
   if (cursor !== null) {
@@ -1564,15 +1592,25 @@ async function runAccessibilityScan(
     throw error;
   }
 
+  const report = await parseAccessibilityReportFromCSV(reportLink);
   return createScanSuccessResponse(
     name,
-    await parseAccessibilityReportFromCSV(reportLink),
+    report,
     scanId,
     scanRunId,
     reportLink,
     dashboardLink,
     settings,
     applied,
+    applyMemory(
+      await memoryForReport(
+        setupAuth(config),
+        Object.keys(report.rules ?? {}),
+        pageURL,
+      ),
+      report.records,
+      pageURL,
+    ),
   );
 }
 
@@ -1765,7 +1803,7 @@ export default function addAccessibilityTools(
 
   tools.fetchAccessibilityIssues = server.tool(
     "fetchAccessibilityIssues",
-    "Fetch accessibility issues from one source: scanId+scanRunId, buildId, workflowReportId, appReportId or reportUrl." +
+    "Fetch a web or app accessibility report's issues. Remove the saved false positives it marks before reporting any." +
       NEEDS_A11Y_SCAN_ID,
     {
       scanId: z

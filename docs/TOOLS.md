@@ -362,7 +362,7 @@ searchCapability  →  describeCapability  →  invokeCapability
 
 | Tool | What it does |
 |---|---|
-| `getFailureLogs` | Retrieve error logs for Automate/App Automate sessions. App Automate log endpoints are build-scoped, so a hashed build ID is required there — pass one if you have it, otherwise it is resolved from the session automatically. |
+| `getFailureLogs` | Retrieve error logs for Automate/App Automate sessions. App Automate log endpoints are build-scoped, so a hashed build ID is required there — pass one if you have it, otherwise it is resolved from the session automatically. For App Automate `deviceLogs`, pass `deviceLogFilter` to return matching lines (e.g. a logcat tag) instead of only error lines. |
 | `getBuildId` | Get the BrowserStack build ID for a given project and build name, scoped to your builds. |
 | `fetchBuildInsights` | Fetch insights about a BrowserStack build by combining build details and quality-gate results. Includes `hashed_id` (the hashed build id `listSessions` takes) and `session_type`, resolved through the build's sessions when the build ran on Automate / App Automate. |
 | `fetchRCA` | Fetch AI Root Cause Analysis for your failed Automate/App-Automate tests (by numeric test ID). Suggests fixes only; never auto-applies. |

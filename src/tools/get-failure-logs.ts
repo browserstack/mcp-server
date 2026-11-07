@@ -55,6 +55,7 @@ export async function getFailureLogs(
     buildId?: string;
     logTypes: LogType[];
     sessionType: SessionTypeValues;
+    deviceLogFilter?: string;
   },
   config: BrowserStackConfig,
 ): Promise<CallToolResult> {
@@ -186,7 +187,12 @@ export async function getFailureLogs(
         }
 
         case AppAutomateLogType.DeviceLogs: {
-          response = await retrieveDeviceLogs(args.sessionId, buildId!, config);
+          response = await retrieveDeviceLogs(
+            args.sessionId,
+            buildId!,
+            config,
+            args.deviceLogFilter,
+          );
           results.push({ type: "text", text: response });
           break;
         }
@@ -258,6 +264,12 @@ export default function registerGetFailureLogs(
           ]),
         )
         .describe("The types of logs to fetch."),
+      deviceLogFilter: z
+        .string()
+        .optional()
+        .describe(
+          "deviceLogs only: case-insensitive text; return only lines containing it, instead of error lines.",
+        ),
     },
     {
       title: "Get Failure Logs",

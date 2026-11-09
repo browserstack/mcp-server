@@ -7,6 +7,7 @@ import logger from "../logger.js";
 import { trackMCP } from "../lib/instrumentation.js";
 import { BrowserStackConfig } from "../lib/types.js";
 import { isEnabled as capabilityRegistryEnabled } from "./capability-registry/config.js";
+import { randomUUID } from "node:crypto";
 import { versionString } from "../lib/version-keyword.js";
 
 /**
@@ -56,6 +57,9 @@ export async function startAppLiveSession(
     }
   }
 
+  // A reference is minted only while the applive capabilities exist to use it: without
+  // the registry the tag would be a promise nothing can keep.
+  const mcpRef = capabilityRegistryEnabled() ? randomUUID() : undefined;
   const launchUrl = await startSession(
     {
       appPath: args.appPath,
@@ -63,15 +67,22 @@ export async function startAppLiveSession(
       desiredPhone: args.desiredPhone,
       desiredPlatformVersion: args.desiredPlatformVersion,
       browserstackAppUrl: args.browserstackAppUrl,
+      mcpRef,
     },
     { config },
   );
+
+  // Short on purpose: the capabilities describe themselves. This only says that the
+  // session can be driven, and which call turns the reference into a session.
+  const handoff = mcpRef
+    ? `\n\nActions on this session (tap, type, scroll, screenshot, app control) are supported through the applive capabilities: invokeCapability applive get_session with mcp_ref=${mcpRef} once the device is up, then the session capabilities, and stop_session when done.`
+    : "";
 
   return {
     content: [
       {
         type: "text",
-        text: `Successfully started a session. If a browser window did not open automatically, use the following URL to start the session: ${launchUrl}`,
+        text: `Successfully started a session. If a browser window did not open automatically, use the following URL to start the session: ${launchUrl}${handoff}`,
       },
     ],
   };
@@ -90,7 +101,7 @@ export default function addAppLiveTools(
   const description =
     "Open a manual App Live session for the user to operate by hand; the agent cannot drive it." +
     (capabilityRegistryEnabled()
-      ? " To tap, type or read the app yourself, use a mobiledevicecontrol session via invokeCapability."
+      ? " Actions (tap, type, scroll) via invokeCapability on applive with the mcp_ref; unwatched: mobiledevicecontrol."
       : "");
 
   tools.runAppLiveSession = server.tool(
@@ -112,8 +123,15 @@ export default function addAppLiveTools(
         ),
       appPath: z
         .string()
+        .optional()
         .describe(
           "Local .apk/.ipa path inside MCP_UPLOAD_BASE_DIR. Ask the user; never assume.",
+        ),
+      browserstackAppUrl: z
+        .string()
+        .optional()
+        .describe(
+          "bs:// URL of an app already in App Live, instead of appPath.",
         ),
     },
     {

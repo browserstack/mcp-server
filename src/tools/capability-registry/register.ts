@@ -38,6 +38,16 @@ import {
 import { assertSelectable, narrowResponse } from "./narrow.js";
 import { invokeWithFallbacks } from "./fallback.js";
 import { invoke } from "./resolve.js";
+import {
+  forgetOrigin,
+  markOriginAnswered,
+  notReady,
+  originAnswered,
+  probeSatisfied,
+  renderOrigin,
+} from "./origin.js";
+import { invokeWithPolling } from "./poll.js";
+import { runChain } from "./chain.js";
 import { agentHandoff, agentSummary, agentsOf, matchAgents } from "./agents.js";
 import { isEnabled as askIsEnabled } from "../ask-browserstack/config.js";
 import { PRODUCTS as ASK_PRODUCTS } from "../ask-browserstack/types.js";
@@ -54,7 +64,7 @@ import {
   unreadable,
   vocabularyOf,
 } from "./search.js";
-import { Mode, guidanceLines } from "./types.js";
+import { Capability, Mode, guidanceLines } from "./types.js";
 
 export const PERMISSION_VALUES = ["not_asked", "granted", "denied"] as const;
 
@@ -1029,6 +1039,15 @@ export function addCapabilityRegistryTools(
               input.path as string,
               input.product,
             );
+        if (capability.internal)
+          return refuse(
+            "describeCapability",
+            "capability_internal",
+            `${capability.name} is a step of a chain and is not called on its own; ` +
+              "describe the chain that uses it instead",
+            undefined,
+            identity,
+          );
 
         identity = {
           capability: capability.name,
@@ -1071,6 +1090,8 @@ export function addCapabilityRegistryTools(
           send_empty_body,
           local_only,
           disabled,
+          origin,
+          steps,
           ...contract
         } = capability;
         void unresolved;
@@ -1079,6 +1100,14 @@ export function addCapabilityRegistryTools(
         void send_empty_body;
         void local_only;
         void disabled;
+        // Plumbing too: how the builder parameters are rendered into an origin and which
+        // hosts it may land on is how WE reach the product. The parameters themselves stay
+        // in their group, flagged, so the caller sees what to pass and where. `poll` stays,
+        // because a call that may take minutes is something the caller plans around.
+        void origin;
+        // Which siblings a chain calls is how WE answer it; the caller sees one capability
+        // with parameters and returns, which is the point of declaring the chain.
+        void steps;
         return ok({
           // No build_id here either, same reason. `product` stays: describeCapability
           // resolves by NAME and its product argument is optional, so the answer has to
@@ -1259,6 +1288,16 @@ export function addCapabilityRegistryTools(
           body: input.body,
         };
 
+        if (capability.internal) {
+          return refuse(
+            "invokeCapability",
+            "capability_internal",
+            `${handle} is a step of a chain and is not called on its own; ` +
+              "invoke the chain that uses it instead",
+            undefined,
+            identity,
+          );
+        }
         if (capability.invocable === false) {
           // THE ONE PLACE describe AND invoke DIVERGE, deliberately. Everywhere else a name
           // that describes is a name that invokes, and breaking that is its own bug class —
@@ -1324,23 +1363,171 @@ export function addCapabilityRegistryTools(
           }
         }
 
+        const lookup = (name: string) =>
+          registry.byNameLookup(name, product).capability;
+        /** One request at the product's own origin, or a named host of it. */
+        const runFixed = async (
+          target: Capability,
+          targetArgs: GroupedArguments,
+        ) =>
+          invoke(
+            target,
+            targetArgs,
+            await deps.baseUrlFor(product, target.host),
+            deps.credentialsFor(),
+            transport,
+            registry.index.products[product]?.auth,
+            product,
+          );
         // The base URL is resolved per target rather than once: a fallback step may sit
-        // on a different named host from the capability that declared it.
-        const { result, attempts } = await invokeWithFallbacks(
-          capability,
-          args,
-          async (target, targetArgs) =>
-            invoke(
+        // on a different named host from the capability that declared it — or, for a
+        // capability with `base_from`, at an origin a sibling has to be asked for first.
+        // Such an origin is reached without credentials, and forgotten when a call on it
+        // answers 404 or cannot connect, so an ended session is resolved afresh rather
+        // than driven at a stale proxy.
+        /** Set when the first call on a fresh origin had to be sent more than once. */
+        let readiness:
+          | { attempts: number; elapsed_seconds: number }
+          | undefined;
+        const run = async (
+          target: Capability,
+          targetArgs: GroupedArguments,
+        ) => {
+          if (!target.origin) return runFixed(target, targetArgs);
+          // THE CALLER SAYS WHERE. The origin is rendered from the parameters flagged
+          // base_url_builder, checked against the capability's host allowlist, and the
+          // request goes there with no credentials: the session id in the path admits it.
+          const { base, rest } = renderOrigin(product, target, targetArgs);
+          const caller = deps.credentialsFor().username ?? "";
+          // THE FIRST READ ON A FRESH ORIGIN IS RE-SENT WHILE THE ORIGIN SAYS "NOT YET".
+          // The device's Appium session comes up after the session is listed; until then
+          // the proxy either holds a request or answers a plain 404 "Session not found."
+          // A write is never re-sent (see `origin.ready`), and once anything else has
+          // answered, a timeout or that 404 is a fault.
+          const ready = target.origin.ready;
+          const started = Date.now();
+          const probeMs = ready?.probe_seconds
+            ? ready.probe_seconds * 1000
+            : undefined;
+          let attempts = 0;
+          // WITH A PROBE PATH THE ORIGIN IS BROUGHT UP FIRST, AND THE COMMAND SENT ONCE.
+          // For App Live the probe is GET …/sessions: the device creates its Appium
+          // session on that call and lists it once it exists. Nothing is re-sent, so a
+          // write is as safe as a read here, and the command's own timeout applies to it.
+          if (ready?.probe_path && !originAnswered(caller, base)) {
+            const probeUrl = `${base.replace(/\/$/, "")}${ready.probe_path}`;
+            const headers = {
+              "request-source": "ai-chatbot",
+              "Content-Type": "application/json",
+            };
+            const windowMs = ready.timeout_seconds * 1000;
+            const stepMs = probeMs ?? 30_000;
+            let probes = 0;
+            for (;;) {
+              probes += 1;
+              const probe = await transport(
+                "GET",
+                probeUrl,
+                headers,
+                {},
+                undefined,
+                {
+                  timeoutMs: stepMs,
+                },
+              );
+              if (probeSatisfied(probe.status, probe.body)) {
+                markOriginAnswered(caller, base);
+                break;
+              }
+              if (Date.now() - started + stepMs > windowMs) break;
+              // A refusal comes back at once; a held request has already waited.
+              if (probe.status !== 0)
+                await new Promise((resolve) => setTimeout(resolve, stepMs));
+            }
+            if (probes > 1 || Date.now() - started > 1000)
+              readiness = {
+                attempts: probes,
+                elapsed_seconds: Math.round((Date.now() - started) / 100) / 10,
+              };
+            const answer = await invoke(
               target,
-              targetArgs,
-              await deps.baseUrlFor(product, target.host),
+              rest,
+              base,
               deps.credentialsFor(),
               transport,
               registry.index.products[product]?.auth,
               product,
-            ),
-          (name) => registry.byNameLookup(name, product).capability,
-        );
+              { anonymous: true },
+            );
+            if (answer.http_response.status === 404) forgetOrigin(caller, base);
+            return answer;
+          }
+          for (;;) {
+            attempts += 1;
+            const fresh = ready !== undefined && !originAnswered(caller, base);
+            const answer = await invoke(
+              target,
+              rest,
+              base,
+              deps.credentialsFor(),
+              transport,
+              registry.index.products[product]?.auth,
+              product,
+              {
+                anonymous: true,
+                ...(fresh && probeMs ? { timeoutMs: probeMs } : {}),
+              },
+            );
+            const status = answer.http_response.status;
+            if (attempts > 1)
+              readiness = {
+                attempts,
+                elapsed_seconds: Math.round((Date.now() - started) / 100) / 10,
+              };
+            const pending = notReady(answer);
+            if (!pending) {
+              if (status === 404) forgetOrigin(caller, base);
+              else markOriginAnswered(caller, base);
+              return answer;
+            }
+            // A 404 comes back at once, so the next attempt waits the probe length rather
+            // than hammering the proxy; a timeout has already waited that long.
+            const attemptMs = probeMs ?? (target.timeout_seconds ?? 45) * 1000;
+            const withinWindow =
+              ready !== undefined &&
+              Date.now() - started + attemptMs <= ready.timeout_seconds * 1000;
+            if (fresh && target.mode === "read" && withinWindow) {
+              if (status === 404)
+                await new Promise((resolve) => setTimeout(resolve, attemptMs));
+              continue;
+            }
+            forgetOrigin(caller, base);
+            return answer;
+          }
+        };
+        /** One call as invokeCapability makes it: origin, fallbacks and polling included. */
+        const runOne = (target: Capability, targetArgs: GroupedArguments) =>
+          invokeWithPolling(
+            target,
+            targetArgs,
+            (t, a) => invokeWithFallbacks(t, a, run, lookup),
+            (outcome) => outcome.result,
+          );
+        // A CHAIN RUNS ITS STEPS THROUGH THE SAME PATH, one after another, and answers
+        // with what they took; anything else answers with its own one call.
+        const chained = capability.steps
+          ? await runChain(capability, args, lookup, runOne)
+          : undefined;
+        const {
+          outcome: { result, attempts },
+          polled,
+        } = chained
+          ? {
+              outcome: { result: chained.result, attempts: undefined },
+              polled: undefined,
+            }
+          : await runOne(capability, args);
+        const chain = chained?.chain;
         // NARROWING IS APPLIED TO A SUCCESS ONLY. A 4xx body is the diagnosis the caller
         // needs whole, and a selection that happened to match none of its keys would
         // quietly empty it. `narrowResponse` refuses an unsupported `select` by throwing,
@@ -1372,6 +1559,14 @@ export function addCapabilityRegistryTools(
           // Only when the chain ran: a capability without `fallbacks` answers exactly as
           // before, and one whose first call succeeded has nothing to report.
           ...(attempts ? { fallback: { attempts } } : {}),
+          // Only when the call waited: how many requests it took and whether the
+          // condition was met, so a timed-out wait is read as "not yet", not as success.
+          ...(polled ? { polled } : {}),
+          // Only when the first call on a fresh origin was re-sent: how many times and
+          // for how long, so a slow start is visible rather than silently absorbed.
+          ...(readiness ? { readiness } : {}),
+          // Only for a chain: each step's status, so a refusal is placed and a wait seen.
+          ...(chain ? { chain } : {}),
         };
         // AN IMAGE LEAVES THE JSON. Where the capability says its body carries one, the
         // base64 is lifted out and sent as an MCP image block beside the text, so the

@@ -169,9 +169,11 @@ export async function listSessionIdsTool(
     if (sessions.length === 0 && sessionType === SessionType.AppAutomate) {
       const framework = await findFrameworkBuild(buildId, config);
       if (framework) {
-        sessions = frameworkSessions(framework).filter(
-          (s) => !args.status || s.status === args.status,
-        );
+        const wanted = args.status?.trim().toLowerCase();
+        const offset = args.offset ?? 0;
+        sessions = frameworkSessions(framework)
+          .filter((s) => !wanted || (s.status ?? "").toLowerCase() === wanted)
+          .slice(offset, offset + (args.limit ?? DEFAULT_SESSION_LIST_LIMIT));
         notes.push(
           `This build ran through the ${framework.framework.name} framework API; sessions are listed from it.`,
         );

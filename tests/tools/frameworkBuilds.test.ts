@@ -97,7 +97,7 @@ function routeMaestro(extra: (url: string) => unknown = () => undefined) {
 describe("findFrameworkBuild", () => {
   beforeEach(() => vi.resetAllMocks());
 
-  it("tries each framework once and stops at the one that knows the build", async () => {
+  it("asks all five frameworks at once and returns the one that knows the build", async () => {
     (apiClient.get as Mock).mockImplementation(async ({ url }) =>
       url.includes("/xcuitest/v2/") ? ok({ id: BUILD, devices: [] }) : notFound,
     );
@@ -105,11 +105,7 @@ describe("findFrameworkBuild", () => {
     const build = await findFrameworkBuild(BUILD, config);
 
     expect(build?.framework.name).toBe("xcuitest");
-    expect((apiClient.get as Mock).mock.calls.map(([r]) => r.url)).toEqual([
-      `https://api-cloud.browserstack.com/app-automate/maestro/v2/builds/${BUILD}`,
-      `https://api-cloud.browserstack.com/app-automate/espresso/v2/builds/${BUILD}`,
-      `https://api-cloud.browserstack.com/app-automate/xcuitest/v2/builds/${BUILD}`,
-    ]);
+    expect(apiClient.get).toHaveBeenCalledTimes(5);
   });
 
   it("returns undefined after five 404s, for an ordinary Appium build", async () => {
@@ -119,14 +115,28 @@ describe("findFrameworkBuild", () => {
     expect(apiClient.get).toHaveBeenCalledTimes(5);
   });
 
-  it("surfaces a server error instead of reading it as 'not this framework'", async () => {
+  it("treats a failed lookup on another framework as 'not this framework'", async () => {
+    (apiClient.get as Mock).mockImplementation(async ({ url }) => {
+      if (url.includes("/maestro/v2/")) return ok(maestroBuild);
+      if (url.includes("/flutter-integration-tests/v2/ios/"))
+        return { ok: false, status: 403, statusText: "Forbidden", data: {} };
+      return {
+        ok: false,
+        status: 503,
+        statusText: "Service Unavailable",
+        data: {},
+      };
+    });
+
+    await expect(findFrameworkBuild(BUILD, config)).resolves.toMatchObject({
+      framework: { name: "maestro" },
+    });
     (apiClient.get as Mock).mockResolvedValue({
       ok: false,
       status: 503,
       statusText: "Service Unavailable",
     });
-
-    await expect(findFrameworkBuild(BUILD, config)).rejects.toThrow(/503/);
+    await expect(findFrameworkBuild(BUILD, config)).resolves.toBeUndefined();
   });
 });
 
@@ -188,6 +198,7 @@ describe("retrieveFrameworkLogs", () => {
       text.indexOf("login-flow (passed)"),
     );
     expect(text).toContain("Assertion failed: button not visible");
+    expect(text).toContain("UNTRUSTED");
     const fetched = (apiClient.get as Mock).mock.calls.find(([r]) =>
       r.url.endsWith("fail.txt"),
     )![0];
@@ -386,5 +397,82 @@ describe("Maestro screenshot memory limits", () => {
     for (let i = 0; i <= MAX_ZIP_ENTRIES; i++) zip.file(`${i}.png`, "x");
 
     await expect(shotsFrom(zip)).rejects.toThrow(/too many files/);
+  });
+});
+
+describe("review follow-ups", () => {
+  beforeEach(() => vi.resetAllMocks());
+
+  it("keeps a non-404 screenshot error and makes no framework calls", async () => {
+    (apiClient.get as Mock).mockResolvedValue({
+      ok: false,
+      status: 500,
+      statusText: "Internal Server Error",
+      data: {},
+    });
+
+    await expect(
+      fetchAutomationScreenshots(SESSION, SessionType.AppAutomate, config),
+    ).rejects.toThrow();
+    expect(
+      (apiClient.get as Mock).mock.calls.some(([r]) => r.url.includes("/v2/")),
+    ).toBe(false);
+  });
+
+  it("keeps the original screenshot error when the framework check fails", async () => {
+    (apiClient.get as Mock).mockImplementation(async ({ url }) =>
+      url.endsWith("/logs")
+        ? notFound
+        : {
+            ok: false,
+            status: 503,
+            statusText: "Service Unavailable",
+            data: {},
+          },
+    );
+
+    await expect(
+      fetchAutomationScreenshots(SESSION, SessionType.AppAutomate, config),
+    ).rejects.toThrow(/Invalid session ID/);
+  });
+
+  it("listSessions honours limit, offset and a status filter in any case", async () => {
+    const many = {
+      ...maestroBuild,
+      devices: [
+        {
+          device: "Pixel",
+          os: "android",
+          os_version: "14.0",
+          sessions: [
+            { id: "s1", status: "failed" },
+            { id: "s2", status: "passed" },
+            { id: "s3", status: "failed" },
+            { id: "s4", status: "failed" },
+          ],
+        },
+      ],
+    };
+    (apiClient.get as Mock).mockImplementation(async ({ url }) => {
+      if (url.endsWith(`/app-automate/builds/${BUILD}/sessions.json`))
+        return ok([]);
+      if (url.endsWith(`/maestro/v2/builds/${BUILD}`)) return ok(many);
+      return notFound;
+    });
+
+    const result = await listSessionIdsTool(
+      {
+        sessionType: SessionType.AppAutomate,
+        buildId: BUILD,
+        status: "FAILED",
+        limit: 1,
+        offset: 1,
+      },
+      config,
+    );
+
+    expect(
+      JSON.parse(result.content[0].text as string).map((s: any) => s.sessionId),
+    ).toEqual(["s3"]);
   });
 });

@@ -16,6 +16,14 @@ import {
 } from "../appautomate-utils/framework-builds.js";
 import { resolveAppAutomateBuildId } from "../failurelogs-utils/resolve-app-build-id.js";
 
+/** The session is unknown to the generic logs endpoint (404). */
+export class SessionLogsNotFoundError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "SessionLogsNotFoundError";
+  }
+}
+
 export const MAX_SCREENSHOT_BYTES = globalConfig.REMOTE_MCP
   ? 10 * 1024 * 1024
   : undefined;
@@ -47,6 +55,9 @@ async function extractScreenshotUrls(
     throw new Error(
       "The logs for this session are too large (over 5 MB) to find screenshots here. Open the session in the BrowserStack dashboard to view them.",
     );
+  }
+  if (response.status === 404) {
+    throw new SessionLogsNotFoundError("Invalid session ID for Session");
   }
   await assertOkResponse(response, "Session");
 
@@ -185,7 +196,13 @@ export async function fetchAutomationScreenshots(
   try {
     urls = await extractScreenshotUrls(sessionId, sessionType, config);
   } catch (error) {
-    if (sessionType !== SessionType.AppAutomate) throw error;
+    // Only a 404 can mean a framework session; anything else keeps its own error.
+    if (
+      sessionType !== SessionType.AppAutomate ||
+      !(error instanceof SessionLogsNotFoundError)
+    ) {
+      throw error;
+    }
     const framework = await frameworkScreenshots(sessionId, config);
     if (!framework) throw error;
     return framework;
@@ -258,12 +275,19 @@ async function frameworkScreenshots(
   sessionId: string,
   config: BrowserStackConfig,
 ): Promise<Screenshot[] | undefined> {
-  const buildId = await resolveAppAutomateBuildId(sessionId, config);
-  if (!buildId) return undefined;
-  const build = await findFrameworkBuild(buildId, config);
-  if (!build) return undefined;
-
-  const cases = (await getFrameworkTestCases(build, sessionId, config)) ?? [];
+  // A failed lookup here means "not a framework session": the caller keeps the
+  // original error instead of reporting this secondary failure.
+  let build;
+  let cases;
+  try {
+    const buildId = await resolveAppAutomateBuildId(sessionId, config);
+    if (!buildId) return undefined;
+    build = await findFrameworkBuild(buildId, config);
+    if (!build) return undefined;
+    cases = (await getFrameworkTestCases(build, sessionId, config)) ?? [];
+  } catch {
+    return undefined;
+  }
   const withShots = failedFirst(cases).find((c) =>
     isBrowserStackUrl(c.fields.screenshots),
   );

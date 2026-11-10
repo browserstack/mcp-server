@@ -1,4 +1,5 @@
 import { AppAutomateLogType } from "../../lib/constants.js";
+import { wrapUntrusted } from "../../lib/untrusted-content.js";
 import { BrowserStackConfig } from "../../lib/types.js";
 import {
   downloadTestCaseFile,
@@ -55,9 +56,12 @@ export async function retrieveFrameworkLogs(
     );
     return crashed.length
       ? `Crashes recorded in this ${framework} session:\n` +
-          crashed
-            .map((c) => `- ${label(c)}: ${c.fields.crash_logs_count}`)
-            .join("\n") +
+          wrapUntrusted(
+            "test names",
+            crashed
+              .map((c) => `- ${label(c)}: ${c.fields.crash_logs_count}`)
+              .join("\n"),
+          ) +
           "\nOpen the session on the dashboard to read the crash reports."
       : `No crashes recorded in this ${framework} session.`;
   }
@@ -95,5 +99,9 @@ export async function retrieveFrameworkLogs(
     withLog.length > MAX_TESTS
       ? `\n\n${withLog.length - MAX_TESTS} more test(s) have this log; failed tests are shown first.`
       : "";
-  return `${framework} session ${sessionId}, ${logType}:\n\n${parts.join("\n\n")}${more}`;
+  return (
+    `${framework} session ${sessionId}, ${logType}:\n` +
+    wrapUntrusted("test logs", parts.join("\n\n")) +
+    more
+  );
 }

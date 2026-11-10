@@ -4,6 +4,7 @@ import { getBrowserStackAuth } from "../../lib/get-auth.js";
 import { getRegionalHost } from "../../lib/regional-host.js";
 import { BrowserStackConfig } from "../../lib/types.js";
 import { SessionIdRecord } from "../automate-utils/list-session-ids.js";
+import logger from "../../logger.js";
 
 /**
  * App Automate builds run through a framework API (Maestro, Espresso, XCUITest,
@@ -64,17 +65,34 @@ async function getJson(url: string, config: BrowserStackConfig) {
 
 /**
  * The framework build with this id, or undefined if none has it. Each framework's
- * build endpoint returns 404 for another framework's build, so this is at most
- * one call per framework.
+ * build endpoint returns 404 for another framework's build, so the five lookups
+ * run in parallel and at most one answers. Used only as a fallback after an empty
+ * or 404 answer, so a failed lookup (401, 403, 5xx) is treated as "not this
+ * framework" rather than replacing the caller's original reply with an error.
  */
 export async function findFrameworkBuild(
   buildId: string,
   config: BrowserStackConfig,
 ): Promise<FrameworkBuild | undefined> {
   const id = encodeURIComponent(buildId.trim());
-  for (const framework of FRAMEWORKS) {
-    const data = await getJson(frameworkUrl(framework, `builds/${id}`), config);
-    if (data) return { framework, buildId: buildId.trim(), data };
+  const results = await Promise.allSettled(
+    FRAMEWORKS.map((framework) =>
+      getJson(frameworkUrl(framework, `builds/${id}`), config),
+    ),
+  );
+  for (const [index, result] of results.entries()) {
+    if (result.status === "fulfilled" && result.value) {
+      return {
+        framework: FRAMEWORKS[index],
+        buildId: buildId.trim(),
+        data: result.value,
+      };
+    }
+    if (result.status === "rejected") {
+      logger.debug(
+        `framework lookup failed for ${FRAMEWORKS[index].name}: ${result.reason}`,
+      );
+    }
   }
   return undefined;
 }

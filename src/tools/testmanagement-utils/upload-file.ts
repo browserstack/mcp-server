@@ -30,7 +30,7 @@ export const UploadFileSchema = z.object({
   file_path: z
     .string()
     .describe(
-      "Full path to a PDF, TXT, PNG or JPG file. Must be inside the " +
+      "Full path to the file. Must be inside the " +
         "directory configured via the MCP_UPLOAD_BASE_DIR environment variable.",
     ),
 });

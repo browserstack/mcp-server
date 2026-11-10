@@ -63,7 +63,7 @@ describe("uploadFile — file types", () => {
     fs.rmSync(dir, { recursive: true, force: true });
   });
 
-  it.each(["spec.docx", "data.csv", "notes.md", "sheet.xlsx", "page.html"])(
+  it.each(["spec.doc", "notes.md", "data.json", "page.html", "bundle.zip"])(
     "rejects %s, which test case generation cannot read",
     async (name) => {
       const file = path.join(dir, name);
@@ -84,6 +84,16 @@ describe("uploadFile — file types", () => {
     ["flow.png", "image/png"],
     ["flow.JPG", "image/jpeg"],
     ["flow.jpeg", "image/jpeg"],
+    [
+      "spec.docx",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ],
+    [
+      "sheet.xlsx",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    ],
+    ["data.csv", "text/csv"],
+    ["spec.rtf", "application/rtf"],
   ])("stores the mimeType for %s", async (name, mimeType) => {
     const file = path.join(dir, name);
     fs.writeFileSync(file, "x");

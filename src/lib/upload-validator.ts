@@ -133,6 +133,12 @@ export const TEST_CASE_GENERATION_MIME_TYPES: Readonly<Record<string, string>> =
     ".png": "image/png",
     ".jpg": "image/jpeg",
     ".jpeg": "image/jpeg",
+    ".docx":
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ".xlsx":
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    ".csv": "text/csv",
+    ".rtf": "application/rtf",
   };
 
 export const ONE_MB = 1024 * 1024;

@@ -241,9 +241,8 @@ describe("tm's upload_generic_attachments in the shipped index", () => {
 
   it("accepts at least every extension the uploadFile tool accepts for tm", async () => {
     const { readFileSync } = await import("node:fs");
-    const { TEST_MANAGEMENT_ATTACHMENT_EXTENSIONS } = await import(
-      "../../src/lib/upload-validator.js"
-    );
+    const { TEST_CASE_GENERATION_MIME_TYPES } =
+      await import("../../src/lib/upload-validator.js");
     const index = JSON.parse(
       readFileSync(
         join(__dirname, "../../capability/tm.capability-index.json"),
@@ -254,7 +253,7 @@ describe("tm's upload_generic_attachments in the shipped index", () => {
       .find((c: { name: string }) => c.name === "upload_generic_attachments")
       .body.find((p: { type: string }) => p.type === "file");
     expect(file.accept).toEqual(
-      expect.arrayContaining([...TEST_MANAGEMENT_ATTACHMENT_EXTENSIONS]),
+      expect.arrayContaining(Object.keys(TEST_CASE_GENERATION_MIME_TYPES)),
     );
   });
 });

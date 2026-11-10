@@ -164,6 +164,11 @@ describe("a lone decisive word settles, and says so", () => {
 describe("a summary claims the words its product really uses", () => {
   // Both products record the RESULT of a run; only one modelled the word as an entity, so
   // "delete the failed results from this run" read as settled and routed without asking.
+  //
+  // `result` has since joined GENERIC_ANCHORS — it is an everyday word that was handing
+  // whole device-session requests to tm on its own — so it no longer appears in `terms`.
+  // What these queries are here to prove is unchanged and is what is asserted: the pair
+  // still clashes rather than settling silently, now carried by `run`.
   for (const q of [
     "Delete the failed results from this run.",
     "Export the 'Sprint 14 Regression' run with results.",
@@ -171,8 +176,17 @@ describe("a summary claims the words its product really uses", () => {
     it(q, () => {
       const verdict = ambiguousProducts(products, q);
       expect(verdict.products).toEqual(["tm", "tra"]);
-      expect(verdict.terms).toContain("result");
+      expect(verdict.settled).toBeUndefined();
     });
+
+  // And with the shared word gone, a request carrying ONLY `result` must not settle
+  // either: nothing in it is recognised, which the gate treats as the least settled case
+  // of all and refuses. Silence here would be the original bug by a quieter route.
+  it("a result-only request still does not settle on one product", () => {
+    const verdict = ambiguousProducts(products, "Delete the failed results");
+    expect(verdict.settled).toBeUndefined();
+    expect(verdict.products.length).not.toBe(1);
+  });
 
   it("still lets a word only one product uses decide", () =>
     expect(

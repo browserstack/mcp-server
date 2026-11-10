@@ -649,6 +649,19 @@ const IDENTITY_WEIGHT = 6;
 // put a product question to users whose request was about something else entirely. A
 // product that wants them to route can still claim the longer phrase (`quality gate`,
 // `saved filter`, `os version`).
+// `search`, `result`, `statu`(s), `view`, `type`, `message` and `version` joined for the
+// same reason, measured on the App Live QA corpus. Each is an entity alias on one of the
+// workflow products and an everyday word everywhere else, and because the clash set is the
+// INTERSECTION of the shared terms' claimants, one such word is enough to hand a whole
+// request to a product that claims nothing else in it: "check that it opens to the Explore
+// screen with a Search Wikipedia box" settled on Test Management, on the strength of
+// `search`, for a request to open an app on a phone. Across 71 QA prompts this decided 6
+// outright and polluted more; with them listed here, none settles outside the device
+// products. A product that wants them to route can still claim the longer phrase
+// (`saved search`, `test result`, `run status`).
+//
+// `statu` and `statuse` are what the singulariser leaves of `status`/`statuses`; the keys
+// here are compared after folding, so the folded spelling is the one that has to be listed.
 const GENERIC_ANCHORS = new Set([
   "test",
   "tests",
@@ -658,6 +671,14 @@ const GENERIC_ANCHORS = new Set([
   "filter",
   "filters",
   "os",
+  "search",
+  "result",
+  "statu",
+  "statuse",
+  "view",
+  "type",
+  "message",
+  "version",
 ]);
 
 export interface ProductAmbiguity {

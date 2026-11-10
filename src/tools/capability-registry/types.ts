@@ -650,6 +650,14 @@ export interface ProductIndex {
    */
   routing_terms?: string[];
   /**
+   * Clashes this product has already decided, so the gate need not ask the user.
+   * See `policy.ts`; the shape is `RoutingPolicy` there.
+   */
+  routing_policy?: {
+    preferred_over?: string[];
+    note?: string;
+  };
+  /**
    * How to authenticate to this product. Absent means the historical default: the caller's
    * credentials as `Api-Token: {username}:{access_key}`, which is what every shipped index
    * relies on today.

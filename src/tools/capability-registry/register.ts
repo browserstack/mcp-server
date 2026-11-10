@@ -36,6 +36,7 @@ import {
   resolveResponses,
 } from "./index-loader.js";
 import { assertSelectable, narrowResponse } from "./narrow.js";
+import { ClashResolution, resolveClash } from "./policy.js";
 import { invokeWithFallbacks } from "./fallback.js";
 import { invoke } from "./resolve.js";
 import {
@@ -373,24 +374,45 @@ export function addCapabilityRegistryTools(
       // THE VERDICT TRAVELS WITH THE CALLER. Signed here, read back by the search — which
       // is how the search can know what this call concluded about the whole request
       // without the server keeping a note between the two.
+      // A clash the indexes already decide between themselves is reported as decided, so
+      // the caller never has to put a question the products have answered. See policy.ts.
+      const decided =
+        ambiguity.products.length > 1
+          ? resolveClash(registry.index.products, ambiguity.products)
+          : undefined;
       const listingToken = query
         ? signRouting(
-            ambiguity.products.length > 1
-              ? {
-                  verdict: "clash",
-                  terms: ambiguity.terms,
-                  products: ambiguity.products,
-                }
-              : ambiguity.unknown
-                ? { verdict: "blank" }
-                : { verdict: "settled", product: ambiguity.settled },
+            decided
+              ? { verdict: "settled", product: decided.product }
+              : ambiguity.products.length > 1
+                ? {
+                    verdict: "clash",
+                    terms: ambiguity.terms,
+                    products: ambiguity.products,
+                  }
+                : ambiguity.unknown
+                  ? { verdict: "blank" }
+                  : { verdict: "settled", product: ambiguity.settled },
           )
         : undefined;
       /** The product's title for the question put to a person; the key stays the handle. */
       const label = (name: string) =>
         registry.index.products[name]?.title ?? DEFAULT_TITLES[name] ?? name;
-      const routing =
-        ambiguity.products.length > 1
+      const routing = decided
+        ? {
+            verdict: "resolved_by_policy" as const,
+            note:
+              `These products overlap (${ambiguity.terms.map((t) => `'${t}'`).join(", ")}), ` +
+              `but the choice is already decided: ${decided.note} ` +
+              `SEARCH ${decided.product}. Do NOT ask the user which product to use — they ` +
+              "have no choice to make here. DO tell them which product you used and why. " +
+              `If they name ${decided.over.join(" or ")} themselves, use what they named.`,
+            routing_token: listingToken,
+            product: decided.product,
+            preferred_over: decided.over,
+            shared_terms: ambiguity.terms,
+          }
+        : ambiguity.products.length > 1
           ? {
               verdict: "products_clash" as const,
               note:
@@ -698,6 +720,8 @@ export function addCapabilityRegistryTools(
       }
       /** The product was taken on the caller's word, for a quote the index cannot read. */
       let routingUnverified = false;
+      /** Set when the indexes' own declarations, not the user, settled the product. */
+      let routedBy: ClashResolution | undefined;
       if (!isBrowseQuery(query)) {
         // JUDGE THE USER'S WORDS, NOT THE AGENT'S REWRITE.
         //
@@ -778,8 +802,44 @@ export function addCapabilityRegistryTools(
         // vocabulary is the least settled kind there is, and it used to pass this gate
         // untouched because there was no shared word in it to object to.
         const blank = routable && ambiguity.unknown && !settled;
+        // A CLASH THE PRODUCTS HAVE ALREADY DECIDED IS NOT THE USER'S QUESTION.
+        //
+        // Only the plain clash is eligible. `blank` has no candidates to choose between,
+        // and `mismatch` is the caller contradicting the user's own words, which no
+        // product declaration should be able to wave through.
+        const resolved =
+          routable && ambiguity.products.length > 1 && !settled && !answered
+            ? resolveClash(registry.index.products, ambiguity.products)
+            : undefined;
+        if (resolved && resolved.product !== product) {
+          // Pointing at the right product rather than answering for the wrong one. The
+          // token says `settled`, so the corrected search goes straight through.
+          return refuse(
+            "searchCapability",
+            "product_resolved",
+            `'${subject}' could mean ${ambiguity.products.join(" or ")}, and that choice ` +
+              `is already decided: ${resolved.note} Search ${resolved.product}, not ` +
+              `${product}, and TELL THE USER which product you used. Resend with ` +
+              "`routing_token` set to the token below. The user is not asked, because " +
+              "they have not been given a choice to make here.",
+            {
+              routing_token: signRouting({
+                verdict: "settled",
+                product: resolved.product,
+              }),
+              routed: {
+                product: resolved.product,
+                over: resolved.over,
+                why: resolved.note,
+              },
+            },
+            { product: resolved.product },
+          );
+        }
+        routedBy = resolved;
         if (
           routable &&
+          !resolved &&
           (ambiguity.products.length > 1 || reopened || blank || mismatch) &&
           !settled &&
           !answered
@@ -909,10 +969,24 @@ export function addCapabilityRegistryTools(
         weak_match: weak,
         coverage: Math.round(rest.coverage * 100) / 100,
         ...(routingUnverified ? { routing_unverified: true } : {}),
+        ...(routedBy ? { routed_by_policy: true } : {}),
       });
       return ok({
         ...(agentMatches.length
           ? { use_agent: agentHandoff(product, agentMatches) }
+          : {}),
+        // THE PRODUCT WAS CHOSEN FOR THE CALLER, SO THE CALLER HAS TO SAY SO. A silent
+        // pick is the failure this gate exists to stop, and a pick the server made is no
+        // different: the user still ends up on a product nobody told them about.
+        ...(routedBy
+          ? {
+              routed: {
+                product: routedBy.product,
+                over: routedBy.over,
+                why: routedBy.note,
+                tell_user: `Say which product you used and why: ${routedBy.note}`,
+              },
+            }
           : {}),
         // NO build_id. It is provenance — for our logs and for cache busting — and
         // resolution must never depend on it, which is exactly why no caller has anything

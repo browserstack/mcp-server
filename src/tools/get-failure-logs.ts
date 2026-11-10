@@ -12,6 +12,7 @@ import {
 } from "./failurelogs-utils/automate.js";
 
 import {
+  LogsNotFoundError,
   retrieveDeviceLogs,
   retrieveAppiumLogs,
   retrieveCrashLogs,
@@ -158,8 +159,8 @@ export async function getFailureLogs(
   }
 
   // Framework builds (Maestro, Espresso, XCUITest, Flutter) 404 on the generic App
-  // Automate log endpoints. Checked once, and only after a generic request fails,
-  // so Appium sessions make no extra calls.
+  // Automate log endpoints. Checked once, and only after a generic 404, so Appium
+  // sessions with logs make no extra calls.
   let framework: FrameworkBuild | null | undefined;
   const appLogs = async (
     logType: AppAutomateLogType,
@@ -168,12 +169,14 @@ export async function getFailureLogs(
     try {
       return await generic();
     } catch (error) {
+      if (!(error instanceof LogsNotFoundError)) throw error;
       if (framework === undefined) {
         framework = buildId
           ? ((await findFrameworkBuild(buildId, config)) ?? null)
           : null;
       }
-      if (!framework) throw error;
+      // Not a framework build either: the same "not available" text as before.
+      if (!framework) return error.message;
       return retrieveFrameworkLogs(framework, args.sessionId, logType, config);
     }
   };
@@ -213,7 +216,9 @@ export async function getFailureLogs(
 
         case AppAutomateLogType.DeviceLogs: {
           response = await appLogs(logType, () =>
-            retrieveDeviceLogs(args.sessionId, buildId!, config),
+            retrieveDeviceLogs(args.sessionId, buildId!, config, {
+              throwOnNotFound: true,
+            }),
           );
           results.push({ type: "text", text: response });
           break;
@@ -221,7 +226,9 @@ export async function getFailureLogs(
 
         case AppAutomateLogType.AppiumLogs: {
           response = await appLogs(logType, () =>
-            retrieveAppiumLogs(args.sessionId, buildId!, config),
+            retrieveAppiumLogs(args.sessionId, buildId!, config, {
+              throwOnNotFound: true,
+            }),
           );
           results.push({ type: "text", text: response });
           break;
@@ -229,7 +236,9 @@ export async function getFailureLogs(
 
         case AppAutomateLogType.CrashLogs: {
           response = await appLogs(logType, () =>
-            retrieveCrashLogs(args.sessionId, buildId!, config),
+            retrieveCrashLogs(args.sessionId, buildId!, config, {
+              throwOnNotFound: true,
+            }),
           );
           results.push({ type: "text", text: response });
           break;

@@ -9,11 +9,14 @@ import {
 } from "../../src/tools/appautomate-utils/framework-builds";
 import { retrieveFrameworkLogs } from "../../src/tools/failurelogs-utils/framework";
 import { fetchAutomationScreenshots } from "../../src/tools/automate-utils/fetch-screenshots";
+import { listSessionIdsTool } from "../../src/tools/automate";
+import { getFailureLogs } from "../../src/tools/get-failure-logs";
 
 vi.mock("../../src/lib/apiClient", () => ({ apiClient: { get: vi.fn() } }));
 vi.mock("../../src/lib/get-auth", () => ({
   getBrowserStackAuth: () => "user:key",
 }));
+vi.mock("../../src/lib/instrumentation", () => ({ trackMCP: vi.fn() }));
 vi.mock("../../src/logger", () => ({
   default: { warn: vi.fn(), error: vi.fn(), info: vi.fn(), debug: vi.fn() },
 }));
@@ -249,5 +252,72 @@ describe("fetchAutomationScreenshots on a Maestro session", () => {
     await expect(
       fetchAutomationScreenshots(SESSION, SessionType.AppAutomate, config),
     ).rejects.toThrow(/Invalid session ID/);
+  });
+});
+
+describe("tools on a framework build", () => {
+  beforeEach(() => vi.resetAllMocks());
+
+  it("listSessions lists a Maestro build's sessions when the generic list is empty", async () => {
+    routeMaestro((url) =>
+      url.endsWith(`/app-automate/builds/${BUILD}/sessions.json`)
+        ? ok([])
+        : undefined,
+    );
+
+    const result = await listSessionIdsTool(
+      { sessionType: SessionType.AppAutomate, buildId: BUILD },
+      config,
+    );
+
+    const sessions = JSON.parse(result.content[0].text as string);
+    expect(sessions[0]).toMatchObject({ sessionId: SESSION, status: "failed" });
+    expect(result.content.map((c: any) => c.text).join("\n")).toContain(
+      "ran through the maestro framework API",
+    );
+  });
+
+  it("getFailureLogs falls back to the framework session when generic logs 404", async () => {
+    routeMaestro((url) => {
+      if (url.endsWith("/appiumlogs")) return notFound;
+      if (url.endsWith("fail.txt"))
+        return ok("Assertion failed: dice not visible");
+      if (url.endsWith("pass.txt")) return ok("ok");
+      return undefined;
+    });
+
+    const result = await getFailureLogs(
+      {
+        sessionId: SESSION,
+        sessionType: SessionType.AppAutomate,
+        logTypes: [AppAutomateLogType.AppiumLogs],
+      },
+      config,
+    );
+
+    const text = result.content.map((c: any) => c.text).join("\n");
+    expect(result.isError).toBeFalsy();
+    expect(result.content[0].text).toContain("maestro framework API");
+    expect(text).toContain("Assertion failed: dice not visible");
+  });
+
+  it("getFailureLogs makes no framework calls for an Appium session", async () => {
+    (apiClient.get as Mock).mockImplementation(async ({ url }) => {
+      if (url.endsWith("/appiumlogs")) return ok("appium log line");
+      throw new Error(`unexpected url ${url}`);
+    });
+
+    await getFailureLogs(
+      {
+        sessionId: SESSION,
+        sessionType: SessionType.AppAutomate,
+        logTypes: [AppAutomateLogType.AppiumLogs],
+      },
+      config,
+    );
+
+    expect(
+      (apiClient.get as Mock).mock.calls.some(([r]) => r.url.includes("/v2/")),
+    ).toBe(false);
   });
 });

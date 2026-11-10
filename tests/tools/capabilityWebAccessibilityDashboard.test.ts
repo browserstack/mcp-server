@@ -109,6 +109,32 @@ describe("the Web Accessibility dashboard capability index", () => {
     ).toEqual(["list_website_scanner_scan_runs", "list_website_scanner_scans"]);
   });
 
+  it("declares no object-typed query parameter, which cannot reach the wire", () => {
+    // fetchTransport sends a query value with String(value), so an object goes out as
+    // "[object Object]" and the backend answers 422. A Rails nested filter is declared as
+    // flat bracket-named strings instead (filter[impact], filter[status], ...), which
+    // bind.ts matches by exact name and the backend parses back into a hash.
+    for (const c of dash.capabilities) {
+      for (const q of c.query ?? []) {
+        expect(q.type, `${c.name}.${q.name}`).not.toBe("object");
+      }
+    }
+    const filters = byName("get_workflow_analyzer_consolidated_report")
+      .query.map((q: any) => q.name)
+      .filter((n: string) => n.startsWith("filter["));
+    expect(filters).toEqual(
+      expect.arrayContaining(["filter[impact]", "filter[status]"]),
+    );
+  });
+
+  it("does not offer an undo that the backend cannot perform", () => {
+    // Sending hidden=false without confirmed after "Not an issue" leaves the issue
+    // confirmed=false and visible: it drops out of the report and the counts drift.
+    const guidance = byName("review_needs_review_issue").guidance.join(" ");
+    expect(guidance).not.toMatch(/confirmed omitted \(back to pending\)/);
+    expect(guidance).toMatch(/undo_bulk_review_decisions/);
+  });
+
   it("tells an agent why a refused route is refused", () => {
     const responses = dash.responses;
     expect(responses.ScopeNotAllowed.description).toMatch(

@@ -684,14 +684,14 @@
             "values": [
               "lcnc"
             ],
-            "description": "Send lcnc to list only low-code (LCNC) automation projects. Omit for the regular Automated Tests projects. Any other value answers 422.",
+            "description": "Send lcnc to list only low-code (LCNC) automation projects. Omit for the regular Automated Tests projects.",
             "example": "lcnc"
           }
         ],
         "intent": "List every Automated Tests project in the account, newest first, with its id, name and URL-safe name - use this to find a project by name or the project id another capability takes.",
         "guidance": [
           "All projects come back in one response: the server walks every page itself, so there is no paging to do. info describes only the last page it read; read info.count for the total.",
-          "query, sort and team filters are not applied: query is accepted but ignored, so filter the rows by name yourself.",
+          "There is no name search: the backend ignores any query, so filter the rows by name yourself.",
           "normalisedName is the name URL-encoded (spaces become +), the form a project path segment needs; id is the numeric project id that list_custom_dashboard_scans reports as projectId.",
           "Website Scanner projects are excluded. team_id is snake_case and is null when the project has no team."
         ],
@@ -788,7 +788,7 @@
         "guidance": [
           "data is an object keyed by guideline tag (wcag111, wcag412, rgaa_1_1, rgaa_theme_1), not an array: look a tag up by key.",
           "value is the human number (1.1.1 for wcag111, 1.1 for rgaa_1_1); level is A, AA or AAA for WCAG and null for RGAA; urls maps a WCAG version (2.0, 2.1, 2.2) or RGAA 4.1 to its reference page.",
-          "No filter is read (version and the like are ignored): the whole catalogue of about 200 entries always comes back, so pick out the tags you need.",
+          "There is no filter: the whole catalogue of about 200 entries always comes back, so pick out the tags you need.",
           "RGAA names are in French and their description is empty. assistive_tests is null for RGAA themes.",
           "Each entry carries value, name, description, level, principle, regulations, urls and assistive_tests."
         ],
@@ -1068,7 +1068,7 @@
               "pdf-scanner",
               "extension"
             ],
-            "description": "Which manual product's reports to list. extension returns Workflow Analyzer and Assisted Test reports merged. Missing or any other value answers 422.",
+            "description": "Which manual product's reports to list. extension returns Workflow Analyzer and Assisted Test reports merged. Required: a missing product answers 422 'Parameter product is required'.",
             "example": "workflow-analyzer"
           },
           {
@@ -1085,7 +1085,7 @@
             "minimum": 1,
             "maximum": 99,
             "default": 30,
-            "description": "Reports per page, up to 99. 100 or more is not refused: it silently falls back to 30.",
+            "description": "Reports per page, 1 to 99.",
             "example": 50
           },
           {
@@ -1118,7 +1118,7 @@
               "last_six_months",
               "one_year"
             ],
-            "description": "Only reports started within this window. A value outside the list is not refused: it is dropped and every report comes back.",
+            "description": "Only reports started within this window (last_week, last_month and so on).",
             "example": "last_week"
           }
         ],
@@ -1126,24 +1126,17 @@
         "guidance": [
           "product is required; without it the call answers 422 'Parameter product is required'.",
           "Paging is page and page_size; info.count is the total, info.next the next page number or null. A page can hold fewer rows than page_size when a report is still being created.",
-          "isColdStart true means the account has no reports of that product: the rows, if any, are BrowserStack's sample reports, not the user's.",
+          "isColdStart true means this page came back empty with no filter sent (product other than extension). On page 1 that means the account has no reports of that product, and the rows, if any, are BrowserStack sample reports. Past the last page it is also true, with reports [], info.count 0 and info.page 1, so read info.next rather than paging until empty. A filtered empty result and product=extension always answer false.",
           "Workflow Analyzer and Assisted Test rows share a shape: id, uniqueId ('workflowScan:<id>' or 'assistiveTest:<id>'), testType, time, issues, issueSummary, score, wcagVersion {label,value}. PDF Scanner rows differ: issueCount instead of issues, timestamp instead of time, and th_build_id.",
           "createdBy is an object of id and name; team is the team (sub-group) id.",
           "Use user_id to narrow to one person rather than reading every page."
         ],
         "returns": [
           "reports.id",
-          "reports.uniqueId",
-          "reports.testType",
           "reports.name",
           "reports.status",
           "reports.createdBy",
-          "reports.time",
-          "reports.issues",
-          "reports.issueCount",
           "reports.issueSummary",
-          "reports.score",
-          "reports.wcagVersion",
           "info.count",
           "info.next",
           "isColdStart"
@@ -1277,7 +1270,11 @@
                         }
                       },
                       "pageCount": {
-                        "type": "integer"
+                        "type": [
+                          "integer",
+                          "null"
+                        ],
+                        "description": "null on failed PDF Scanner reports."
                       },
                       "team": {
                         "type": "integer",
@@ -2014,8 +2011,11 @@
                       }
                     },
                     "snapshotComparison": {
-                      "type": "object",
-                      "description": "nested record"
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "description": "nested record; null when there is no comparable previous build"
                     },
                     "chartData": {
                       "type": "object",
@@ -2081,6 +2081,11 @@
             "default": 1,
             "description": "Page number; follow info.next.",
             "example": 2
+          },
+          {
+            "name": "central_scanner",
+            "type": "boolean",
+            "description": "true for a Website Scanner run (each scanned page is one test case); leave it out for an Automated Tests build (any value counts as true)."
           }
         ],
         "intent": "List the test cases of an Automated Tests build, each with name, file, pass/fail status, browser and OS, pages visited and issue counts - use this to find the test case to open with get_build_test_case_overview.",
@@ -2088,7 +2093,7 @@
           "testCases[].id (local integer) or testCases[].thBtcerId is the id get_build_test_case_overview takes.",
           "filters lists the status, file, tag and page values present in this build.",
           "This is the top-level shape {success, filters, testCases, th_build_id, info}, with no data wrapper. Paging is info.next.",
-          "Automated Tests builds only: a Website Scanner run answers 404 without central_scanner, and its pages are in get_scan_run_page_logs instead. A build with no ingested test cases answers 500."
+          "Automated Tests builds, and Website Scanner runs with central_scanner=true (each page is a test case). A Website Scanner run without central_scanner answers 404. A build with no ingested test cases answers 500."
         ],
         "returns": [
           "testCases.id",
@@ -2451,10 +2456,17 @@
                             "type": "string"
                           },
                           "score": {
-                            "type": "integer"
+                            "type": [
+                              "integer",
+                              "null"
+                            ]
                           },
                           "finalRedirectUrl": {
-                            "type": "string"
+                            "type": [
+                              "string",
+                              "null"
+                            ],
+                            "description": "null when the page did not redirect"
                           },
                           "pageUrlToFilter": {
                             "type": "string"
@@ -2487,7 +2499,7 @@
             "name": "project_name",
             "type": "string",
             "required": true,
-            "description": "Exact project name to check for new builds. Must be snake_case: projectName answers 422 \"project_name is required\".",
+            "description": "Exact project name to check for new builds.",
             "example": "example-project"
           },
           {
@@ -2533,7 +2545,6 @@
         "guidance": [
           "hasUpdates true means at least one listed build's status is now different from the one sent, or a newer build exists. It does not say which: re-read list_build_report_runs.",
           "Send each build's status as last seen; sending a status it no longer has returns hasUpdates true at once.",
-          "Snake_case keys only; this action does not convert camelCase.",
           "A 500 \"Something Went Wrong\" with hasUpdates false means TestHub did not answer, not that nothing changed."
         ],
         "returns": [
@@ -2579,13 +2590,13 @@
             "name": "th_build_id",
             "type": "string",
             "required": true,
-            "description": "The build's or scan run's thBuildId. Must be snake_case.",
+            "description": "The build's or scan run's thBuildId.",
             "example": "abc123examplebuilduuid"
           },
           {
             "name": "central_scanner",
             "type": "boolean",
-            "description": "true for a Website Scanner run, omitted for an Automated Tests build. Must be snake_case: centralScanner is not seen and a Website Scanner run then answers 404.",
+            "description": "true for a Website Scanner run, omitted for an Automated Tests build.",
             "example": true
           },
           {
@@ -2660,8 +2671,8 @@
         "intent": "List the accessibility rules a build or scan run violated, each with issue counts, impact and the review category, plus the report's confirmed, needs-review, hidden and dismissed totals - use this for a build's issue breakdown by rule and for the rule id the component drill-down takes.",
         "guidance": [
           "data.rules[].id is the rule id list_build_rule_components and get_build_issue take as rule_id. On grouped builds (isGrouped) pass rules[].code instead.",
-          "Filter keys may be camelCase (needsReview, issueStatus) or snake_case, but th_build_id and central_scanner must be snake_case because they are read before the conversion.",
-          "Each rule carries issueCount, violationCount, needsReviewCount and impact. data.confirmedIssueCount and data.needsReviewIssueCount are report totals that ignore the sidebar filters when bulk review is on for the account.",
+          "Filter keys may be camelCase or snake_case.",
+          "Each rule carries issueCount, violationCount, needsReviewCount and impact. data.confirmedIssueCount and data.needsReviewIssueCount are report totals: severity, pages, components, categories, needs_review and ai_issues do not change them, but issue_status and tests do.",
           "An invalid filter value (e.g. severity bad) answers 422 naming the allowed values."
         ],
         "returns": [
@@ -2750,8 +2761,11 @@
                             "type": "number"
                           },
                           "reviewCategory": {
-                            "type": "object",
-                            "description": "nested record"
+                            "type": [
+                              "object",
+                              "null"
+                            ],
+                            "description": "nested record; null when the rule has no review category"
                           }
                         }
                       }
@@ -2760,7 +2774,11 @@
                       "type": "integer"
                     },
                     "bulkReviewComplete": {
-                      "type": "boolean"
+                      "type": [
+                        "boolean",
+                        "null"
+                      ],
+                      "description": "null on Website Scanner runs"
                     },
                     "hasNeedsReviewIssues": {
                       "type": "boolean"
@@ -2798,13 +2816,13 @@
             "name": "th_build_id",
             "type": "string",
             "required": true,
-            "description": "The build's or scan run's thBuildId. Must be snake_case.",
+            "description": "The build's or scan run's thBuildId.",
             "example": "abc123examplebuilduuid"
           },
           {
             "name": "central_scanner",
             "type": "boolean",
-            "description": "true for a Website Scanner run, omitted for an Automated Tests build. Must be snake_case.",
+            "description": "true for a Website Scanner run, omitted for an Automated Tests build.",
             "example": true
           },
           {
@@ -2851,7 +2869,7 @@
         "intent": "List the WCAG success criteria (or RGAA criteria on RGAA reports) a build or scan run failed, each with its level, principle, issue counts and the rules behind it - use this for a build's issue breakdown by guideline.",
         "guidance": [
           "data.guidelines[].tag (e.g. wcag143) is what list_build_guideline_components takes as guideline_tag; value is the human number (1.4.3).",
-          "Same filters, casing rules and totals as list_build_issues_by_rule."
+          "Same filters and totals as list_build_issues_by_rule."
         ],
         "returns": [
           "data.guidelines.tag",
@@ -2939,7 +2957,10 @@
                             }
                           },
                           "assistiveTests": {
-                            "type": "array",
+                            "type": [
+                              "array",
+                              "null"
+                            ],
                             "items": {
                               "type": "string"
                             }
@@ -2954,7 +2975,11 @@
                       "type": "integer"
                     },
                     "bulkReviewComplete": {
-                      "type": "boolean"
+                      "type": [
+                        "boolean",
+                        "null"
+                      ],
+                      "description": "null on Website Scanner runs"
                     },
                     "hasNeedsReviewIssues": {
                       "type": "boolean"
@@ -3345,10 +3370,10 @@
             "values": [
               "visible",
               "hidden",
-              "not_an_issue"
+              "non-issue"
             ],
             "default": "visible",
-            "description": "Which issues to include."
+            "description": "Which issues to include: visible, hidden or non-issue (Not an issue). Other spellings are refused."
           },
           {
             "name": "pages",
@@ -3381,8 +3406,7 @@
           "data.issueStatus",
           "data.needsReview",
           "data.confirmed",
-          "data.testCaseIds",
-          "data.issueIndex"
+          "data.testCaseIds"
         ],
         "responses": {
           "401": {
@@ -3481,7 +3505,11 @@
                       "type": "string"
                     },
                     "confirmed": {
-                      "type": "boolean"
+                      "type": [
+                        "boolean",
+                        "null"
+                      ],
+                      "description": "null until a needs-review issue is reviewed"
                     },
                     "hidden": {
                       "type": "boolean"
@@ -3490,14 +3518,21 @@
                       "description": "null in the live sample"
                     },
                     "testhubIssueUuid": {
-                      "type": "string"
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "description": "null on Website Scanner runs"
                     },
                     "ruleData": {
                       "type": "object",
                       "description": "nested record"
                     },
                     "reviewCategory": {
-                      "type": "object",
+                      "type": [
+                        "object",
+                        "null"
+                      ],
                       "description": "nested record"
                     },
                     "testCaseIds": {
@@ -3574,12 +3609,34 @@
             "example": "summary"
           },
           {
-            "name": "filter",
-            "type": "object",
-            "description": "view=issues only. Keys impact, status (confirmed, needsReview), rule, url, component, tag; sent as filter[impact]=critical. impact, status, rule and tag also take comma lists.",
-            "example": {
-              "impact": "critical,serious"
-            }
+            "name": "filter[impact]",
+            "type": "string",
+            "description": "view=issues only. Only issues of these impacts: minor, moderate, serious, critical (comma list allowed)."
+          },
+          {
+            "name": "filter[status]",
+            "type": "string",
+            "description": "view=issues only. confirmed or needsReview (comma list allowed)."
+          },
+          {
+            "name": "filter[rule]",
+            "type": "string",
+            "description": "view=issues only. Only issues of these rule codes, e.g. color-contrast (comma list allowed)."
+          },
+          {
+            "name": "filter[url]",
+            "type": "string",
+            "description": "view=issues only. Only issues on this page URL."
+          },
+          {
+            "name": "filter[component]",
+            "type": "string",
+            "description": "view=issues only. Only issues on this component selector."
+          },
+          {
+            "name": "filter[tag]",
+            "type": "string",
+            "description": "view=issues only. Only issues of these WCAG tags, e.g. wcag143 (comma list allowed)."
           },
           {
             "name": "nodeFields",
@@ -3600,8 +3657,8 @@
         "intent": "Read one or several Workflow Analyzer (or Assisted Test) reports merged into one - issue totals, severity counts, needs-review and hidden counts, score, per-rule counts, and with view=issues the individual issues filtered by impact, status, rule, URL, component or tag.",
         "guidance": [
           "Prefer view=summary first, then view=issues with filters. view=full on a large report is megabytes.",
-          "filter, nodeFields or limit without view=issues answers 422 \"filter, nodeFields and limit require view=issues\".",
-          "With view=issues, data.filter gives matchedIssueCount, returnedNodeCount and truncated; raise limit (max 500) or narrow the filter when truncated is true. Per-rule counts stay whole-report; only matchedIssueCount and nodes are filtered.",
+          "filter[impact], filter[status], filter[rule], filter[url], filter[component], filter[tag], nodeFields or limit without view=issues answers 422 \"filter, nodeFields and limit require view=issues\".",
+          "With view=issues only, data.filter gives matchedIssueCount, returnedNodeCount and truncated; raise limit (max 500) or narrow the filter when truncated is true. Per-rule counts stay whole-report; only matchedIssueCount and nodes are filtered.",
           "data.meta_v2 is keyed \"workflowScan:<id>\" and stays snake_case; the other keys are camelCase.",
           "An id that is not in the account answers 404 \"Test Not Found\". Too many ids (the account's limit, 10 by default) answers 422."
         ],
@@ -3613,8 +3670,7 @@
           "data.hiddenIssueCount",
           "data.markedAsNonIssueCount",
           "data.scoreData",
-          "data.reportData",
-          "data.filter"
+          "data.reportData"
         ],
         "responses": {
           "401": {
@@ -3837,7 +3893,7 @@
               "central_scanner",
               "lcnc"
             ],
-            "description": "automated-tests for two Automated Tests builds, central_scanner for two runs of one Website Scanner scan. site-scanner is refused with 422.",
+            "description": "automated-tests for two Automated Tests builds, central_scanner for two runs of one Website Scanner scan.",
             "example": "automated-tests"
           },
           {
@@ -3981,10 +4037,16 @@
                               "type": "boolean"
                             },
                             "bestPractices": {
-                              "type": "null"
+                              "type": [
+                                "boolean",
+                                "null"
+                              ]
                             },
                             "needsReview": {
-                              "type": "null"
+                              "type": [
+                                "boolean",
+                                "null"
+                              ]
                             },
                             "experimental": {
                               "type": "boolean"
@@ -4037,7 +4099,8 @@
           "Automated Tests answers carry tests and testHealth; Website Scanner answers carry scanStability (pages that loaded, failed or redirected per run) instead.",
           "hasEngineVersionChangedPatchless true means the engine changed between runs, so some new or resolved issues may come from the engine rather than the site.",
           "includeDuplicates, which the dashboard sends, is not read.",
-          "A 200 with success false and a message means the comparison was refused (for example, reports too large); a timeout answers 500 'request time out'."
+          "A 200 with success false and a message means the comparison was refused (for example, reports too large); a timeout answers 500 'request time out'.",
+          "Website Scanner: only pages that loaded successfully (not redirected) are compared. Read data.scanStability first: when no page loaded in a run, every count here is 0 even though get_website_scanner_scan_trends shows issues for that run."
         ],
         "returns": [
           "data.newIssues",
@@ -4048,9 +4111,7 @@
           "data.pageComparison.chartData",
           "data.componentComparison.chartData",
           "data.componentComparison.newComponentCount",
-          "data.componentComparison.resolvedComponentCount",
-          "data.tests.tableData",
-          "data.scanStability"
+          "data.componentComparison.resolvedComponentCount"
         ],
         "responses": {
           "401": {
@@ -4432,15 +4493,15 @@
           "data is a bare array of rules, most issues first. Each has id (the number get_report_comparison_issue takes as ruleId), code (the rule name such as color-contrast), help, tags and issueCount.",
           "impact came back null and violationCount and needsReviewCount came back 0 on every rule of a non-grouped comparison, even with issues present. Take severity from the summary's severityBreakdown instead.",
           "An empty array is a normal answer: nothing in that bucket under those filters.",
-          "For the WCAG view of the same issues use list_report_comparison_guidelines."
+          "For the WCAG view of the same issues use list_report_comparison_guidelines.",
+          "Website Scanner: an empty answer can mean no page loaded successfully in the compared runs; check get_report_comparison_summary's data.scanStability."
         ],
         "returns": [
           "data.id",
           "data.code",
           "data.help",
           "data.issueCount",
-          "data.tags",
-          "data.reviewCategory.id"
+          "data.tags"
         ],
         "responses": {
           "401": {
@@ -4505,7 +4566,10 @@
                         "type": "integer"
                       },
                       "violationConfidence": {
-                        "type": "null"
+                        "type": [
+                          "integer",
+                          "null"
+                        ]
                       },
                       "needsReviewConfidence": {
                         "type": "number"
@@ -4657,7 +4721,8 @@
           "data is a bare array. Each row has tag (such as wcag143, the guidelineTag get_report_comparison_issue takes), value (1.4.3), name, level, issueCount, violationCount, needsReviewCount and rules (rule codes).",
           "Here violationCount and needsReviewCount are filled in, unlike on list_report_comparison_rules.",
           "For an RGAA comparison the rows are RGAA criteria, with tags like rgaa_3_2.",
-          "Base is always the older run, whatever the ids order."
+          "Base is always the older run, whatever the ids order.",
+          "Website Scanner: an empty answer can mean no page loaded successfully in the compared runs; check get_report_comparison_summary's data.scanStability."
         ],
         "returns": [
           "data.tag",
@@ -4859,7 +4924,8 @@
           "componentId is required unless issueId is sent; leaving both out answers 422 'Parameter component_id is required.'",
           "Nothing left (or nothing matching) answers 404 with success false and data [] - that is the end of the list, not an error in the ids.",
           "Each issue has issueId, url, html, target (the CSS selector), failureSummary, impact, resultType (violation or needs_review), ruleData (code, help, tags), testCaseIds and engineInfo.",
-          "product and ids go in the query string; everything else in the JSON body."
+          "product and ids go in the query string; everything else in the JSON body.",
+          "Website Scanner: an empty answer can mean no page loaded successfully in the compared runs; check get_report_comparison_summary's data.scanStability."
         ],
         "returns": [
           "data.issueId",
@@ -5034,7 +5100,10 @@
                         "type": "boolean"
                       },
                       "remediationData": {
-                        "type": "null"
+                        "type": [
+                          "object",
+                          "null"
+                        ]
                       },
                       "testhubIssueUuid": {
                         "type": "string"
@@ -5060,7 +5129,10 @@
                         }
                       },
                       "reviewCategory": {
-                        "type": "object",
+                        "type": [
+                          "object",
+                          "null"
+                        ],
                         "properties": {
                           "id": {
                             "type": "string"
@@ -5113,7 +5185,10 @@
                         "type": "string"
                       },
                       "proxyMap": {
-                        "type": "null"
+                        "type": [
+                          "object",
+                          "null"
+                        ]
                       },
                       "scanRunId": {
                         "type": "string"
@@ -5446,7 +5521,10 @@
                             "type": "integer"
                           },
                           "changesSinceLastRun": {
-                            "type": "object",
+                            "type": [
+                              "object",
+                              "null"
+                            ],
                             "properties": {
                               "newIssues": {
                                 "type": "integer"
@@ -5457,7 +5535,8 @@
                               "retainedIssues": {
                                 "type": "integer"
                               }
-                            }
+                            },
+                            "description": "null on a scan's first run."
                           }
                         }
                       }
@@ -5469,7 +5548,12 @@
                           "type": "boolean"
                         },
                         "nextPage": {
-                          "type": "null"
+                          "type": [
+                            "string",
+                            "integer",
+                            "null"
+                          ],
+                          "description": "Token for the next page, null on the last one; send it back as given."
                         }
                       }
                     }
@@ -5617,7 +5701,7 @@
               "guideline"
             ],
             "json_path": "/scope",
-            "description": "How wide the hide reaches: one issue, every issue of a rule on one component, every issue of a rule, or every issue under a guideline.",
+            "description": "Recorded with the decision; it does not narrow anything. Which issues change is set only by the ids sent: issue_id + component_id = one issue, rule_id + component_id = one component, rule_id alone = every issue of the rule, guideline_tag = every issue under the guideline. Send the scope that matches those ids.",
             "example": "issue"
           },
           {
@@ -5666,7 +5750,8 @@
           "issue_id is the local integer id (issueId / id on a get_bulk_review_page element), not testhubIssueUuid.",
           "422 'Invalid request' means both or neither of rule_id and guideline_tag were sent, or issue_id came without component_id. 404 'Unknown rule_id: ...' means the rule code did not resolve.",
           "403 causes: '<Build|Test> doesn't belong to the User' when the caller is not the report's author and the group does not have TEAM_REPORT_MANAGEMENT released (a builds:manage_issues holder is exempt except on PDF scans); PERMISSION_DENIED when an RBAC group's role lacks builds:update (or builds:manage_issues), checked for test_type TestCase also against the project-level role; ACTION_NOT_ALLOWED_FOR_SCOPE if the token's allowlist no longer names this route.",
-          "502 'Could not record this change. Nothing was changed' means TestHub refused the write; nothing changed, so it is safe to retry once."
+          "502 'Could not record this change. Nothing was changed' means TestHub refused the write; nothing changed, so it is safe to retry once.",
+          "422 'Invalid parameters passed. Parameter reason is required.' means hidden was true without a reason."
         ],
         "returns": [
           "success"
@@ -5737,7 +5822,7 @@
             "type": "boolean",
             "required": true,
             "json_path": "/hidden",
-            "description": "JSON true or false. The strings \"true\"/\"false\" are refused with 422.",
+            "description": "true hides, false unhides. (The backend refuses strings with 422; this server converts \"true\"/\"false\" to booleans before sending.)",
             "example": true
           },
           {
@@ -5809,7 +5894,7 @@
         "guidance": [
           "Confirm with the user before every call, naming the report and how many pairs. Undo is the same components with hidden false.",
           "hidden_count in the reply is how many issues changed state; pairs that matched nothing are skipped silently, not refused.",
-          "hidden and persist must be real JSON booleans; component_id must be a string even when it looks numeric. Any other type answers 422.",
+          "component_id must be a string even when it looks numeric (a number answers 422 'component_id must be a string'). When nothing matches, the reply is still 200 with hidden_count 0 and message 'No issues found for the given components' (hide_issues answers 404 instead).",
           "An entry without component_id needs scope \"rule\"; otherwise 422 'Each component must have component_id (or scope: rule)'.",
           "403 causes: not the report's author while TEAM_REPORT_MANAGEMENT is off for the group (manage_issues holders exempt except PDF); PERMISSION_DENIED when an RBAC role lacks builds:update/manage_issues (for TestCase also the project-level role); ACTION_NOT_ALLOWED_FOR_SCOPE if the route leaves the allowlist.",
           "502 means TestHub refused the write before anything changed locally."
@@ -5887,14 +5972,14 @@
             "type": "boolean",
             "required": true,
             "json_path": "/hidden",
-            "description": "false with confirmed true = Confirm; true with confirmed false = Not an issue; false with confirmed omitted = back to pending.",
+            "description": "false with confirmed true = Confirm; true with confirmed false = Not an issue. There is no pending reset through this capability: use undo_bulk_review_decisions.",
             "example": false
           },
           {
             "name": "confirmed",
             "type": "boolean",
             "json_path": "/confirmed",
-            "description": "true to confirm, false for Not an issue (with hidden true). Omit to reset to pending.",
+            "description": "true to confirm, false for Not an issue (with hidden true). Always send it: omitting it does not reset anything.",
             "example": true
           },
           {
@@ -5921,9 +6006,9 @@
         ],
         "intent": "Confirm a needs-review issue as a real issue, mark it Not an issue, or put it back to pending - the single-issue review on the dashboard.",
         "guidance": [
-          "Confirm with the user before every call. Undo by calling again with hidden false and confirmed omitted (back to pending).",
+          "Confirm with the user before every call. This capability cannot put an issue back to pending: omitting confirmed leaves it unchanged, and null is refused. To undo, call undo_bulk_review_decisions with elements [{issue_id}] and category_id = the issue's reviewCategory.id (from get_build_issue). Never send hidden false without confirmed after Not an issue: that leaves the issue confirmed=false and visible, it disappears from the report and the counts drift until undo_bulk_review_decisions repairs it.",
           "Only issues whose result is needs-review take this: any other issue answers 422 'Invalid issue type'. A combination outside the three states above answers 422 'Issue that needs review can't be updated to the requested state.'",
-          "Repeating the state the issue already has is accepted (idempotent).",
+          "Repeating the state the issue already has answers 200 but decrements the build's needsReviewCount again, so do not repeat a decision; read get_build_issue first.",
           "The reply is only {success: true}. Errors inside the update come back as 422 with message.",
           "Keys may be camelCase (testType, categoryId, optionId): the controller underscores them.",
           "403 causes: not the report's author while TEAM_REPORT_MANAGEMENT is off for the group (manage_issues holders exempt except PDF); PERMISSION_DENIED when an RBAC role lacks builds:update/manage_issues, for TestCase also checked on the project role; ACTION_NOT_ALLOWED_FOR_SCOPE if the route leaves the allowlist."
@@ -5988,7 +6073,7 @@
               "workflow-analyzer",
               "site-scanner"
             ],
-            "description": "Hyphenated. automated_tests and other spellings answer 400.",
+            "description": "Hyphenated. Other spellings (automated_tests) are refused before sending.",
             "example": "automated-tests"
           },
           {
@@ -6014,7 +6099,7 @@
         "intent": "List a report's bulk-review categories (groups of needs-review issues such as Keyboard Focus or Links) with each category's question, answer options and pending/confirmed/dismissed counts - the first step of bulk review.",
         "guidance": [
           "id is the {category_id} the other bulk-review capabilities take; questionnaire.options[].id is the option_id submit_bulk_review_decisions takes.",
-          "An option's outcome, not its label, decides the result: for Links, opt-yes is outcome dismiss. Read outcome before choosing.",
+          "An option's outcome, not its label, decides the result: on Images (and Links) opt-yes is outcome dismiss and opt-no is confirm. Read outcome before choosing.",
           "Only categories with something in the asked status come back: pending lists categories with pendingCount > 0, reviewed those with confirmed or dismissed issues. An empty list means nothing to review, not an error.",
           "supportsGroupReview false means a category's components cannot take a whole-component decision; review it element by element.",
           "403 'Build does not belong to the user' comes on these reads too: the caller must be the report's author unless TEAM_REPORT_MANAGEMENT is released for the group (or the RBAC role has builds:manage_issues). 403 'Bulk review is not available for this user' means the group is blacklisted on ACCURACY_BUCKETING_V0. PERMISSION_DENIED means the RBAC role lacks builds:view.",
@@ -6191,7 +6276,8 @@
               "workflow-analyzer",
               "site-scanner"
             ],
-            "example": "automated-tests"
+            "example": "automated-tests",
+            "description": "Hyphenated. Other spellings (automated_tests) are refused before sending."
           },
           {
             "name": "status",
@@ -6200,7 +6286,7 @@
             "values": [
               "pending"
             ],
-            "description": "Only pending is accepted; reviewed answers 400.",
+            "description": "Always pending; this server fills it in (a different value is replaced, not refused).",
             "example": "pending"
           },
           {
@@ -6214,7 +6300,7 @@
         ],
         "intent": "Get one pending component (a group of identical elements) of a bulk-review category, with how many elements and pages it spans - step two of bulk review, where one decision covers the whole component.",
         "guidance": [
-          "One component per call: data.component is a single object, and per_page above 1 still returns only one. Walk components with page and meta.nextPage; meta.totalCount is the number of components.",
+          "One component per call; walk with page and meta.nextPage. Only components with two or more pending elements are listed, so meta.totalCount can be smaller than the category's components; review single-element components with get_bulk_review_page (component_id narrows to one).",
           "data.component is null when page is past the last component or nothing is pending.",
           "component.id is the component_id for get_bulk_review_component_page and submit_bulk_review_decisions; it can contain '#', so URL-encode it in a query string (component.encodedId is it pre-encoded).",
           "counts are for the whole category, not the component.",
@@ -6393,7 +6479,8 @@
               "workflow-analyzer",
               "site-scanner"
             ],
-            "example": "automated-tests"
+            "example": "automated-tests",
+            "description": "Hyphenated. Other spellings (automated_tests) are refused before sending."
           },
           {
             "name": "status",
@@ -6426,7 +6513,7 @@
           "A page past the last is not refused: the last page comes back, with meta.currentPage saying which.",
           "page is null and counts are 0 when nothing matches - including an unknown category or component. It is not a 404.",
           "Each element's issueId (also id) is the id review_needs_review_issue and hide_issues take; testhubIssueUuid is the issue_uuid link_ticket_to_issue takes; html + cssSelector + page.url identify the element for submit/undo.",
-          "selectedOptionId is the option already chosen for the element, null while pending.",
+          "selectedOptionId is the option chosen for the element. It can be pre-filled on a pending element (seen on Images), so status=pending vs reviewed, not selectedOptionId, says whether it was decided.",
           "Same 403 causes as list_bulk_review_categories."
         ],
         "returns": [
@@ -6697,7 +6784,8 @@
               "workflow-analyzer",
               "site-scanner"
             ],
-            "example": "automated-tests"
+            "example": "automated-tests",
+            "description": "Hyphenated. Other spellings (automated_tests) are refused before sending."
           },
           {
             "name": "status",
@@ -7089,7 +7177,7 @@
           "option_id must be one of the category's questionnaire.options[].id from list_bulk_review_categories; its outcome (confirm or dismiss) is what is applied - dismiss also hides the issues.",
           "A component decision on a category whose supportsGroupReview is false answers 422 'does not support group review'. An unknown option_id or category answers 422 with the valid options.",
           "An element given by issue_id or testhub_issue_uuid that is not in this build and category answers 422.",
-          "Send at least one of components and elements; both default to empty.",
+          "Send at least one of components and elements; sending neither changes nothing and just returns the category's counts (200).",
           "403 causes: 'Bulk review is not available for this user' while the group is blacklisted on ACCURACY_BUCKETING_V0; 'Build does not belong to the user' when the caller is not the author and TEAM_REPORT_MANAGEMENT is off for the group (builds:manage_issues waives it); PERMISSION_DENIED when an RBAC role lacks builds:update/manage_issues; ACTION_NOT_ALLOWED_FOR_SCOPE if the route leaves the allowlist."
         ],
         "returns": [

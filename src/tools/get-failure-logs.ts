@@ -23,6 +23,11 @@ import {
   isTraBuildId,
 } from "./automate-utils/resolve-hashed-build-id.js";
 import { retrieveSessionVideo } from "./failurelogs-utils/video.js";
+import {
+  findFrameworkBuild,
+  FrameworkBuild,
+} from "./appautomate-utils/framework-builds.js";
+import { retrieveFrameworkLogs } from "./failurelogs-utils/framework.js";
 
 import {
   AppAutomateLogType,
@@ -152,6 +157,27 @@ export async function getFailureLogs(
     };
   }
 
+  // Framework builds (Maestro, Espresso, XCUITest, Flutter) 404 on the generic App
+  // Automate log endpoints. Checked once, and only after a generic request fails,
+  // so Appium sessions make no extra calls.
+  let framework: FrameworkBuild | null | undefined;
+  const appLogs = async (
+    logType: AppAutomateLogType,
+    generic: () => Promise<string>,
+  ): Promise<string> => {
+    try {
+      return await generic();
+    } catch (error) {
+      if (framework === undefined) {
+        framework = buildId
+          ? ((await findFrameworkBuild(buildId, config)) ?? null)
+          : null;
+      }
+      if (!framework) throw error;
+      return retrieveFrameworkLogs(framework, args.sessionId, logType, config);
+    }
+  };
+
   let response;
   // eslint-disable-next-line no-useless-catch
   try {
@@ -186,19 +212,25 @@ export async function getFailureLogs(
         }
 
         case AppAutomateLogType.DeviceLogs: {
-          response = await retrieveDeviceLogs(args.sessionId, buildId!, config);
+          response = await appLogs(logType, () =>
+            retrieveDeviceLogs(args.sessionId, buildId!, config),
+          );
           results.push({ type: "text", text: response });
           break;
         }
 
         case AppAutomateLogType.AppiumLogs: {
-          response = await retrieveAppiumLogs(args.sessionId, buildId!, config);
+          response = await appLogs(logType, () =>
+            retrieveAppiumLogs(args.sessionId, buildId!, config),
+          );
           results.push({ type: "text", text: response });
           break;
         }
 
         case AppAutomateLogType.CrashLogs: {
-          response = await retrieveCrashLogs(args.sessionId, buildId!, config);
+          response = await appLogs(logType, () =>
+            retrieveCrashLogs(args.sessionId, buildId!, config),
+          );
           results.push({ type: "text", text: response });
           break;
         }
@@ -208,6 +240,11 @@ export async function getFailureLogs(
     throw error;
   }
 
+  if (framework) {
+    notes.push(
+      `This session ran through the ${framework.framework.name} framework API, so its logs come from each test's results.`,
+    );
+  }
   if (notes.length > 0) {
     results.unshift({ type: "text", text: notes.join("\n") });
   }

@@ -15,6 +15,10 @@ import {
   resolveHashedBuildId,
 } from "./automate-utils/resolve-hashed-build-id.js";
 import { SessionType } from "../lib/constants.js";
+import {
+  findFrameworkBuild,
+  frameworkSessions,
+} from "./appautomate-utils/framework-builds.js";
 import { trackMCP } from "../lib/instrumentation.js";
 import logger from "../logger.js";
 import { BrowserStackConfig } from "../lib/types.js";
@@ -157,6 +161,20 @@ export async function listSessionIdsTool(
               "the dashboard build link, or the TRA build id from listBuildId.",
           );
         }
+      }
+    }
+
+    // Framework builds (Maestro, Espresso, XCUITest, Flutter) are empty on the
+    // generic App Automate list; their own build endpoint has the sessions.
+    if (sessions.length === 0 && sessionType === SessionType.AppAutomate) {
+      const framework = await findFrameworkBuild(buildId, config);
+      if (framework) {
+        sessions = frameworkSessions(framework).filter(
+          (s) => !args.status || s.status === args.status,
+        );
+        notes.push(
+          `This build ran through the ${framework.framework.name} framework API; sessions are listed from it.`,
+        );
       }
     }
 

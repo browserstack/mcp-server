@@ -6,6 +6,15 @@ import { apiClient } from "../../lib/apiClient.js";
 import globalConfig from "../../config.js";
 import { sessionApiHost } from "../../lib/regional-host.js";
 import { MAX_LOG_BYTES } from "../failurelogs-utils/utils.js";
+import JSZip from "jszip";
+import {
+  downloadTestCaseFile,
+  failedFirst,
+  findFrameworkBuild,
+  getFrameworkTestCases,
+  isBrowserStackUrl,
+} from "../appautomate-utils/framework-builds.js";
+import { resolveAppAutomateBuildId } from "../failurelogs-utils/resolve-app-build-id.js";
 
 export const MAX_SCREENSHOT_BYTES = globalConfig.REMOTE_MCP
   ? 10 * 1024 * 1024
@@ -172,7 +181,15 @@ export async function fetchAutomationScreenshots(
   sessionType: SessionType = SessionType.Automate,
   config: BrowserStackConfig,
 ) {
-  const urls = await extractScreenshotUrls(sessionId, sessionType, config);
+  let urls: string[];
+  try {
+    urls = await extractScreenshotUrls(sessionId, sessionType, config);
+  } catch (error) {
+    if (sessionType !== SessionType.AppAutomate) throw error;
+    const framework = await frameworkScreenshots(sessionId, config);
+    if (!framework) throw error;
+    return framework;
+  }
   if (urls.length === 0) {
     return [];
   }
@@ -180,4 +197,68 @@ export async function fetchAutomationScreenshots(
   // Take only the last 5 URLs
   const lastFiveUrls = urls.slice(-5);
   return await convertUrlsToBase64(lastFiveUrls);
+}
+
+const MAX_ZIP_BYTES = 10 * 1024 * 1024;
+const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+const IMAGE_FILE = /\.(png|jpe?g)$/i;
+
+/**
+ * Screenshots of a framework session (Maestro packs them per test as a zip), or
+ * undefined when the session is not part of a framework build. Frameworks without
+ * screenshots throw a message saying where the evidence is instead.
+ */
+async function frameworkScreenshots(
+  sessionId: string,
+  config: BrowserStackConfig,
+): Promise<Screenshot[] | undefined> {
+  const buildId = await resolveAppAutomateBuildId(sessionId, config);
+  if (!buildId) return undefined;
+  const build = await findFrameworkBuild(buildId, config);
+  if (!build) return undefined;
+
+  const cases = (await getFrameworkTestCases(build, sessionId, config)) ?? [];
+  const withShots = failedFirst(cases).find((c) =>
+    isBrowserStackUrl(c.fields.screenshots),
+  );
+  if (!withShots) {
+    throw new Error(
+      `This ${build.framework.name} session has no screenshots. Use getFailureLogs ` +
+        "for its test logs, or the video log type for its recording.",
+    );
+  }
+
+  const file = await downloadTestCaseFile(
+    withShots.fields.screenshots as string,
+    config,
+    { binary: true, maxBytes: MAX_ZIP_BYTES },
+  );
+  if (file.tooLarge) {
+    throw new Error(
+      "The screenshots for this session are over 10 MB. Open the session in the BrowserStack dashboard to view them.",
+    );
+  }
+  const zip = await JSZip.loadAsync(Buffer.from(file.data));
+  const images = Object.values(zip.files)
+    .filter((entry) => !entry.dir && IMAGE_FILE.test(entry.name))
+    .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }))
+    .slice(-5);
+
+  const screenshots: Screenshot[] = [];
+  for (const entry of images) {
+    // Checked before inflating, so a crafted archive cannot exhaust memory.
+    const declared = (
+      entry as unknown as { _data?: { uncompressedSize?: number } }
+    )._data?.uncompressedSize;
+    if (typeof declared !== "number" || declared > MAX_IMAGE_BYTES) continue;
+    const buffer = await entry.async("nodebuffer");
+    if (buffer.length > MAX_IMAGE_BYTES) continue;
+    const base64 = await maybeCompressBase64(buffer.toString("base64"));
+    screenshots.push({
+      url: `${withShots.fields.screenshots as string}#${entry.name}`,
+      base64,
+      mimeType: detectImageMimeType(Buffer.from(base64, "base64")),
+    });
+  }
+  return screenshots;
 }

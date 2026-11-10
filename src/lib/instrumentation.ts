@@ -17,6 +17,9 @@ import {
 
 const INSTRUMENTATION_ENDPOINT = "https://api.browserstack.com/sdk/v1/event";
 
+/** This server's version: `mcp_version` here, `x-mcp-version` on registry calls. */
+export const MCP_VERSION: string = packageJson.version;
+
 export type ClientInfo = { name?: string; version?: string };
 
 export type ToolOutcome = "ok" | "error_result" | "threw";
@@ -56,7 +59,7 @@ interface MCPEventPayload {
 
 function baseProperties(toolName: string, clientInfo: ClientInfo) {
   return {
-    mcp_version: packageJson.version as string,
+    mcp_version: MCP_VERSION,
     tool_name: toolName,
     mcp_client: clientInfo?.name || "unknown",
     node_version: process.versions.node,

@@ -1338,6 +1338,9 @@ export function addCapabilityRegistryTools(
               transport,
               registry.index.products[product]?.auth,
               product,
+              // Optional chaining, not `!`: attribution must never decide whether the
+              // call is made, the same rule `track` follows.
+              server.server?.getClientVersion()?.name,
             ),
           (name) => registry.byNameLookup(name, product).capability,
         );

@@ -47,8 +47,9 @@ describe("a clash the products have already decided", () => {
   it("resolves nothing on a mutual declaration rather than guessing", () => {
     const a = { ...load("applive"), routing_policy: { preferred_over: ["b"] } };
     const b = { ...load("applive"), routing_policy: { preferred_over: ["a"] } };
-    expect(resolveClash({ a, b } as Record<string, ProductIndex>, ["a", "b"]))
-      .toBeUndefined();
+    expect(
+      resolveClash({ a, b } as Record<string, ProductIndex>, ["a", "b"]),
+    ).toBeUndefined();
   });
 
   it("needs a winner that actually won, not one that merely survived", () => {

@@ -650,6 +650,22 @@ export interface ProductIndex {
    */
   routing_terms?: string[];
   /**
+   * Words this product answers to but will not be routed on by itself — an everyday
+   * word it happens to alias. It stays a claimant for the explanation and stops being
+   * one for the decision. See `ambiguousProducts`.
+   */
+  weak_terms?: string[];
+  /**
+   * The family of products this one belongs to: products that do the same job for a
+   * different audience, with a declared order between them. See `policy.ts`.
+   */
+  routing_family?: {
+    name: string;
+    role?: string;
+    rank: number;
+    note?: string;
+  };
+  /**
    * How to authenticate to this product. Absent means the historical default: the caller's
    * credentials as `Api-Token: {username}:{access_key}`, which is what every shipped index
    * relies on today.

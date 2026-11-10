@@ -31,8 +31,8 @@ const config = {
   "browserstack-username": "user",
   "browserstack-access-key": "key",
 };
-const BUILD = "1b463b0f5e7bb27c29c4ffe8d7666d91451cc600";
-const SESSION = "d0dcef26a61f9f8fc8588f8b12c45f2a2c0dcf29";
+const BUILD = "f00d000000000000000000000000000000000001";
+const SESSION = "5e55000000000000000000000000000000000001";
 const ok = (data: unknown) => ({ ok: true, status: 200, data });
 const notFound = { ok: false, status: 404, statusText: "Not Found", data: {} };
 
@@ -57,13 +57,13 @@ const maestroSession = {
         class: "flows",
         testcases: [
           {
-            name: "dice-roller",
+            name: "login-flow",
             status: "passed",
             maestro_log: "https://api.browserstack.com/logs/pass.txt",
             screenshots: "https://api.browserstack.com/shots/pass.zip",
           },
           {
-            name: "random-character",
+            name: "checkout-flow",
             status: "failed",
             crash_logs_count: 1,
             maestro_log: "https://api.browserstack.com/logs/fail.txt",
@@ -165,7 +165,7 @@ describe("retrieveFrameworkLogs", () => {
   it("returns the failed test's log first, from its link", async () => {
     routeMaestro((url) =>
       url.endsWith("fail.txt")
-        ? ok("step 1\nAssertion failed: dice not visible")
+        ? ok("step 1\nAssertion failed: button not visible")
         : url.endsWith("pass.txt")
           ? ok("all good")
           : undefined,
@@ -178,10 +178,10 @@ describe("retrieveFrameworkLogs", () => {
       config,
     );
 
-    expect(text.indexOf("random-character (failed)")).toBeLessThan(
-      text.indexOf("dice-roller (passed)"),
+    expect(text.indexOf("checkout-flow (failed)")).toBeLessThan(
+      text.indexOf("login-flow (passed)"),
     );
-    expect(text).toContain("Assertion failed: dice not visible");
+    expect(text).toContain("Assertion failed: button not visible");
     const fetched = (apiClient.get as Mock).mock.calls.find(([r]) =>
       r.url.endsWith("fail.txt"),
     )![0];
@@ -198,7 +198,7 @@ describe("retrieveFrameworkLogs", () => {
       config,
     );
 
-    expect(text).toContain("random-character (failed): 1");
+    expect(text).toContain("checkout-flow (failed): 1");
   });
 
   it("says which logs exist when the requested one does not", async () => {
@@ -281,7 +281,7 @@ describe("tools on a framework build", () => {
     routeMaestro((url) => {
       if (url.endsWith("/appiumlogs")) return notFound;
       if (url.endsWith("fail.txt"))
-        return ok("Assertion failed: dice not visible");
+        return ok("Assertion failed: button not visible");
       if (url.endsWith("pass.txt")) return ok("ok");
       return undefined;
     });
@@ -298,7 +298,7 @@ describe("tools on a framework build", () => {
     const text = result.content.map((c: any) => c.text).join("\n");
     expect(result.isError).toBeFalsy();
     expect(result.content[0].text).toContain("maestro framework API");
-    expect(text).toContain("Assertion failed: dice not visible");
+    expect(text).toContain("Assertion failed: button not visible");
   });
 
   it("getFailureLogs makes no framework calls for an Appium session", async () => {

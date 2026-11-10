@@ -8,7 +8,13 @@ import {
   isBrowserStackUrl,
 } from "../../src/tools/appautomate-utils/framework-builds";
 import { retrieveFrameworkLogs } from "../../src/tools/failurelogs-utils/framework";
-import { fetchAutomationScreenshots } from "../../src/tools/automate-utils/fetch-screenshots";
+import {
+  fetchAutomationScreenshots,
+  MAX_IMAGE_BYTES,
+  MAX_TOTAL_IMAGE_BYTES,
+  MAX_ZIP_ENTRIES,
+  readEntryCapped,
+} from "../../src/tools/automate-utils/fetch-screenshots";
 import { listSessionIdsTool } from "../../src/tools/automate";
 import { getFailureLogs } from "../../src/tools/get-failure-logs";
 
@@ -319,5 +325,66 @@ describe("tools on a framework build", () => {
     expect(
       (apiClient.get as Mock).mock.calls.some(([r]) => r.url.includes("/v2/")),
     ).toBe(false);
+  });
+});
+
+describe("Maestro screenshot memory limits", () => {
+  beforeEach(() => vi.resetAllMocks());
+
+  async function shotsFrom(zip: JSZip) {
+    const zipped = await zip.generateAsync({
+      type: "nodebuffer",
+      compression: "DEFLATE",
+    });
+    routeMaestro((url) => {
+      if (url.endsWith(`/app-automate/sessions/${SESSION}/logs`))
+        return notFound;
+      if (url.endsWith("fail.zip")) return ok(zipped);
+      return undefined;
+    });
+    return fetchAutomationScreenshots(SESSION, SessionType.AppAutomate, config);
+  }
+
+  it("stops inflating an entry at the cap, whatever its compressed size", async () => {
+    const zip = new JSZip();
+    // 3 MB of zeros compresses to a few KB: the real size must be what counts.
+    zip.file("big.png", Buffer.alloc(3 * 1024 * 1024));
+    const loaded = await JSZip.loadAsync(
+      await zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE" }),
+    );
+    const entry = loaded.file("big.png")!;
+
+    await expect(readEntryCapped(entry, 1024 * 1024)).resolves.toBeNull();
+    await expect(readEntryCapped(entry, 4 * 1024 * 1024)).resolves.toHaveLength(
+      3 * 1024 * 1024,
+    );
+  });
+
+  it("skips images over the per-image limit", async () => {
+    const zip = new JSZip();
+    zip.file("1.png", Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+    zip.file("2.png", Buffer.alloc(MAX_IMAGE_BYTES + 1));
+
+    const shots = await shotsFrom(zip);
+
+    expect(shots.map((s) => s.url.split("#")[1])).toEqual(["1.png"]);
+  });
+
+  it("stops at the total budget across images", async () => {
+    const zip = new JSZip();
+    const size = Math.floor(MAX_TOTAL_IMAGE_BYTES / 3) + 1;
+    for (let i = 1; i <= 4; i++) zip.file(`${i}.png`, Buffer.alloc(size));
+
+    const shots = await shotsFrom(zip);
+
+    expect(shots.length).toBeLessThan(4);
+    expect(shots.length).toBeGreaterThan(0);
+  });
+
+  it("refuses an archive with too many files", async () => {
+    const zip = new JSZip();
+    for (let i = 0; i <= MAX_ZIP_ENTRIES; i++) zip.file(`${i}.png`, "x");
+
+    await expect(shotsFrom(zip)).rejects.toThrow(/too many files/);
   });
 });

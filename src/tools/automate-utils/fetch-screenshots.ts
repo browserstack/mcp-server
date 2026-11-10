@@ -199,9 +199,55 @@ export async function fetchAutomationScreenshots(
   return await convertUrlsToBase64(lastFiveUrls);
 }
 
-const MAX_ZIP_BYTES = 10 * 1024 * 1024;
-const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+// Limits for Maestro screenshot archives, so one call cannot exhaust a pod's memory.
+export const MAX_ZIP_BYTES = 10 * 1024 * 1024;
+export const MAX_ZIP_ENTRIES = 500;
+export const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+export const MAX_TOTAL_IMAGE_BYTES = 25 * 1024 * 1024;
 const IMAGE_FILE = /\.(png|jpe?g)$/i;
+
+/**
+ * Inflate one archive entry, stopping as soon as it passes `maxBytes`. The size
+ * in the archive header is not trusted: a crafted entry can claim to be small.
+ */
+export function readEntryCapped(
+  entry: JSZip.JSZipObject,
+  maxBytes: number,
+): Promise<Buffer | null> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    let total = 0;
+    let settled = false;
+    const stream = entry.nodeStream("nodebuffer") as NodeJS.ReadableStream & {
+      destroy?: () => void;
+    };
+    stream.on("data", (chunk: Buffer) => {
+      if (settled) return;
+      total += chunk.length;
+      if (total > maxBytes) {
+        settled = true;
+        chunks.length = 0;
+        stream.pause();
+        stream.destroy?.();
+        resolve(null);
+        return;
+      }
+      chunks.push(chunk);
+    });
+    stream.on("error", (error: Error) => {
+      if (!settled) {
+        settled = true;
+        reject(error);
+      }
+    });
+    stream.on("end", () => {
+      if (!settled) {
+        settled = true;
+        resolve(Buffer.concat(chunks));
+      }
+    });
+  });
+}
 
 /**
  * Screenshots of a framework session (Maestro packs them per test as a zip), or
@@ -239,26 +285,39 @@ async function frameworkScreenshots(
     );
   }
   const zip = await JSZip.loadAsync(Buffer.from(file.data));
-  const images = Object.values(zip.files)
+  const entries = Object.values(zip.files);
+  if (entries.length > MAX_ZIP_ENTRIES) {
+    throw new Error(
+      "This session's screenshot archive has too many files to read here. Open the session in the BrowserStack dashboard to view them.",
+    );
+  }
+  const images = entries
     .filter((entry) => !entry.dir && IMAGE_FILE.test(entry.name))
     .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }))
     .slice(-5);
 
   const screenshots: Screenshot[] = [];
+  let budget = MAX_TOTAL_IMAGE_BYTES;
+  // One image at a time, newest last, so at most one inflated image is held.
   for (const entry of images) {
-    // Checked before inflating, so a crafted archive cannot exhaust memory.
-    const declared = (
-      entry as unknown as { _data?: { uncompressedSize?: number } }
-    )._data?.uncompressedSize;
-    if (typeof declared !== "number" || declared > MAX_IMAGE_BYTES) continue;
-    const buffer = await entry.async("nodebuffer");
-    if (buffer.length > MAX_IMAGE_BYTES) continue;
+    if (budget <= 0) break;
+    const buffer = await readEntryCapped(
+      entry,
+      Math.min(MAX_IMAGE_BYTES, budget),
+    );
+    if (!buffer) continue;
+    budget -= buffer.length;
     const base64 = await maybeCompressBase64(buffer.toString("base64"));
     screenshots.push({
       url: `${withShots.fields.screenshots as string}#${entry.name}`,
       base64,
       mimeType: detectImageMimeType(Buffer.from(base64, "base64")),
     });
+  }
+  if (images.length > 0 && screenshots.length === 0) {
+    throw new Error(
+      "The screenshots in this session are too large (over 10 MB each) to fetch here. Open the session in the BrowserStack dashboard to view them.",
+    );
   }
   return screenshots;
 }

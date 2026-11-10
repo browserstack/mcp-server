@@ -4,11 +4,11 @@
   "build_id": "43eba70_2026-09-02T14:26:51Z",
   "loadtesting": {
     "summary": "Load and performance testing: run k6, JMeter, Gatling and Locust load tests at scale. List and inspect projects and load tests; create, update, start, stop and monitor runs; read run reports, AI insights and historical trends; compare runs; and check VU-hour quota and cost estimates. Test definitions, runs and their results live here. Account plan and billing do not — only VU-hour entitlement is exposed, via quota. There is no capability to delete a load test or schedule recurring runs — for those, point the user to the web dashboard. Each capability returns its full result in one call; reuse a result within a task rather than re-fetching the same data.",
-  "weak_terms": [
-   "session",
-   "type",
-   "result"
-  ],
+    "weak_terms": [
+      "session",
+      "type",
+      "result"
+    ],
     "base_url": "https://load-api.browserstack.com",
     "auth": {
       "type": "http",

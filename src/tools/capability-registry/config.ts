@@ -80,10 +80,12 @@ const REGIONAL_HOSTS: Record<
   tm: { base: "testManagement" },
   tra: { base: "observabilityApi" },
   app_accessibility: { base: "appAccessibilityApi" },
-  web_accessibility: { base: "accessibilityApi" },
-  // The dashboard's own routes: Basic auth is never read there, so this product's index
-  // declares oauth2 and the backend admits only the routes its ai_agent scope allows.
-  web_accessibility_dashboard: { base: "accessibilityDashboard" },
+  // `dashboard`: the dashboard's own routes, which never read Basic auth; those capabilities
+  // declare oauth2 themselves and the backend admits only what its ai_agent scope allows.
+  web_accessibility: {
+    base: "accessibilityApi",
+    hosts: { dashboard: "accessibilityDashboard" },
+  },
   devicecontrol: { base: "automateHubUrl", hosts: { api: "automateApi" } },
   mobiledevicecontrol: {
     base: "appAutomateHubUrl",

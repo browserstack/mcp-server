@@ -141,6 +141,33 @@ describe("parseAccessibilityReportFromCSV", () => {
     expect(result.next_page).toBeNull();
   });
 
+  it("reads a Workflow Analyzer export: True/False flags, and Not-an-issue rows left out", async () => {
+    // The Workflow Analyzer export writes "True"/"False" where other exports write "Yes"/"No",
+    // and a reviewer's "Not an issue" as Issue status `non-issue`. Read as before, a report
+    // whose dashboard shows 21 issues pending review answered "none need review", and its
+    // dismissed issues were counted (110 issues, 20 critical, where the dashboard has 105, 19).
+    const WA_COLUMNS = COLUMNS.filter((c) => c !== "Duplicate Issue of");
+    const wa = (fields: Record<string, string>) =>
+      row({ ...contrast, "Affected page": "https://site.example/", ...fields });
+    const rows = [
+      wa({ Severity: "critical", "Needs review": "True", "Needs Review Status": "Pending Review", "Issue status": "visible", Component: "a" }),
+      wa({ Severity: "critical", "Needs review": "False", "Needs Review Status": "Confirmed Issue", "Issue status": "visible", Component: "b" }),
+      wa({ Severity: "serious", "Needs review": "True", "Needs Review Status": "Confirmed Issue", "Issue status": "visible", Component: "c" }),
+      wa({ Severity: "critical", "Needs review": "True", "Needs Review Status": "Not an Issue", "Issue status": "non-issue", Component: "d" }),
+    ];
+    get.mockResolvedValue(csvResponse(toCsv(WA_COLUMNS, rows)));
+    const result = await parseAccessibilityReportFromCSV("https://csv");
+
+    expect(result.total_issues).toBe(3);
+    expect(result.hidden_issues).toBe(1);
+    expect(result.records.map((r) => r.needs_review)).toEqual([
+      "pending review",
+      undefined,
+      "confirmed issue",
+    ]);
+    expect(result.records.filter((r) => r.severity === "critical")).toHaveLength(2);
+  });
+
   it("leaves out hidden issues, and every occurrence of them", async () => {
     const LINK_C = "https://dash.example/issue?activeIssueId=hidden";
     const hiddenIssue = {

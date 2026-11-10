@@ -303,7 +303,7 @@ function excludedIssuesNote(
   }
   if (hidden) {
     notes.push(
-      `${hidden} issues hidden in the dashboard are not included, as the dashboard leaves them out of its count too.`,
+      `${hidden} issues hidden or marked "Not an issue" in the dashboard are not included, as the dashboard leaves them out of its count too.`,
     );
   }
   return notes;
@@ -1029,7 +1029,12 @@ async function fetchAccessibilityIssues(
   }
   if (compareWith !== undefined && source.kind !== "appBuild") {
     return createErrorResponse(
-      `compareWith compares Website Scanner runs and App Accessibility builds; ${describeSource(source)} is neither.`,
+      `compareWith compares Website Scanner runs and App Accessibility builds; ${describeSource(source)} is neither.` +
+        // Without a pointer, an agent diffed two builds' issue lists itself and reported 16
+        // resolved where the dashboard's comparison says 9.
+        (source.kind === "build"
+          ? " For two Automated Tests builds, use the web_accessibility capability get_report_comparison_summary (product automated-tests, ids = the two builds' ids) through searchCapability: it counts new, resolved and unchanged issues the way the dashboard does. Do not diff the issue lists yourself."
+          : ""),
     );
   }
   const processing = await waitForProcessing(

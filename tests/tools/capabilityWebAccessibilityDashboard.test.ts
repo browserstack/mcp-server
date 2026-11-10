@@ -9,9 +9,12 @@ import type { TokenTransport } from "../../src/lib/central-oauth.js";
 // The Accessibility dashboard's own routes read only a browser session or a central-auth
 // Bearer carrying the `ai_agent` scope, and for that scope only the routes on the backend's
 // allowlist (SCOPED_BEARER_SCOPE_POLICIES in browserstack/accessibility). Basic auth is never
-// read there, so this product is the one that declares oauth2. What has to hold: it mints,
-// it follows the account's region to the DASHBOARD host (not the external API host), its
-// writes are writes, and its words do not pull Web Accessibility's questions away from it.
+// read there. They live in the Web Accessibility product, each declaring `host: dashboard`
+// and `auth: oauth2`: as a second product, the router made users choose between two names
+// for one product, and a search in one could not find the other's capabilities. What has to
+// hold: these capabilities mint while the public-API lists keep Basic, they follow the
+// account's region to the DASHBOARD host, their writes are writes, and the words users say
+// still reach Web Accessibility.
 
 vi.mock("../../src/logger.js", () => ({
   default: { error: vi.fn(), info: vi.fn(), debug: vi.fn(), warn: vi.fn() },
@@ -35,31 +38,42 @@ function shipped(): Record<string, any> {
 }
 
 const products = shipped();
-const dash = products.web_accessibility_dashboard;
+const web = products.web_accessibility;
+const dash = web.capabilities.filter((c: any) => c.host === "dashboard");
 const byName = (name: string) =>
-  dash.capabilities.find((c: any) => c.name === name);
+  web.capabilities.find((c: any) => c.name === name);
 
-describe("the Web Accessibility dashboard capability index", () => {
-  it("signs in with a minted token, not the access key", () => {
-    expect(dash.auth).toEqual({ type: "oauth2" });
-    expect(dash.base_url).toBe("https://accessibility.browserstack.com");
+describe("the Web Accessibility dashboard capabilities", () => {
+  it("are part of Web Accessibility, not a product of their own", () => {
+    expect(products.web_accessibility_dashboard).toBeUndefined();
+    expect(dash.length).toBe(44);
+    expect(web.hosts.dashboard).toBe("https://accessibility.browserstack.com");
   });
 
-  it("ships one capability per method and path, each on an entity that names it", () => {
-    const routes = dash.capabilities.map((c: any) => `${c.method} ${c.path}`);
-    expect(new Set(routes).size).toBe(routes.length);
-    for (const c of dash.capabilities) {
-      expect(dash.entities[c.entity].capabilities).toContain(c.name);
-      expect(c.intent.length).toBeGreaterThan(0);
+  it("sign in with a minted token while the public-API lists keep Basic", () => {
+    expect(web.auth).toEqual({ type: "http", scheme: "basic" });
+    for (const c of dash) expect(c.auth, c.name).toEqual({ type: "oauth2" });
+    for (const c of web.capabilities.filter((c: any) => !c.host)) {
+      expect(c.auth, c.name).toBeUndefined();
     }
-    for (const entity of Object.values<any>(dash.entities)) {
+  });
+
+  it("ship one capability per method and path, each on an entity that names it", () => {
+    const routes = web.capabilities.map(
+      (c: any) => `${c.host ?? "api"} ${c.method} ${c.path}`,
+    );
+    expect(new Set(routes).size).toBe(routes.length);
+    for (const c of web.capabilities) {
+      expect(web.entities[c.entity].capabilities).toContain(c.name);
+    }
+    for (const entity of Object.values<any>(web.entities)) {
       expect(entity.description.length).toBeLessThanOrEqual(140);
     }
-    expect(dash.summary.length).toBeLessThanOrEqual(900);
+    expect(web.summary.length).toBeLessThanOrEqual(900);
   });
 
-  it("marks every route that changes data as a write, so it needs approval", () => {
-    const writes = dash.capabilities
+  it("mark every route that changes data as a write, so it needs approval", () => {
+    const writes = web.capabilities
       .filter((c: any) => c.mode !== "read")
       .map((c: any) => c.name)
       .sort();
@@ -72,13 +86,13 @@ describe("the Web Accessibility dashboard capability index", () => {
       "submit_bulk_review_decisions",
       "undo_bulk_review_decisions",
     ]);
-    for (const c of dash.capabilities) {
+    for (const c of dash) {
       if (c.method === "PATCH") expect(c.mode).not.toBe("read");
     }
   });
 
-  it("leaves out what is served elsewhere or cannot be redacted", () => {
-    const paths = dash.capabilities.map((c: any) => `${c.method} ${c.path}`);
+  it("leave out what is served elsewhere or cannot be redacted", () => {
+    const paths = dash.map((c: any) => `${c.method} ${c.path}`);
     // Saved login configs come back with raw authData; getAccessibilityAuthConfig strips it,
     // and the registry has no way to strip a response field.
     expect(paths).not.toContain("GET /api/website-scanner/v1/auth_configs");
@@ -88,33 +102,25 @@ describe("the Web Accessibility dashboard capability index", () => {
     expect(paths).not.toContain("POST /api/website-scanner/v1/scans");
   });
 
-  it("names only capabilities that exist, in this product or another", () => {
+  it("name only capabilities that exist", () => {
     // A guidance line naming a capability that is not there sends the agent to a dead end,
     // or worse to another product's capability of that name (tm has list_test_runs).
-    const known = new Set(
-      Object.values<any>(products).flatMap((p) =>
-        (p.capabilities ?? []).map((c: any) => c.name),
-      ),
-    );
-    const own = new Set(dash.capabilities.map((c: any) => c.name));
-    const text = JSON.stringify(dash.capabilities);
+    const own = new Set(web.capabilities.map((c: any) => c.name));
+    const text = JSON.stringify(web.capabilities);
     const referenced = text.match(
       /\b(?:list|get|search|rerun|submit|undo|link|check)_[a-z]+(?:_[a-z]+)+\b/g,
     );
     for (const name of new Set(referenced)) {
-      expect(known.has(name), name).toBe(true);
+      expect(own.has(name), name).toBe(true);
     }
-    expect(
-      [...new Set(referenced)].filter((n) => !own.has(n)).sort(),
-    ).toEqual(["list_website_scanner_scan_runs", "list_website_scanner_scans"]);
   });
 
-  it("declares no object-typed query parameter, which cannot reach the wire", () => {
+  it("declare no object-typed query parameter, which cannot reach the wire", () => {
     // fetchTransport sends a query value with String(value), so an object goes out as
     // "[object Object]" and the backend answers 422. A Rails nested filter is declared as
     // flat bracket-named strings instead (filter[impact], filter[status], ...), which
     // bind.ts matches by exact name and the backend parses back into a hash.
-    for (const c of dash.capabilities) {
+    for (const c of web.capabilities) {
       for (const q of c.query ?? []) {
         expect(q.type, `${c.name}.${q.name}`).not.toBe("object");
       }
@@ -127,7 +133,7 @@ describe("the Web Accessibility dashboard capability index", () => {
     );
   });
 
-  it("does not offer an undo that the backend cannot perform", () => {
+  it("do not offer an undo that the backend cannot perform", () => {
     // Sending hidden=false without confirmed after "Not an issue" leaves the issue
     // confirmed=false and visible: it drops out of the report and the counts drift.
     const guidance = byName("review_needs_review_issue").guidance.join(" ");
@@ -135,9 +141,19 @@ describe("the Web Accessibility dashboard capability index", () => {
     expect(guidance).toMatch(/undo_bulk_review_decisions/);
   });
 
-  it("tells an agent why a refused route is refused", () => {
-    const responses = dash.responses;
-    expect(responses.ScopeNotAllowed.description).toMatch(
+  it("say a scan run's null issue count is unknown, not zero", () => {
+    // Read as zero, "which run found issues" was answered "none" for a scan whose trends
+    // show a run with 306.
+    expect(
+      byName("list_website_scanner_scan_runs").guidance.join(" "),
+    ).toMatch(/null means not recorded here, not zero/);
+    expect(byName("get_website_scanner_scan_trends").intent).toMatch(
+      /every completed run/,
+    );
+  });
+
+  it("tell an agent why a refused route is refused", () => {
+    expect(web.responses.DashboardScopeNotAllowed.description).toMatch(
       /ACTION_NOT_ALLOWED_FOR_SCOPE/,
     );
     expect(byName("hide_issues").responses["403"]).toBeDefined();
@@ -156,8 +172,8 @@ describe("minting for the dashboard", () => {
     };
     const headers = await authHeaders(
       { username: "dash_user_unique", accessKey: "SECRET" },
-      dash.auth,
-      "web_accessibility_dashboard",
+      byName("list_custom_dashboards").auth,
+      "web_accessibility",
       transport,
     );
     expect(headers.Authorization).toBe("Bearer minted-dashboard");
@@ -166,6 +182,49 @@ describe("minting for the dashboard", () => {
       expect.arrayContaining(["ai_agent", "oauth_user_profile"]),
     );
   });
+
+  it("uses the capability's own auth over the product's, and the product's otherwise", async () => {
+    // Proven with an apiKey scheme so no token is minted (no network in a unit test); the
+    // oauth2 presentation itself is covered by the test above.
+    const { invoke } =
+      await import("../../src/tools/capability-registry/resolve.js");
+    const ownAuth = {
+      ...byName("list_custom_dashboards"),
+      auth: { type: "apiKey", in: "header", name: "X-Capability-Auth" },
+    };
+    const sent: Record<string, string>[] = [];
+    const transport = async (
+      _method: string,
+      _url: string,
+      headers: Record<string, string>,
+    ) => {
+      sent.push(headers);
+      return { status: 200, body: {} };
+    };
+    const creds = { username: "dash_invoke_user", accessKey: "SECRET" };
+    await invoke(
+      ownAuth,
+      { path_params: {}, query: {}, body: undefined } as any,
+      "https://dashboard.example",
+      creds,
+      transport,
+      web.auth,
+      "web_accessibility",
+    );
+    await invoke(
+      byName("list_website_scanner_scans"),
+      { path_params: {}, query: {}, body: undefined } as any,
+      "https://api.example",
+      creds,
+      transport,
+      web.auth,
+      "web_accessibility",
+    );
+    expect(sent[0]["X-Capability-Auth"]).toBe("dash_invoke_user:SECRET");
+    expect(sent[0].Authorization).toBeUndefined();
+    expect(sent[1].Authorization).toMatch(/^Basic /);
+    expect(sent[1]["X-Capability-Auth"]).toBeUndefined();
+  });
 });
 
 describe("the dashboard follows the account's region", () => {
@@ -173,58 +232,62 @@ describe("the dashboard follows the account's region", () => {
     "browserstack-username": "dash_region_user",
     "browserstack-access-key": "SECRET",
   } as any;
+  const OVERRIDE = "CAPABILITY_REGISTRY_BASE_URL_WEB_ACCESSIBILITY_HOST_DASHBOARD";
 
-  async function resolveIn(region: string | undefined) {
+  async function resolveIn(region: string | undefined, host?: string) {
     const { resolveBaseUrl } =
       await import("../../src/tools/capability-registry/config.js");
     const { withAccountRegion } =
       await import("../../src/lib/region-context.js");
     return withAccountRegion(region as any, () =>
-      resolveBaseUrl("web_accessibility_dashboard", CONFIG, {
-        base_url: dash.base_url,
-      }),
+      resolveBaseUrl("web_accessibility", CONFIG, web, undefined, host),
     );
   }
 
   beforeEach(() => {
     vi.resetModules();
-    delete process.env.CAPABILITY_REGISTRY_BASE_URL_WEB_ACCESSIBILITY_DASHBOARD;
+    delete process.env[OVERRIDE];
   });
   afterEach(() => {
-    delete process.env.CAPABILITY_REGISTRY_BASE_URL_WEB_ACCESSIBILITY_DASHBOARD;
+    delete process.env[OVERRIDE];
   });
 
   it.each([
     ["us", "https://accessibility.browserstack.com"],
     ["eu", "https://accessibility-eu.browserstack.com"],
     ["in", "https://accessibility-in.browserstack.com"],
-  ])("sends a %s account to %s", async (region, host) => {
-    expect(await resolveIn(region)).toBe(host);
+  ])("sends a %s account's dashboard calls to %s", async (region, host) => {
+    expect(await resolveIn(region, "dashboard")).toBe(host);
+  });
+
+  it("keeps the public-API lists on the API host", async () => {
+    expect(await resolveIn("eu")).toBe(
+      "https://api-accessibility-eu.browserstack.com",
+    );
   });
 
   it("refuses when the account's region is unknown, instead of guessing", async () => {
-    await expect(resolveIn("unknown")).rejects.toThrow(
+    await expect(resolveIn("unknown", "dashboard")).rejects.toThrow(
       /Could not confirm your BrowserStack account's region/,
     );
   });
 
   it("lets an override reach a non-production dashboard", async () => {
-    process.env.CAPABILITY_REGISTRY_BASE_URL_WEB_ACCESSIBILITY_DASHBOARD =
-      "https://accessibility-preprod.bsstag.com";
-    expect(await resolveIn("us")).toBe(
+    process.env[OVERRIDE] = "https://accessibility-preprod.bsstag.com";
+    expect(await resolveIn("us", "dashboard")).toBe(
       "https://accessibility-preprod.bsstag.com",
     );
   });
 });
 
-describe("routing to the dashboard", () => {
+describe("routing", () => {
   it.each([
     ["Show the accessibility score on my custom dashboard"],
     ["Compare reports for the last two builds"],
     ["Start a bulk review of the issues"],
-  ])("routes %j to the dashboard", (query) => {
+  ])("routes %j to Web Accessibility", (query) => {
     expect(ambiguousProducts(products, query).settled).toBe(
-      "web_accessibility_dashboard",
+      "web_accessibility",
     );
   });
 });

@@ -214,6 +214,19 @@ export interface Capability {
    * return a 404 that reads like the caller's mistake.
    */
   host?: string;
+  /**
+   * How THIS capability signs in, when it differs from the product's `auth`.
+   *
+   * The same reason as `host`: one product can be served by surfaces that accept different
+   * credentials. Web Accessibility's public API takes Basic; its dashboard routes never read
+   * Basic and admit only an `ai_agent`-scoped Bearer. Publishing the dashboard as a second
+   * product made the router ask users to choose between "web_accessibility" and
+   * "web_accessibility_dashboard", a split no user recognises, and a search in one could
+   * not find the other's capabilities ("there is no re-run tool").
+   *
+   * Unset means the product's own `auth`, so every existing index is unaffected.
+   */
+  auth?: AuthScheme;
   mode: Mode;
   entity: string;
   path_params?: WireParam[];

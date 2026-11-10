@@ -146,7 +146,12 @@ export async function invoke(
       ? await multipartBody(capability, bound.body)
       : undefined;
   const send = async () => {
-    const headers = await authHeaders(credentials, auth, product);
+    // A capability may sign in differently from its product (see Capability.auth).
+    const headers = await authHeaders(
+      credentials,
+      capability.auth ?? auth,
+      product,
+    );
     if (multipart) {
       // fetch writes its own Content-Type with the boundary. Leaving the JSON one on sends
       // a body the product cannot parse, under a header that says it should be able to.

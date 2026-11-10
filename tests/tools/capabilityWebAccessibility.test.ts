@@ -35,12 +35,25 @@ const products = shipped();
 const web = products.web_accessibility;
 const capability = (name: string) =>
   web.capabilities.find((c: any) => c.name === name);
+// The six report lists on the public API. The product also carries the dashboard's own
+// capabilities (see capabilityWebAccessibilityDashboard.test.ts), which are not lists.
+const LISTS = [
+  "list_assisted_test_reports",
+  "list_automated_tests_builds",
+  "list_automated_tests_projects",
+  "list_website_scanner_scan_runs",
+  "list_website_scanner_scans",
+  "list_workflow_analyzer_reports",
+];
+const lists = () => web.capabilities.filter((c: any) => LISTS.includes(c.name));
 const queryNames = (name: string) =>
   (capability(name).query ?? []).map((q: any) => q.name);
 
 describe("the Web Accessibility capability index", () => {
   it("ships the six lists, as paged reads, each on an entity that names it", () => {
-    const names = web.capabilities.map((c: any) => c.name).sort();
+    const names = lists()
+      .map((c: any) => c.name)
+      .sort();
     expect(names).toEqual([
       "list_assisted_test_reports",
       "list_automated_tests_builds",
@@ -49,7 +62,7 @@ describe("the Web Accessibility capability index", () => {
       "list_website_scanner_scans",
       "list_workflow_analyzer_reports",
     ]);
-    for (const c of web.capabilities) {
+    for (const c of lists()) {
       expect(c.mode).toBe("read");
       expect(c.paginated).toBe(true);
       expect(c.max_page_size).toBeGreaterThan(0);
@@ -69,7 +82,7 @@ describe("the Web Accessibility capability index", () => {
     expect(limit("list_assisted_test_reports").maximum).toBe(99);
     // Above 25 the page holds 25 scans and the next one starts past the ones in between.
     expect(limit("list_website_scanner_scans").maximum).toBe(25);
-    for (const c of web.capabilities) {
+    for (const c of lists()) {
       expect(c.max_page_size).toBe(
         c.query.find((q: any) => q.name === "limit").maximum,
       );

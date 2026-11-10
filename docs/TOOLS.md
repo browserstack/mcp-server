@@ -355,7 +355,7 @@ searchCapability  →  describeCapability  →  invokeCapability
 | `list_website_scanner_scans` | List the account's Website Scanner scans, most recently run first, with each scan's id, name, creator, dashboard link and latest run - use this to find a scan by name or person, or the scan and run ids that read its issues. |
 | `list_workflow_analyzer_reports` | List the account's Workflow Analyzer reports newest first, with each report's id, name, creator, status, settings and issue counts - use this to find someone's latest reports, a report by name, or the id that reads its issues. |
 
-**Accessibility dashboard** (`web_accessibility_dashboard`): the dashboard's own views, reached with a token minted from your username and access key (`ai_agent` scope). Only routes the dashboard allows for that scope are listed; writes ask for your approval first.
+**Accessibility dashboard views** (also in `web_accessibility`, served from the dashboard host): reached with a token minted from your username and access key (`ai_agent` scope). Only routes the dashboard allows for that scope are listed; writes ask for your approval first.
 
 | Capability | What it does |
 |---|---|

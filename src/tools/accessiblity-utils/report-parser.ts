@@ -109,7 +109,10 @@ type PaginatedResult = {
   duplicate_issues: number | null;
   /** Of those, the ones whose main issue could not be identified (counted only here). */
   unlinked_duplicates: number;
-  /** Issues hidden in the dashboard and left out; null when the export has no Issue status. */
+  /**
+   * Issues hidden, or marked "Not an issue", in the dashboard and left out; null when the
+   * export has no Issue status.
+   */
   hidden_issues: number | null;
   /** Set when the report was read for one page. */
   page?: PageSummary;
@@ -122,9 +125,15 @@ const BEST_PRACTICE_COLUMN = "Best practice";
 const ISSUE_LINK_COLUMN = "Issue link";
 const STATUS_COLUMN = "Issue status";
 
-/** An issue hidden in the dashboard, which leaves it out of its count. */
+/**
+ * An issue the dashboard leaves out of its count: hidden, or reviewed as "Not an issue"
+ * (Issue status `non-issue`). Counting the second kind made a Workflow Analyzer report read
+ * 110 issues and 20 critical where its dashboard shows 105 and 19.
+ */
+const EXCLUDED_STATUSES = new Set(["hidden", "non-issue"]);
+
 function isHidden(row: Record<string, string>): boolean {
-  return (row[STATUS_COLUMN] ?? "").trim().toLowerCase() === "hidden";
+  return EXCLUDED_STATUSES.has((row[STATUS_COLUMN] ?? "").trim().toLowerCase());
 }
 
 /** A grouped report marks a main issue `NA`; a duplicate carries its main issue's link. */
@@ -157,8 +166,13 @@ function shortSnippet(snippet: string | undefined): string {
     : text;
 }
 
+// Exports write these flags as "Yes"/"No" or as "True"/"False" (Workflow Analyzer). Reading
+// only "Yes" dropped every needs-review flag from a Workflow Analyzer report, so an agent
+// answered "nothing needs review" for a report with 21 issues pending review.
+const YES_VALUES = new Set(["yes", "true"]);
+
 const isYes = (value: string | undefined) =>
-  (value ?? "").trim().toLowerCase() === "yes";
+  YES_VALUES.has((value ?? "").trim().toLowerCase());
 
 function recordOfRow(
   row: any,

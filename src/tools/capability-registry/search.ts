@@ -171,10 +171,65 @@ const BRAND = /\bbrowser\s*stack\b|\bbstack\b/g;
  * that starts with a top-level domain. A scheme or `www.` always counts.
  */
 const ADDRESS =
-  /https?:\/\/\S+|\bwww\.\S+|\b(?!(?:com|org|net|io|co|dev|app|ai)\.)[a-z0-9-]+(?:\.[a-z0-9-]+)*\.(?:com|org|net|io|co|in|uk|de|jp|edu|gov|me|xyz)\b/i;
+  /https?:\/\/\S+|\bwww\.\S+|\b(?!(?:com|org|net|io|co|dev|app|ai)\.)[a-z0-9-]+(?:\.[a-z0-9-]+)*\.(?:com|org|net|io|co|in|uk|de|jp|edu|gov|me|xyz)\b/gi;
 
-export function impliedTerms(text: string | undefined): string[] {
-  return text && ADDRESS.test(text) ? ["url"] : [];
+/**
+ * AN ADDRESS ON A PRODUCT'S OWN HOST NAMES THAT PRODUCT, NOT `url`.
+ *
+ * A product whose records are shared as links claims its host as a routing term, and that
+ * term already decides the request. Reading the same link as `url` as well made the product
+ * that drives pages a second decider, and with two deciders the shared words chose instead
+ * — so "review this bug <link to the bug>" settled on neither product the link pointed at.
+ * Any other address in the text still counts.
+ */
+export function impliedTerms(
+  text: string | undefined,
+  ownHosts: ReadonlySet<string> = new Set(),
+): string[] {
+  for (const [address] of (text ?? "").matchAll(ADDRESS))
+    if (!ownHosts.has(hostOf(address))) return ["url"];
+  return [];
+}
+
+function hostOf(address: string): string {
+  try {
+    return new URL(
+      /^https?:\/\//i.test(address) ? address : `http://${address}`,
+    ).hostname.toLowerCase();
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * The text with every address on a product's own host cut down to that host.
+ *
+ * THE PATH OF SUCH A LINK IS THE PRODUCT'S ROUTE, NOT THE USER'S WORDS. A Bug Capture link
+ * reads `/workspaces/<id>/collections/<id>/sessions/<id>`, and folded whole those segments
+ * claimed `workspace`, `collection` and `session` for whichever products model them — which
+ * outvoted the host that names the product. The host stays, so it still decides; an
+ * address on any other host is left exactly as written.
+ */
+export function withOwnHosts(
+  text: string | undefined,
+  ownHosts: ReadonlySet<string>,
+): string {
+  return (text ?? "").replace(ADDRESS, (address) => {
+    const host = hostOf(address);
+    return ownHosts.has(host) ? host : address;
+  });
+}
+
+/** The hosts products claim as routing terms: the ones whose links name the product. */
+export function productHosts(
+  products: Record<string, ProductIndex>,
+): Set<string> {
+  const hosts = new Set<string>();
+  for (const index of Object.values(products))
+    for (const word of index.routing_terms ?? [])
+      if (/^[a-z0-9-]+(?:\.[a-z0-9-]+)+$/i.test(String(word)))
+        hosts.add(String(word).toLowerCase());
+  return hosts;
 }
 
 /**
@@ -728,7 +783,8 @@ export function ambiguousProducts(
    */
   const fold = (text: string): string => terms(text).map(singular).join(" ");
 
-  const asked_ = ` ${[fold(query || ""), ...impliedTerms(query)].join(" ")} `;
+  const hosts = productHosts(products);
+  const asked_ = ` ${[fold(withOwnHosts(query, hosts)), ...impliedTerms(query, hosts)].join(" ")} `;
 
   const owners = new Map<string, Set<string>>();
   for (const [product, entries] of Object.entries(vocabularyOf(products))) {
@@ -1104,7 +1160,8 @@ export function productAnchors(
   if (terms(text).length === 0) return none;
 
   const fold = (s: string): string => terms(s).map(singular).join(" ");
-  const said = ` ${[fold(text || ""), ...impliedTerms(text)].join(" ")} `;
+  const hosts = productHosts(products);
+  const said = ` ${[fold(withOwnHosts(text, hosts)), ...impliedTerms(text, hosts)].join(" ")} `;
   const found = new Map<string, Set<string>>();
 
   const claim = (product: string, term: string) => {

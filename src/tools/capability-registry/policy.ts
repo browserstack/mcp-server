@@ -10,33 +10,38 @@
  * says a NEW session goes to App Automate, and App Live is used only when the user asks
  * for it by name or the account has no App Automate — a rule the server is supposed to
  * apply, not relay. With no way to express it, every "open my app on a phone" became a
- * question put back to the user, who had already said what they wanted. A QA pass over 71
- * prompts put 19 of them into that clash with nothing else in it.
+ * question put back to the user, who had already said what they wanted.
  *
- * So a product may declare which products it is chosen over. That is a claim about the
- * product, belongs beside its vocabulary, and is reviewed with it.
+ * A FAMILY, NOT A LIST OF RIVALS. The first version of this had each product name the
+ * products it beat. That reads naturally and does not scale: it is a claim about a pair,
+ * so N products need up to N^2 of them, every one of which has to be revisited when a
+ * product is added, and a product can be declared to win by a rival that never mentions
+ * it back. Here each product makes ONE statement about ITSELF — which family it is in,
+ * what role it plays, where it sits in the order — and the comparison is derived. Adding
+ * a product is one declaration, in its own file, reviewed with its own vocabulary.
  *
- * WHAT THIS DELIBERATELY DOES NOT DO. It never invents a winner: with no declaration the
- * clash is still the user's question. It never resolves a clash it only partly covers —
- * if Test Management is in the set because the request also mentions a test plan, the
- * App Automate rule says nothing about that and the user is still asked. And a mutual
- * declaration (each product claiming precedence over the other) resolves to nothing
- * rather than to whichever was listed first, because that is a contradiction in the
- * indexes and guessing past it would hide it.
+ * WHAT THIS DELIBERATELY DOES NOT DO. It never invents a winner: no family, no answer. It
+ * never resolves a clash that reaches outside one family — if Test Management is in the
+ * set because the request also mentions a test plan, the device-session order says
+ * nothing about that and the user is still asked. And it refuses to break a tie, because
+ * two products claiming the same rank is a contradiction in the indexes that should be
+ * seen rather than silently resolved in file order.
  */
 
 import { ProductIndex } from "./types.js";
 
-/** What a product declares about clashes it is in. */
-export interface RoutingPolicy {
+/** What a product declares about the family it competes in. */
+export interface RoutingFamily {
+  /** Products sharing this name are alternatives to each other. */
+  name: string;
+  /** What this member is FOR, in one word, e.g. "attended" or "unattended". */
+  role?: string;
+  /** Lower wins. Unique within a family; a tie resolves nothing. */
+  rank: number;
   /**
-   * Products this one is chosen over when a request could be either and the user has
-   * named neither. Names are product keys, as `listProducts` reports them.
-   */
-  preferred_over?: string[];
-  /**
-   * One line saying WHY, written for the user to hear. The caller is expected to repeat
-   * it, because a product chosen silently is the failure this registry exists to stop.
+   * One line saying why this member is the default, written for the user to hear. The
+   * caller is expected to repeat it: a product chosen silently is the failure this
+   * registry exists to stop, and that is no less true when the server did the choosing.
    */
   note?: string;
 }
@@ -44,14 +49,16 @@ export interface RoutingPolicy {
 export interface ClashResolution {
   /** The product the declarations leave standing. */
   product: string;
-  /** The products it was chosen over, for the note and for telemetry. */
+  /** The family it won in, for the message and for telemetry. */
+  family: string;
+  /** The members it was chosen over. */
   over: string[];
   /** The winner's own words for why, or a plain fallback. */
   note: string;
 }
 
-const policyOf = (index: ProductIndex | undefined): RoutingPolicy | undefined =>
-  index?.routing_policy;
+const familyOf = (index: ProductIndex | undefined): RoutingFamily | undefined =>
+  index?.routing_family;
 
 /**
  * The one product a clash resolves to on the indexes' own declarations, if any.
@@ -65,33 +72,34 @@ export function resolveClash(
 ): ClashResolution | undefined {
   if (candidates.length < 2) return undefined;
 
-  // A product is out if any OTHER candidate declares precedence over it. Computed in one
-  // pass against the original set, so a mutual pair eliminates both and resolves nothing
-  // — the contradiction surfaces as a question rather than as a coin toss.
-  const out = new Set<string>();
-  for (const winner of candidates) {
-    const over = policyOf(products[winner])?.preferred_over ?? [];
-    for (const loser of over)
-      if (loser !== winner && candidates.includes(loser)) out.add(loser);
-  }
+  const members = candidates.map((name) => ({
+    name,
+    family: familyOf(products[name]),
+  }));
+  // Every candidate must be in the SAME family. One outsider and the order says nothing
+  // about the question actually being asked.
+  const first = members[0].family;
+  if (!first) return undefined;
+  if (!members.every((m) => m.family && m.family.name === first.name))
+    return undefined;
 
-  const left = candidates.filter((name) => !out.has(name));
-  if (left.length !== 1) return undefined;
-
-  const product = left[0];
-  // The winner must have WON, not merely survived. Without this a clash between two
-  // products that declare nothing and one that is declared over by a third would
-  // "resolve" to a product no declaration mentions.
-  const over = (policyOf(products[product])?.preferred_over ?? []).filter(
-    (name) => candidates.includes(name),
+  const ranked = [...members].sort(
+    (a, b) =>
+      (a.family as RoutingFamily).rank - (b.family as RoutingFamily).rank,
   );
-  if (over.length === 0) return undefined;
+  const top = ranked[0].family as RoutingFamily;
+  const runnerUp = ranked[1].family as RoutingFamily;
+  // A tie at the top is a contradiction between two indexes. Surface it as a question.
+  if (top.rank === runnerUp.rank) return undefined;
 
+  const product = ranked[0].name;
+  const over = ranked.slice(1).map((m) => m.name);
   return {
     product,
+    family: first.name,
     over,
     note:
-      policyOf(products[product])?.note ??
-      `${product} is the declared default over ${over.join(", ")} for this kind of request.`,
+      top.note ??
+      `${product} is the declared default in the ${first.name} family, ahead of ${over.join(", ")}.`,
   };
 }

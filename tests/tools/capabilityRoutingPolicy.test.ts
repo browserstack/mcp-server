@@ -19,6 +19,7 @@ describe("a clash the products have already decided", () => {
   it("resolves App Live vs App Automate to App Automate", () => {
     const r = resolveClash(DEVICE, ["applive", "mobiledevicecontrol"]);
     expect(r?.product).toBe("mobiledevicecontrol");
+    expect(r?.family).toBe("device_session");
     expect(r?.over).toEqual(["applive"]);
     // The caller has to be able to tell the user WHY, so the note must say something.
     expect(r?.note.length).toBeGreaterThan(20);
@@ -39,7 +40,7 @@ describe("a clash the products have already decided", () => {
     ).toBeUndefined();
   });
 
-  it("invents nothing when no product declares anything", () => {
+  it("invents nothing when no product declares a family", () => {
     const products = { tm: load("tm"), tra: load("tra") };
     expect(resolveClash(products, ["tm", "tra"])).toBeUndefined();
   });
@@ -102,5 +103,50 @@ describe("the requests the QA pass found", () => {
         "Explore screen with a Search Wikipedia box. Give me a screenshot, then end the session.",
     );
     expect(verdict.settled).not.toBe("tm");
+  });
+});
+
+describe("a word a product answers to but will not route on alone", () => {
+  const ALL = Object.fromEntries(
+    [
+      "applive",
+      "mobiledevicecontrol",
+      "devicecontrol",
+      "tm",
+      "tra",
+      "loadtesting",
+      "app_accessibility",
+      "web_accessibility",
+    ].map((n) => [n, load(n)]),
+  ) as Record<string, ProductIndex>;
+
+  it("keeps Test Management out of a device request it only shares nouns with", () => {
+    const verdict = ambiguousProducts(
+      ALL,
+      "Open WikipediaSample on a Samsung Galaxy S23 and check that it opens to the " +
+        "Explore screen with a Search Wikipedia box. Give me a screenshot, then end the session.",
+    );
+    expect(verdict.settled).not.toBe("tm");
+    expect(verdict.products).not.toContain("tm");
+  });
+
+  it("still reports the weakened word, because it is what the user said", () => {
+    // It decides nothing and is still the overlap worth showing in the question.
+    const verdict = ambiguousProducts(
+      { tm: load("tm"), tra: load("tra") },
+      "Delete the failed results from this run.",
+    );
+    expect(verdict.products).toEqual(["tm", "tra"]);
+    expect(verdict.terms).toContain("result");
+  });
+
+  it("never lets disowning a word hand the request silently to the other product", () => {
+    // tm calls `result` weak and tra does not. If weakening removed the claim outright,
+    // tra would become the sole owner and the request would settle on it without asking.
+    const verdict = ambiguousProducts(
+      { tm: load("tm"), tra: load("tra") },
+      "Delete the failed results from this run.",
+    );
+    expect(verdict.settled).toBeUndefined();
   });
 });

@@ -5,7 +5,13 @@
   "applive": {
     "title": "App Live",
     "summary": "App Live: a session a person opens on a real Android or iOS device in their browser, which an agent takes over and drives step by step while they watch. The account side lists the devices the account can use, says which private devices are free, uploads and lists the apps App Live installs, and lists the sessions launched with a reference — waiting for a just-launched one to come up. The session side is the same surface as mobile device control: find elements and read their text, position and attributes, tap, type, swipe, screenshot, press keys, rotate, switch between the native app and a web view. Apps are opened and closed by the user from the dashboard: the device's own Appium is older than App Automate's and lacks the app lifecycle commands. Sessions are started by the USER, not here: the launch tool opens the dashboard with a reference, get_session waits for the device and returns its Appium endpoint, and the session is driven until it is stopped. For a session no person needs to watch, mobile device control starts one on its own. App Live keeps its own app store, separate from App Automate's. Browsers are device control, not here.",
-    "routing_terms": [
+    "routing_family": {
+   "name": "device_session",
+   "role": "attended",
+   "rank": 2,
+   "note": "App Live is the session a person opens and watches in their browser; it is used when the user asks for App Live by name, when they are continuing a session they already have open, or when the account has no App Automate."
+  },
+  "routing_terms": [
       "app live",
       "applive",
       "manual app testing",

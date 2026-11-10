@@ -649,19 +649,6 @@ const IDENTITY_WEIGHT = 6;
 // put a product question to users whose request was about something else entirely. A
 // product that wants them to route can still claim the longer phrase (`quality gate`,
 // `saved filter`, `os version`).
-// `search`, `result`, `statu`(s), `view`, `type`, `message` and `version` joined for the
-// same reason, measured on the App Live QA corpus. Each is an entity alias on one of the
-// workflow products and an everyday word everywhere else, and because the clash set is the
-// INTERSECTION of the shared terms' claimants, one such word is enough to hand a whole
-// request to a product that claims nothing else in it: "check that it opens to the Explore
-// screen with a Search Wikipedia box" settled on Test Management, on the strength of
-// `search`, for a request to open an app on a phone. Across 71 QA prompts this decided 6
-// outright and polluted more; with them listed here, none settles outside the device
-// products. A product that wants them to route can still claim the longer phrase
-// (`saved search`, `test result`, `run status`).
-//
-// `statu` and `statuse` are what the singulariser leaves of `status`/`statuses`; the keys
-// here are compared after folding, so the folded spelling is the one that has to be listed.
 const GENERIC_ANCHORS = new Set([
   "test",
   "tests",
@@ -671,14 +658,6 @@ const GENERIC_ANCHORS = new Set([
   "filter",
   "filters",
   "os",
-  "search",
-  "result",
-  "statu",
-  "statuse",
-  "view",
-  "type",
-  "message",
-  "version",
 ]);
 
 export interface ProductAmbiguity {
@@ -807,7 +786,34 @@ export function ambiguousProducts(
     }
   }
 
+  // WORDS A PRODUCT ANSWERS TO BUT WILL NOT ROUTE ON ALONE.
+  //
+  // `GENERIC_ANCHORS` is the same idea applied to every product at once, and that is its
+  // problem: `search` is an everyday word next to Test Management's entity list and a
+  // precise one next to Test Reporting's, so a global list cannot be right for both, and
+  // widening it moved verdicts on products that had nothing to do with the request being
+  // fixed. `weak_terms` is the same statement made BY a product ABOUT ITSELF, which is
+  // where the knowledge actually is and the only scope at which it can be reviewed.
+  //
+  // It removes the product from the term's DECIDING claimants, not from its claimants.
+  // The difference matters twice over. Dropping the claim outright would leave whoever
+  // else claims the word as its sole owner, and a term with one owner SETTLES the
+  // request — so disowning `result` on one side would hand every "result" question
+  // silently to the other, which is worse than the clash it was meant to calm. And the
+  // word is still what the two products share, so it still belongs in the explanation
+  // the user is shown. Hence: never decides, always reported.
+  const weakFor = new Map<string, Set<string>>();
+  for (const [product, index] of Object.entries(products))
+    for (const word of index.weak_terms ?? []) {
+      const key = fold(String(word));
+      if (!key) continue;
+      if (!weakFor.has(key)) weakFor.set(key, new Set());
+      weakFor.get(key)!.add(product);
+    }
+
   const shared = new Map<string, Set<string>>();
+  /** Shared words that no longer decide anything, kept for the explanation. */
+  const mentioned = new Set<string>();
   const decided = new Set<string>();
   const decidedBy = new Map<string, string[]>();
   for (const [key, claimants] of owners) {
@@ -816,6 +822,20 @@ export function ambiguousProducts(
     // nothing: `test` is an alias on one side and appears throughout both summaries, so
     // counting it would make almost any request look like a clash.
     if (GENERIC_ANCHORS.has(key)) continue;
+    // Weakened down to nothing worth deciding on: still the users' word, still shown,
+    // but it neither settles the request nor narrows the choice.
+    const weak = weakFor.get(key);
+    if (weak?.size) {
+      const deciding = new Set(
+        [...claimants].filter((product) => !weak.has(product)),
+      );
+      if (deciding.size < 2) {
+        if (claimants.size > 1) mentioned.add(key);
+        continue;
+      }
+      shared.set(key, deciding);
+      continue;
+    }
     if (claimants.size < 2) {
       // A term only one product claims POINTS somewhere; whether it decides the question
       // depends on what else is in the sentence. It used to end the check outright, and
@@ -889,7 +909,12 @@ export function ambiguousProducts(
   else
     for (const claimants of shared.values())
       for (const product of claimants) claimed.add(product);
-  return { products: [...claimed].sort(), terms: [...shared.keys()].sort() };
+  // `mentioned` rides along: a weakened word is still what these products share and
+  // still what the user said, so it belongs in the question even though it chose nobody.
+  return {
+    products: [...claimed].sort(),
+    terms: [...shared.keys(), ...mentioned].sort(),
+  };
 }
 
 /** One entity's caller-facing vocabulary: what it is called, and what else it is called. */

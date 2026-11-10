@@ -4,7 +4,17 @@
   "build_id": "web_accessibility-v1.0-lists",
   "web_accessibility": {
     "summary": "BrowserStack Web Accessibility: WCAG accessibility reports for websites and web apps. Find the account's Workflow Analyzer reports from the browser extension, Website Scanner scans with their scan history, Automated Tests projects and builds from web tests executed with accessibility checks on, and Assisted Test reports, each with the id, creator, status and issue counts needed to pick one. Each list names the id the accessibility issue tool reads. These capabilities list reports; they do not read a report's individual issues, start scans, or change or delete anything. Mobile apps are covered by a separate product.",
-    "routing_terms": [
+    "weak_terms": [
+   "session",
+   "search",
+   "tap",
+   "result",
+   "type",
+   "version",
+   "build",
+   "phone"
+  ],
+  "routing_terms": [
       "web accessibility",
       "website accessibility",
       "web a11y",

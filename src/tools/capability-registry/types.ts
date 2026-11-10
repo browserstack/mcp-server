@@ -650,11 +650,19 @@ export interface ProductIndex {
    */
   routing_terms?: string[];
   /**
-   * Clashes this product has already decided, so the gate need not ask the user.
-   * See `policy.ts`; the shape is `RoutingPolicy` there.
+   * Words this product answers to but will not be routed on by itself — an everyday
+   * word it happens to alias. It stays a claimant for the explanation and stops being
+   * one for the decision. See `ambiguousProducts`.
    */
-  routing_policy?: {
-    preferred_over?: string[];
+  weak_terms?: string[];
+  /**
+   * The family of products this one belongs to: products that do the same job for a
+   * different audience, with a declared order between them. See `policy.ts`.
+   */
+  routing_family?: {
+    name: string;
+    role?: string;
+    rank: number;
     note?: string;
   };
   /**

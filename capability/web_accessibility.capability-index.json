@@ -4141,8 +4141,8 @@
           {
             "name": "nodeFields",
             "type": "string",
-            "description": "view=issues only. Comma list of extra node fields, e.g. html,failureSummary,remediationData. camelCase name, sent as is.",
-            "example": "html,failureSummary"
+            "description": "view=issues only. Comma list of node fields to return INSTEAD of the defaults (issueId, impact, issueStatus, confirmed, needsReview, pendingNeedsReview, reportId, url, componentId, htmlTag, classList, target, resultType, duplicateCount). It replaces them: nodeFields=html alone returns nodes with no issueId. To act on a node, keep issueId and componentId in the list, e.g. issueId,componentId,html,failureSummary.",
+            "example": "issueId,componentId,html,failureSummary"
           },
           {
             "name": "limit",
@@ -4160,7 +4160,8 @@
           "filter[impact], filter[status], filter[rule], filter[url], filter[component], filter[tag], nodeFields or limit without view=issues answers 422 \"filter, nodeFields and limit require view=issues\".",
           "With view=issues only, data.filter gives matchedIssueCount, returnedNodeCount and truncated; raise limit (max 500) or narrow the filter when truncated is true. Per-rule counts stay whole-report; only matchedIssueCount and nodes are filtered.",
           "data.meta_v2 is keyed \"workflowScan:<id>\" and stays snake_case; the other keys are camelCase.",
-          "An id that is not in the account answers 404 \"Test Not Found\". Too many ids (the account's limit, 10 by default) answers 422."
+          "An id that is not in the account answers 404 \"Test Not Found\". Too many ids (the account's limit, 10 by default) answers 422.",
+          "A node's issueId is the id review_needs_review_issue and hide_issues take for a Workflow Analyzer report (test_type Test). It is in the default node fields; a nodeFields list that leaves it out drops it."
         ],
         "returns": [
           "data.meta_v2",
@@ -6288,6 +6289,7 @@
         "intent": "Hide (or unhide) accessibility issues in one report at issue, component, rule or guideline scope, with a reason - the dashboard's Hide issue action. Changes the report's issue counts and score.",
         "guidance": [
           "Confirm with the user before every call: it changes the report every viewer sees, and with persist true it carries into later builds.",
+          "Read before you ask: get the exact findings this will change first (list_build_issues_by_guideline or list_build_issues_by_rule for a build or scan run, get_workflow_analyzer_consolidated_report for a Workflow Analyzer report), and put their count, rule or guideline and report in the preview. An approval asked for without the count is an approval of an unknown change.",
           "Undo is the same call with hidden false and the same scope, rule_id/guideline_tag, component_id and issue_id; reason is then not needed.",
           "The success reply is only {success: true}; it does not say how many issues changed. A 404 'Issue Not Found' also means nothing was in the opposite state (already hidden, or already visible).",
           "Keys may be sent camelCase (testType, reportId): the controller underscores them.",
@@ -6441,6 +6443,7 @@
         "intent": "Hide (or unhide) the issues of many rule/component pairs in one report at once, with one reason - the dashboard's multi-select Hide. Returns how many issues changed.",
         "guidance": [
           "Confirm with the user before every call, naming the report and how many pairs. Undo is the same components with hidden false.",
+          "Read before you ask: get the exact findings this will change first (list_build_issues_by_guideline or list_build_issues_by_rule for a build or scan run, get_workflow_analyzer_consolidated_report for a Workflow Analyzer report), and put their count, rule or guideline and report in the preview. An approval asked for without the count is an approval of an unknown change.",
           "hidden_count in the reply is how many issues changed state; pairs that matched nothing are skipped silently, not refused.",
           "component_id must be a string even when it looks numeric (a number answers 422 'component_id must be a string'). When nothing matches, the reply is still 200 with hidden_count 0 and message 'No issues found for the given components' (hide_issues answers 404 instead).",
           "An entry without component_id needs scope \"rule\"; otherwise 422 'Each component must have component_id (or scope: rule)'.",
@@ -6559,6 +6562,7 @@
         "intent": "Confirm a needs-review issue as a real issue, mark it Not an issue, or put it back to pending - the single-issue review on the dashboard.",
         "guidance": [
           "Confirm with the user before every call. This capability cannot put an issue back to pending: omitting confirmed leaves it unchanged, and null is refused. To undo, call undo_bulk_review_decisions with elements [{issue_id}] and category_id = the issue's reviewCategory.id (from get_build_issue). Never send hidden false without confirmed after Not an issue: that leaves the issue confirmed=false and visible, it disappears from the report and the counts drift until undo_bulk_review_decisions repairs it.",
+          "Read before you ask: find the exact finding first and name it, its rule and its page in the preview. For a Workflow Analyzer report: get_workflow_analyzer_consolidated_report with view=issues, filter[rule]=<rule> and filter[status]=needsReview, and no nodeFields (or one that keeps issueId): the node's issueId is the id this takes. For a build or scan run: get_build_issue.",
           "Only issues whose result is needs-review take this: any other issue answers 422 'Invalid issue type'. A combination outside the three states above answers 422 'Issue that needs review can't be updated to the requested state.'",
           "Repeating the state the issue already has answers 200 but decrements the build's needsReviewCount again, so do not repeat a decision; read get_build_issue first.",
           "The reply is only {success: true}. Errors inside the update come back as 422 with message.",

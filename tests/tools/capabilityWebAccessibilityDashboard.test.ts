@@ -141,6 +141,18 @@ describe("the Web Accessibility dashboard capabilities", () => {
     expect(guidance).toMatch(/undo_bulk_review_decisions/);
   });
 
+  it("say nodeFields replaces the default node fields, so issueId is kept on purpose", () => {
+    // Described as "extra" fields, an agent asked for html,failureSummary, got nodes with no
+    // issueId, and could not mark a Workflow Analyzer finding: the backend replaces the
+    // defaults (ConsolidateViewService: node_fields.presence || DEFAULT).
+    const nodeFields = byName("get_workflow_analyzer_consolidated_report").query.find(
+      (q: any) => q.name === "nodeFields",
+    );
+    expect(nodeFields.description).toMatch(/INSTEAD of the defaults/);
+    expect(nodeFields.description).not.toMatch(/extra node fields/);
+    expect(nodeFields.example).toMatch(/issueId/);
+  });
+
   it("say a scan run's null issue count is unknown, not zero", () => {
     // Read as zero, "which run found issues" was answered "none" for a scan whose trends
     // show a run with 306.

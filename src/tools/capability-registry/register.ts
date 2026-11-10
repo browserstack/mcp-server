@@ -406,7 +406,16 @@ export function addCapabilityRegistryTools(
               `but the choice is already decided: ${decided.note} ` +
               `SEARCH ${decided.product}. Do NOT ask the user which product to use — they ` +
               "have no choice to make here. DO tell them which product you used and why. " +
-              `If they name ${decided.over.join(" or ")} themselves, use what they named.`,
+              `If they name ${decided.over.join(" or ")} themselves, use what they named. ` +
+              // NO ENTITLEMENT DATA EXISTS TO CHECK THIS FOR THEM. Only App Automate and
+              // Automate publish a plan call, and it reports capacity rather than whether
+              // the account owns the product; App Live publishes none. So the server
+              // cannot know the account lacks the product it just chose, and the caller
+              // is the only thing standing between that and a dead end.
+              `If ${decided.product} then reports that the account's PLAN DOES NOT ` +
+              `INCLUDE it, use ${decided.over.join(" or ")} instead and say so. Only that ` +
+              "error means switch: a parallel limit, a busy device or a bad app id is " +
+              "reported to the user as-is.",
             routing_token: listingToken,
             product: decided.product,
             preferred_over: decided.over,
@@ -985,6 +994,12 @@ export function addCapabilityRegistryTools(
                 over: routedBy.over,
                 why: routedBy.note,
                 tell_user: `Say which product you used and why: ${routedBy.note}`,
+                if_not_on_this_plan:
+                  `If ${routedBy.product} reports that the account's plan does not ` +
+                  `include it, re-search ${routedBy.over.join(" or ")} and tell the user. ` +
+                  "Only that error means switch — a parallel limit, a busy device or a " +
+                  "bad app id is reported as-is. The server cannot check the plan for " +
+                  "you: no entitlement data is published for these products.",
               },
             }
           : {}),

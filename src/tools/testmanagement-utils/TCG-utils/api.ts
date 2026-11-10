@@ -397,6 +397,7 @@ export async function bulkCreateTestCases(
   traceId: string,
   context: any,
   documentId: number,
+  source: string,
   config: BrowserStackConfig,
 ): Promise<string> {
   const results: Record<string, any> = {};
@@ -431,6 +432,7 @@ export async function bulkCreateTestCases(
         headers: {
           "API-TOKEN": getBrowserStackAuth(config),
           "Content-Type": "application/json",
+          "request-source": source,
         },
         body: payload,
       });

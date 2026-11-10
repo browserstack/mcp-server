@@ -55,7 +55,7 @@ export async function createTestCasesFromFile(
   const document = (documentObj as { downloadUrl: string }).downloadUrl;
   const mimeType = (documentObj as { mimeType?: string }).mimeType;
 
-  const source = "jira-on-prem";
+  const source = "mcp";
 
   const traceId = await triggerTestCaseGeneration(
     document,
@@ -85,6 +85,7 @@ export async function createTestCasesFromFile(
     traceId,
     context,
     documentId,
+    source,
     config,
   );
 

@@ -8,7 +8,10 @@ vi.mock("../../src/lib/tm-base-url.js", () => ({
   getTMBaseURL: async () => "https://tm.example",
 }));
 
-import { triggerTestCaseGeneration } from "../../src/tools/testmanagement-utils/TCG-utils/api.js";
+import {
+  triggerTestCaseGeneration,
+  bulkCreateTestCases,
+} from "../../src/tools/testmanagement-utils/TCG-utils/api.js";
 
 const bsConfig: any = {
   "browserstack-username": "u",
@@ -27,7 +30,7 @@ describe("triggerTestCaseGeneration", () => {
       42,
       "folder-1",
       "123",
-      "jira-on-prem",
+      "mcp",
       bsConfig,
       "text/plain",
     );
@@ -37,6 +40,38 @@ describe("triggerTestCaseGeneration", () => {
       document: "https://dl",
       documentId: 42,
       mimeType: "text/plain",
+      source: "mcp",
     });
+    expect(postMock.mock.calls[0][0].headers["request-source"]).toBe("mcp");
+  });
+});
+
+describe("bulkCreateTestCases", () => {
+  it("sends the request-source header", async () => {
+    postMock.mockReset();
+    postMock.mockResolvedValue({ status: 200, data: { success: true } });
+
+    await bulkCreateTestCases(
+      {
+        "sc-1": {
+          id: "sc-1",
+          name: "Scenario",
+          traceId: "trace-1",
+          testcases: [{ id: "tc-1", name: "Case", steps: [] } as any],
+        },
+      },
+      "123",
+      "folder-1",
+      { priority: {}, status: {}, caseType: {} },
+      undefined,
+      "trace-1",
+      { sendNotification: vi.fn() },
+      42,
+      "mcp",
+      bsConfig,
+    );
+
+    expect(postMock).toHaveBeenCalledTimes(1);
+    expect(postMock.mock.calls[0][0].headers["request-source"]).toBe("mcp");
   });
 });

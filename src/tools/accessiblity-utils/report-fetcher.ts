@@ -309,6 +309,46 @@ function comparedBuild(report: any): WebBuild {
   };
 }
 
+/** One severity's part in a report's score. */
+export interface SeverityScore {
+  severity: string;
+  /** The share of all the report's points (0–100) that this severity's failed checks lost. */
+  lost: number;
+  passed: number;
+  failed: number;
+}
+
+/** The dashboard's accessibility score for a report (0–100), and how each severity shaped it. */
+export interface ReportScore {
+  score: number;
+  severities: SeverityScore[];
+}
+
+const SCORE_SEVERITIES = ["critical", "serious", "moderate", "minor"];
+
+/**
+ * A report summary's `scoreData` — `{score, impact: {critical, criticalPassed,
+ * criticalFailed, serious, …}}`, where the bare severity is the share of points it lost — or
+ * undefined when the summary has no score (`{}` when the plan has none or the report is not
+ * finished).
+ */
+export function parseScore(data: any): ReportScore | undefined {
+  const score = data?.score;
+  if (typeof score !== "number" || !Number.isFinite(score)) return undefined;
+  const impact = data.impact ?? {};
+  const count = (value: unknown) =>
+    typeof value === "number" && Number.isFinite(value) ? value : 0;
+  return {
+    score,
+    severities: SCORE_SEVERITIES.map((severity) => ({
+      severity,
+      lost: count(impact[severity]),
+      passed: count(impact[`${severity}Passed`]),
+      failed: count(impact[`${severity}Failed`]),
+    })),
+  };
+}
+
 /** The thBuildId a dashboard report link carries, if any. */
 function thBuildIdOf(link: string | undefined): string | null {
   try {
@@ -867,6 +907,42 @@ export class AccessibilityReportFetcher {
       )
     )?.changesSinceLastRun;
     return changes ?? undefined;
+  }
+
+  /**
+   * The report's accessibility score as the dashboard shows it, from the report's own
+   * summary. Undefined when it has none (the plan has no scores, or the report is not
+   * finished), when the summary cannot be read, and for app builds and reports. A scanner
+   * run known only by its build id is found in the scan list first, which knows a scan's
+   * latest run only: an earlier run read by its link has no score here.
+   */
+  async score(source: IssueSource): Promise<ReportScore | undefined> {
+    const q = encodeURIComponent;
+    let url: string;
+    switch (source.kind) {
+      case "scanBuild":
+        try {
+          return await this.score(await this.findScanRun(source));
+        } catch {
+          return undefined;
+        }
+      case "scan":
+        url = `${apiBase()}/website-scanner/v1/scans/${q(source.scanId)}/scan_runs/${q(source.scanRunId)}`;
+        break;
+      case "build":
+        url = `${apiBase()}/automated-tests/v1/builds/${q(source.buildId)}`;
+        break;
+      case "workflow":
+        url = `${apiBase()}/workflow-analyzer/v1/reports/${q(source.reportId)}`;
+        break;
+      default:
+        return undefined;
+    }
+    try {
+      return parseScore((await this.getData(url))?.scoreData);
+    } catch {
+      return undefined;
+    }
   }
 
   /**

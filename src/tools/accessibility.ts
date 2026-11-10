@@ -16,6 +16,8 @@ import {
   ScanNotInListError,
   ScanRunNotFoundError,
   type IssueSource,
+  type ReportScore,
+  type SeverityScore,
 } from "./accessiblity-utils/report-fetcher.js";
 import {
   compareAppIssues,
@@ -524,6 +526,30 @@ function webSummaryNote(
       ].join("\n"),
     ),
   ];
+}
+
+/**
+ * The report's accessibility score, as the dashboard shows it, with what lost the points and
+ * how it is worked out, so a question about the score — or a plan to raise it — is answered
+ * from the report rather than guessed. The weights are the backend's (DedupedUrl
+ * IMPACT_SCORE_WEIGHTS, scoring version 2: a failed check counts double).
+ */
+function scoreNote(score: ReportScore | undefined): string[] {
+  if (!score) return [];
+  const by = (part: (s: SeverityScore) => string) =>
+    score.severities.map((s) => `${s.severity} ${part(s)}`).join(", ");
+  return [
+    `Accessibility score of the whole report: ${score.score} out of 100, as the dashboard shows it. Share of points lost by severity: ${by((s) => String(s.lost))}. Checks passed/failed by severity: ${by((s) => `${s.passed}/${s.failed}`)}. How it is worked out: a check is one rule on one page (best practices are not scored), and it fails when any element on that page fails the rule; each check is worth points by its severity (critical 10, serious 7, moderate 3, minor 1), a failed check counts double, and the score is the passed points as a share of all points. So a rule's check passes only once every failing element on that page is fixed, and fixing the rules in the severities that lost the most points raises it most.`,
+  ];
+}
+
+/**
+ * Where a question about a web report beyond its issue list goes: BrowserStack AI, which
+ * answers from the whole report and the product's own knowledge, rather than a plan the
+ * agent works out for itself from one page of issues.
+ */
+function askAiNote(source: IssueSource): string {
+  return `For anything about this report beyond listing its issues, such as a plan to fix them or raise the score, what to fix first, or why it scored as it did, call askBrowserStackAI with product a11y, the user's question and this report (${describeSource(source)}), and give the user its answer. BrowserStack AI answers from the whole report, so do not work out the plan yourself. If askBrowserStackAI says it is not enabled for this account, tell the user, then answer from the issues and score above.`;
 }
 
 const WEB_ISSUES_NOTE =
@@ -1085,23 +1111,30 @@ async function fetchAccessibilityIssues(
     throw error;
   }
 
-  const {
-    records,
-    rules,
-    summary,
-    page_length,
-    total_issues,
-    next_page,
-    remaining,
-    duplicate_issues,
-    unlinked_duplicates,
-    hidden_issues,
-    page,
-    error_pages = [],
-  } = await parseAccessibilityReportFromCSV(reportLink, {
-    nextPage: cursor,
-    pageUrl,
-  });
+  // The score, like the summary, belongs to the whole report: read on its first page only.
+  const [
+    {
+      records,
+      rules,
+      summary,
+      page_length,
+      total_issues,
+      next_page,
+      remaining,
+      duplicate_issues,
+      unlinked_duplicates,
+      hidden_issues,
+      page,
+      error_pages = [],
+    },
+    score,
+  ] = await Promise.all([
+    parseAccessibilityReportFromCSV(reportLink, {
+      nextPage: cursor,
+      pageUrl,
+    }),
+    cursor ? undefined : reportFetcher.score(source),
+  ]);
   // A redirected page was scanned, where it redirected to; a page that showed an error page
   // is said once, with the error page's issues.
   const errorPageUrls = new Set(error_pages.map((p) => samePage(p.url)));
@@ -1129,12 +1162,14 @@ async function fetchAccessibilityIssues(
     // A page that did not load has no issues of its own to count.
     ...(page && error_pages.length === 0 ? pageNote(page) : []),
     `Retrieved ${page_length} accessibility issues (Total: ${total_issues})`,
-    // The whole report's counts, said on its first page.
+    // The whole report's score and counts, said on its first page.
+    ...scoreNote(score),
     ...(cursor ? [] : webSummaryNote(summary, total_issues)),
     ...excludedIssuesNote(duplicate_issues, unlinked_duplicates, hidden_issues),
     fullReportLine(reportLink),
     WEB_ISSUES_NOTE,
     `Issues: ${wrapUntrusted("accessibility scan results", JSON.stringify({ issues: records, rules }))}`,
+    ...(cursor ? [] : [askAiNote(source)]),
     closingMessage(
       next_page,
       remaining,
@@ -1656,6 +1691,7 @@ function createScanSuccessResponse(
   dashboardLink: string | undefined,
   settings: ScanSettings = {},
   applied?: ScanSettings,
+  score?: ReportScore,
 ): CallToolResult {
   const cursor = report.next_page;
   const messages = [
@@ -1666,6 +1702,7 @@ function createScanSuccessResponse(
     scanSettingsNote(settings, applied),
     fullReportLine(reportUrl),
     `We found ${report.total_issues} issues. Below are the details of the ${report.page_length} most critical issues.`,
+    ...scoreNote(score),
     ...webSummaryNote(report.summary, report.total_issues),
     ...excludedIssuesNote(
       report.duplicate_issues,
@@ -1674,6 +1711,7 @@ function createScanSuccessResponse(
     ),
     WEB_ISSUES_NOTE,
     `Scan results: ${wrapUntrusted("accessibility scan results", JSON.stringify({ issues: report.records, rules: report.rules }))}`,
+    askAiNote({ kind: "scan", scanId, scanRunId }),
   ];
 
   if (cursor !== null) {
@@ -1774,16 +1812,21 @@ async function scanOutcome(
     throw error;
   }
 
+  const [report, score] = await Promise.all([
+    parseAccessibilityReportFromCSV(reportLink),
+    reportFetcher.score({ kind: "scan", scanId, scanRunId }),
+  ]);
   return [
     createScanSuccessResponse(
       scanName,
-      await parseAccessibilityReportFromCSV(reportLink),
+      report,
       scanId,
       scanRunId,
       reportLink,
       dashboardLink,
       settings,
       applied,
+      score,
     ),
     "completed",
   ];

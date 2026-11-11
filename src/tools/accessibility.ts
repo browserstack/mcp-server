@@ -153,7 +153,7 @@ async function initializeReportFetcher(
  * which names what to use instead so an agent stops reaching for it.
  */
 const ACCESSIBILITY_EXPERT_DEPRECATED =
-  "Note: accessibilityExpert is deprecated and will be removed in a future release. Answer general WCAG and accessibility questions directly; for the issues on a page or in a report, use startAccessibilityScan or fetchAccessibilityIssues.";
+  "Note: accessibilityExpert is deprecated and will be removed in a future release. To list or filter a report's issues, for example those failing a WCAG criterion, use fetchAccessibilityIssues and answer from its result; to scan a page, use startAccessibilityScan. For advice on a report, such as how to raise its score or which issues to fix first, call askBrowserStackAI with product a11y and give the user its answer. If askBrowserStackAI says it is not enabled for this account, answer from the report's issues.";
 
 async function executeAccessibilityRAG(
   args: { query: string },

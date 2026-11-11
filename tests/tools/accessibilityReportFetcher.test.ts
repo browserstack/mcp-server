@@ -12,6 +12,7 @@ import {
   ExportPendingError,
   IssueSource,
   MAX_SCAN_LIST_PAGES,
+  SCORE_SCAN_LIST_PAGES,
   reportExports,
   MAX_REPORT_EXPORTS,
   foundScanRuns,
@@ -692,6 +693,21 @@ describe("AccessibilityReportFetcher.score", () => {
 
     await expect(fetcher().score({ kind: "scanBuild", thBuildId: BUILD_ID })).resolves.toBeUndefined();
     expect(get).toHaveBeenCalledTimes(1);
+  });
+
+  it("looks for a scanner run's score in the newest 2 pages of the scan list only", async () => {
+    // A link to an earlier run is never in the list, which shows each scan's latest run only:
+    // a full walk (~1.2 s a page) would hold up the issues read with it, on every first page.
+    const page = (n: number) =>
+      ok({
+        scans: [{ id: n, name: `scan ${n}`, scanUrl: `https://accessibility.browserstack.com/site-scanner/projects/p/builds?thBuildId=latest-${n}`, lastScanDetails: { scanRunId: n } }],
+        pagination: { hasNext: true, nextPage: `p${n + 1}` },
+      });
+    get.mockResolvedValueOnce(page(1)).mockResolvedValueOnce(page(2));
+
+    await expect(fetcher().score({ kind: "scanBuild", thBuildId: "an-earlier-run" })).resolves.toBeUndefined();
+    expect(get).toHaveBeenCalledTimes(SCORE_SCAN_LIST_PAGES);
+    expect(SCORE_SCAN_LIST_PAGES).toBeLessThan(MAX_SCAN_LIST_PAGES);
   });
 
   it.each<[string, IssueSource]>([

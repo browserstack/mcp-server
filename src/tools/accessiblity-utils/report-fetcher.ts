@@ -103,6 +103,13 @@ export function scanRunLink(source: ScanBuildSource): string {
  */
 export const MAX_SCAN_LIST_PAGES = 25;
 /**
+ * How far the score looks for a report link's scan. The score is read alongside the issues,
+ * after the export's wait, so a full walk would hold the issues up by ~30 s. A link to an
+ * earlier run is never found (the list has each scan's latest run only), so it would pay that
+ * in full on every first page. Two pages still find a scan someone just ran.
+ */
+export const SCORE_SCAN_LIST_PAGES = 2;
+/**
  * Runs already found by their build id. A build id names one fixed run, so the mapping never
  * changes: a link read again, or both sides of a compare, skip the scan-list walk. Keyed by
  * the account, so one account never sees another's, and bounded, oldest dropped first.
@@ -714,9 +721,13 @@ export class AccessibilityReportFetcher {
   /**
    * A run named by its build id, as its scan's ids: the newest scans are walked for the one
    * whose own link carries this thBuildId. What needs the ids (comparing runs) uses this, as
-   * does a link the API does not know by its build id.
+   * does a link the API does not know by its build id. `maxPages` caps the walk below
+   * MAX_SCAN_LIST_PAGES where a miss costs more than it is worth (the score).
    */
-  async findScanRun({ thBuildId, scanName }: ScanBuildSource): Promise<{
+  async findScanRun(
+    { thBuildId, scanName }: ScanBuildSource,
+    maxPages: number = MAX_SCAN_LIST_PAGES,
+  ): Promise<{
     kind: "scan";
     scanId: string;
     scanRunId: string;
@@ -726,7 +737,7 @@ export class AccessibilityReportFetcher {
     if (found) return { kind: "scan", ...found };
     let nextPage: string | undefined;
     let sameName: number | undefined;
-    for (let page = 0; page < MAX_SCAN_LIST_PAGES; page++) {
+    for (let page = 0; page < maxPages; page++) {
       const resp = await apiClient.get({
         url: `${apiBase()}/website-scanner/v1/scans${
           nextPage ? `?nextPage=${encodeURIComponent(nextPage)}` : ""
@@ -767,7 +778,7 @@ export class AccessibilityReportFetcher {
       );
     }
     // nextPage is still set only when the walk stopped at the page cap, not at the end.
-    throw new ScanNotInListError(nextPage !== undefined, MAX_SCAN_LIST_PAGES);
+    throw new ScanNotInListError(nextPage !== undefined, maxPages);
   }
 
   /**
@@ -913,8 +924,9 @@ export class AccessibilityReportFetcher {
    * The report's accessibility score as the dashboard shows it, from the report's own
    * summary. Undefined when it has none (the plan has no scores, or the report is not
    * finished), when the summary cannot be read, and for app builds and reports. A scanner
-   * run known only by its build id is found in the scan list first, which knows a scan's
-   * latest run only: an earlier run read by its link has no score here.
+   * run known only by its build id is found in the newest SCORE_SCAN_LIST_PAGES of the scan
+   * list first, which knows a scan's latest run only: an earlier run read by its link, or a
+   * scan older than those pages, has no score here.
    */
   async score(source: IssueSource): Promise<ReportScore | undefined> {
     const q = encodeURIComponent;
@@ -922,7 +934,9 @@ export class AccessibilityReportFetcher {
     switch (source.kind) {
       case "scanBuild":
         try {
-          return await this.score(await this.findScanRun(source));
+          return await this.score(
+            await this.findScanRun(source, SCORE_SCAN_LIST_PAGES),
+          );
         } catch {
           return undefined;
         }

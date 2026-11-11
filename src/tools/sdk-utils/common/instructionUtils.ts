@@ -8,6 +8,7 @@ import {
   SDKSupportedBrowserAutomationFramework,
   SDKSupportedTestingFramework,
 } from "./types.js";
+import { CallerError } from "../../../lib/error.js";
 
 const errorMessageSuffix =
   "Please open an issue at our Github repo: https://github.com/browserstack/browserstack-mcp-server/issues to request support for your project configuration";
@@ -20,13 +21,13 @@ export const getInstructionsForProjectConfiguration = (
   const configuration = SUPPORTED_CONFIGURATIONS[detectedLanguage];
 
   if (!configuration) {
-    throw new Error(
+    throw new CallerError(
       `BrowserStack MCP Server currently does not support ${detectedLanguage}, ${errorMessageSuffix}`,
     );
   }
 
   if (!configuration[detectedBrowserAutomationFramework]) {
-    throw new Error(
+    throw new CallerError(
       `BrowserStack MCP Server currently does not support ${detectedBrowserAutomationFramework} for ${detectedLanguage}, ${errorMessageSuffix}`,
     );
   }
@@ -34,7 +35,7 @@ export const getInstructionsForProjectConfiguration = (
   if (
     !configuration[detectedBrowserAutomationFramework][detectedTestingFramework]
   ) {
-    throw new Error(
+    throw new CallerError(
       `BrowserStack MCP Server currently does not support ${detectedTestingFramework} for ${detectedBrowserAutomationFramework} on ${detectedLanguage}, ${errorMessageSuffix}`,
     );
   }

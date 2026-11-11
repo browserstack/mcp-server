@@ -1,5 +1,6 @@
 import { AxiosError } from "axios";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import { markCallerFault } from "./upstream-status.js";
 
 const MAX_ERROR_TEXT = 500;
 const BODY_FIELDS = ["message", "error", "errors"] as const;
@@ -78,6 +79,19 @@ export function formatAxiosError(
     content: [{ type: "text", text: errorText(err, defaultText) }],
     isError: true,
   };
+}
+
+/**
+ * The caller's input or account set-up was rejected: a missing or unsupported argument,
+ * an id that names nothing, a file that is not there. Telemetry attributes the call to
+ * the caller, and keeps doing so when a catch block rewraps the error. `name` stays
+ * "Error" so the text shown to the user is unchanged.
+ */
+export class CallerError extends Error {
+  constructor(message: string) {
+    super(message);
+    markCallerFault();
+  }
 }
 
 /** A failed HTTP request, keeping the status for callers to branch on. */

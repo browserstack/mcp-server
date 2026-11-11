@@ -1,8 +1,9 @@
+import { trackedFetch } from "../../lib/upstream-status.js";
 // Utility for fetching the count of Percy builds and orgId.
 export async function getPercyBuildCount(percyToken: string) {
   const apiUrl = `https://percy.io/api/v1/builds`;
 
-  const response = await fetch(apiUrl, {
+  const response = await trackedFetch(apiUrl, {
     headers: {
       Authorization: `Token token=${percyToken}`,
       "Content-Type": "application/json",

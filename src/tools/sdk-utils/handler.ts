@@ -25,6 +25,7 @@ import {
   PERCY_SIMULATION_DRIVER_INSTRUCTION,
   PERCY_VERIFICATION_REGEX,
 } from "./common/constants.js";
+import { markCallerFault } from "../../lib/upstream-status.js";
 
 export async function runTestsOnBrowserStackHandler(
   rawInput: unknown,
@@ -151,6 +152,7 @@ export async function setUpPercyHandler(
         });
       }
     } else {
+      markCallerFault();
       return {
         content: [
           {

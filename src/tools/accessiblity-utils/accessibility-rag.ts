@@ -9,6 +9,7 @@ export interface RAGChunk {
 import { getBrowserStackAuth } from "../../lib/get-auth.js";
 import { BrowserStackConfig } from "../../lib/types.js";
 import { getRegionalHost } from "../../lib/regional-host.js";
+import { CallerError } from "../../lib/error.js";
 
 export interface AccessibilityRAGResponse {
   content: Array<{
@@ -49,7 +50,7 @@ export async function queryAccessibilityRAG(
   const responseData = response.data as any;
 
   if (!responseData.success) {
-    throw new Error("Something went wrong: " + responseData.message);
+    throw new CallerError("Something went wrong: " + responseData.message);
   }
 
   // Parse the stringified JSON data

@@ -4,7 +4,8 @@ import { getBrowserStackAuth } from "./get-auth.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { trackMCP } from "../index.js";
-import { HttpError } from "./error.js";
+import { HttpError, CallerError } from "./error.js";
+import { trackedFetch } from "./upstream-status.js";
 
 export function sanitizeUrlParam(param: string): string {
   // Remove any characters that could be used for command injection
@@ -19,7 +20,7 @@ export async function assertOkResponse(
 ) {
   if (!response.ok) {
     if (response.status === 404) {
-      throw new Error(`Invalid session ID for ${action}`);
+      throw new CallerError(`Invalid session ID for ${action}`);
     }
     throw new Error(
       `Failed to fetch logs for ${action}: ${response.statusText}`,
@@ -35,7 +36,9 @@ export async function fetchFromBrowserStackAPI(
   const auth = Buffer.from(authString).toString("base64");
 
   const init = { headers: { Authorization: `Basic ${auth}` } };
-  const res = await fetch(url, init).catch(() => fetch(url, init));
+  const res = await trackedFetch(url, init).catch(() =>
+    trackedFetch(url, init),
+  );
 
   if (!res.ok) {
     throw new HttpError(

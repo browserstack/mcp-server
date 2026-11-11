@@ -6,6 +6,7 @@ import { formatAxiosError } from "../../lib/error.js";
 import { BrowserStackConfig } from "../../lib/types.js";
 import { getTMBaseURL } from "../../lib/tm-base-url.js";
 import { wrapUntrusted } from "../../lib/untrusted-content.js";
+import { markCallerFault } from "../../lib/upstream-status.js";
 
 /**
  * Selection of test cases (with optional configurations) to add.
@@ -86,6 +87,7 @@ export async function updateTestRun(
   const hasMetadata = name !== undefined || run_state !== undefined;
 
   if (!hasTestCases && !hasMetadata) {
+    markCallerFault();
     return {
       content: [
         {
@@ -146,6 +148,7 @@ async function updateTestRunMetadata(
 
     const data = resp.data;
     if (!data.success) {
+      markCallerFault();
       return {
         content: [
           {
@@ -211,6 +214,7 @@ async function updateTestRunTestCases(
 
     const data = resp.data;
     if (!data.success) {
+      markCallerFault();
       return {
         content: [
           {

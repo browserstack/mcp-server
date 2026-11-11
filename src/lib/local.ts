@@ -2,6 +2,7 @@ import logger from "../logger.js";
 import { execSync } from "child_process";
 import { Local } from "browserstack-local";
 import config from "../config.js";
+import { CallerError } from "./error.js";
 
 async function isBrowserStackLocalRunning() {
   // Check if BrowserStackLocal binary is already running
@@ -89,7 +90,7 @@ export async function ensureLocalBinarySetup(
 
     const isRunning = await isBrowserStackLocalRunning();
     if (!isRunning) {
-      throw new Error(
+      throw new CallerError(
         "USE_OWN_LOCAL_BINARY_PROCESS is enabled but BrowserStack Local process is not running. Please start your BrowserStack Local binary process first.",
       );
     }

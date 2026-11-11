@@ -5,6 +5,7 @@ import {
   createStep,
 } from "./index.js";
 import { SUPPORTED_CONFIGURATIONS } from "./types.js";
+import { CallerError } from "../../../lib/error.js";
 
 export function isBrowserStackAppUrl(appPath: string): boolean {
   return appPath.startsWith("bs://");
@@ -82,7 +83,7 @@ export function validateSupportforAppAutomate(
     SUPPORTED_CONFIGURATIONS,
   ) as SupportedFramework[];
   if (!SUPPORTED_CONFIGURATIONS[framework]) {
-    throw new Error(
+    throw new CallerError(
       `Unsupported framework '${framework}'. Supported frameworks: ${frameworks.join(", ")}`,
     );
   }
@@ -91,7 +92,7 @@ export function validateSupportforAppAutomate(
     SUPPORTED_CONFIGURATIONS[framework],
   ) as SupportedLanguage[];
   if (!SUPPORTED_CONFIGURATIONS[framework][language]) {
-    throw new Error(
+    throw new CallerError(
       `Unsupported language '${language}' for framework '${framework}'. Supported languages: ${languages.join(", ")}`,
     );
   }
@@ -101,12 +102,12 @@ export function validateSupportforAppAutomate(
   ] as string[];
 
   if (testingFrameworks.length === 0) {
-    throw new Error(
+    throw new CallerError(
       `No testing frameworks are supported for language '${language}' and framework '${framework}'.`,
     );
   }
   if (!testingFrameworks.includes(testingFramework)) {
-    throw new Error(
+    throw new CallerError(
       `Unsupported testing framework '${testingFramework}' for language '${language}' and framework '${framework}'. Supported testing frameworks: ${testingFrameworks.join(", ")}`,
     );
   }

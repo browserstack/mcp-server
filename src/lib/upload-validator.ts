@@ -1,5 +1,6 @@
 import fs from "fs";
 import path from "path";
+import { CallerError } from "./error.js";
 
 export interface UploadValidationOptions {
   allowedExtensions: readonly string[];
@@ -25,32 +26,32 @@ export function validateUploadPath(
   options: UploadValidationOptions,
 ): string {
   if (typeof filePath !== "string" || filePath.trim().length === 0) {
-    throw new Error("Upload rejected: file path is empty.");
+    throw new CallerError("Upload rejected: file path is empty.");
   }
 
   let canonical: string;
   try {
     canonical = fs.realpathSync(path.resolve(filePath));
   } catch {
-    throw new Error(`File not found at path: ${filePath}`);
+    throw new CallerError(`File not found at path: ${filePath}`);
   }
 
   let stats: fs.Stats;
   try {
     stats = fs.statSync(canonical);
   } catch {
-    throw new Error(`File not found at path: ${filePath}`);
+    throw new CallerError(`File not found at path: ${filePath}`);
   }
 
   if (!stats.isFile()) {
-    throw new Error(
+    throw new CallerError(
       `Upload rejected: path does not point to a regular file: ${filePath}`,
     );
   }
 
   if (stats.size > options.maxSizeBytes) {
     const maxMb = Math.round(options.maxSizeBytes / (1024 * 1024));
-    throw new Error(
+    throw new CallerError(
       `Upload rejected: file exceeds maximum allowed size of ${maxMb} MB.`,
     );
   }
@@ -58,7 +59,7 @@ export function validateUploadPath(
   const segments = canonical.split(path.sep).filter((s) => s.length > 0);
   for (const seg of segments) {
     if (seg.startsWith(".") && seg !== "." && seg !== "..") {
-      throw new Error(
+      throw new CallerError(
         `Upload rejected: path traverses a hidden directory or file ("${seg}"). Move the file to a non-hidden location or set MCP_UPLOAD_BASE_DIR.`,
       );
     }
@@ -67,13 +68,13 @@ export function validateUploadPath(
   const ext = path.extname(canonical).toLowerCase();
   const allowed = options.allowedExtensions.map((e) => e.toLowerCase());
   if (!allowed.includes(ext)) {
-    throw new Error(
+    throw new CallerError(
       `Upload rejected: file extension "${ext || "(none)"}" is not in the allowed list (${allowed.join(", ")}).`,
     );
   }
 
   if (!options.allowedBaseDir) {
-    throw new Error(
+    throw new CallerError(
       "Upload rejected: MCP_UPLOAD_BASE_DIR is not set. Set it to the directory " +
         "containing the files to upload, then restart the MCP server.",
     );
@@ -83,7 +84,7 @@ export function validateUploadPath(
   try {
     baseCanonical = fs.realpathSync(path.resolve(options.allowedBaseDir));
   } catch {
-    throw new Error(
+    throw new CallerError(
       `Upload rejected: configured MCP_UPLOAD_BASE_DIR does not exist (${options.allowedBaseDir}).`,
     );
   }
@@ -91,7 +92,7 @@ export function validateUploadPath(
     ? baseCanonical
     : baseCanonical + path.sep;
   if (canonical !== baseCanonical && !canonical.startsWith(baseWithSep)) {
-    throw new Error(
+    throw new CallerError(
       `Upload rejected: file must be located inside ${baseCanonical}.`,
     );
   }

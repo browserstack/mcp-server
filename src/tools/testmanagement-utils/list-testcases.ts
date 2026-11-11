@@ -6,6 +6,7 @@ import { getBrowserStackAuth } from "../../lib/get-auth.js";
 import { BrowserStackConfig } from "../../lib/types.js";
 import { getTMBaseURL } from "../../lib/tm-base-url.js";
 import { wrapUntrusted } from "../../lib/untrusted-content.js";
+import { markCallerFault } from "../../lib/upstream-status.js";
 
 /**
  * Schema for listing test cases with optional filters.
@@ -68,6 +69,7 @@ export async function listTestCases(
 
     const resp_data = resp.data;
     if (!resp_data.success) {
+      markCallerFault();
       return {
         content: [
           {

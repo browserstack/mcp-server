@@ -8,6 +8,7 @@ import {
 } from "../../lib/local.js";
 import config from "../../config.js";
 import { getRegionalHost } from "../../lib/regional-host.js";
+import { CallerError } from "../../lib/error.js";
 
 export interface AccessibilityScanResponse {
   success: boolean;
@@ -52,7 +53,7 @@ export class AccessibilityScanner {
     settings: ScanSettings = {},
   ): Promise<AccessibilityScanResponse> {
     if (!this.auth?.username || !this.auth?.password) {
-      throw new Error(
+      throw new CallerError(
         "BrowserStack credentials are not set for AccessibilityScanner.",
       );
     }
@@ -63,13 +64,13 @@ export class AccessibilityScanner {
     const BS_LOCAL_DOMAIN = "bs-local.com";
 
     if (config.USE_OWN_LOCAL_BINARY_PROCESS && hasLocal) {
-      throw new Error(
+      throw new CallerError(
         "Cannot start scan with local URLs when using own BrowserStack Local binary process. Please set USE_OWN_LOCAL_BINARY_PROCESS to false.",
       );
     }
 
     if (config.REMOTE_MCP && hasLocal) {
-      throw new Error(
+      throw new CallerError(
         "Local URLs are not supported in this remote mcp. Please use a public URL.",
       );
     }
@@ -135,7 +136,7 @@ export class AccessibilityScanner {
       });
       const data = response.data;
       if (!data.success)
-        throw new Error(
+        throw new CallerError(
           `Unable to start scan: ${data.errors?.join(", ") || JSON.stringify(data)}`,
         );
       return data;
@@ -148,7 +149,7 @@ export class AccessibilityScanner {
         data?.message ||
         (Array.isArray(data?.errors) ? data.errors.join(", ") : undefined);
       if (err?.response?.status === 422 && !reason) {
-        throw new Error(
+        throw new CallerError(
           "A scan with this name already exists. please update the name and run again.",
         );
       }
@@ -254,7 +255,9 @@ export class AccessibilityScanner {
       });
       const data = response.data;
       if (!data.success)
-        throw new Error(`Failed to get status: ${data.errors?.join(", ")}`);
+        throw new CallerError(
+          `Failed to get status: ${data.errors?.join(", ")}`,
+        );
       return data;
     } catch (err: any) {
       const msg = err?.response?.data?.message || err?.message || String(err);

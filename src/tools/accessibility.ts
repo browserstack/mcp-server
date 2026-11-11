@@ -38,6 +38,7 @@ import { BrowserStackConfig } from "../lib/types.js";
 import { elicitCredentialsIfSupported } from "../lib/elicit-credentials.js";
 import logger from "../logger.js";
 import { NEEDS_A11Y_CONFIG_ID, NEEDS_A11Y_SCAN_ID } from "./tool-handoff.js";
+import { CallerError } from "../lib/error.js";
 
 interface AuthCredentials {
   username: string;
@@ -1004,7 +1005,7 @@ async function fetchAccessibilityIssues(
       }
       if (!(error instanceof ScanRunNotFoundError)) throw error;
       if (source.scanName === undefined) {
-        throw new Error(
+        throw new CallerError(
           error.routeMissing
             ? `No Automated Tests (web) or App Accessibility build with id "${source.thBuildId}". If it is a Website Scanner run's build id, this API cannot read a run by it yet: pass the scan's report link as reportUrl instead`
             : `No Automated Tests (web), App Accessibility or Website Scanner build with id "${source.thBuildId}". Pass the id the BrowserStack SDK printed as "testhub id" at the end of the run (40 lowercase letters and digits), or the report's dashboard link as reportUrl`,
@@ -1016,7 +1017,7 @@ async function fetchAccessibilityIssues(
       try {
         source = await reportFetcher.findScanRun(source);
       } catch (searchError) {
-        throw new Error(
+        throw new CallerError(
           `${why}, and searching the scan list found nothing either: ${
             searchError instanceof Error
               ? searchError.message
@@ -1414,7 +1415,7 @@ async function createAuthConfig(
 
   if (args.type === "form") {
     if (!validateFormAuthArgs(args)) {
-      throw new Error(
+      throw new CallerError(
         "Form authentication requires usernameSelector, passwordSelector, and submitSelector",
       );
     }

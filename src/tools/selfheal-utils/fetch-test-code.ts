@@ -3,6 +3,7 @@ import { BrowserStackConfig } from "../../lib/types.js";
 import { apiClient } from "../../lib/apiClient.js";
 import logger from "../../logger.js";
 import { getRegionalHost } from "../../lib/regional-host.js";
+import { CallerError } from "../../lib/error.js";
 
 export interface TestCodeEntry {
   testRunId: number;
@@ -97,7 +98,7 @@ export async function fetchTestCodeBySession(
   config: BrowserStackConfig,
 ): Promise<SessionTestCode> {
   if (!sessionId) {
-    throw new Error("sessionId is required to fetch test code");
+    throw new CallerError("sessionId is required to fetch test code");
   }
 
   const authString = getBrowserStackAuth(config);

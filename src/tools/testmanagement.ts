@@ -96,6 +96,7 @@ import {
   PLAN_WRITES_VIA_CAPABILITIES,
   PROJECT_ID_ONLY_FOR_FOLDER,
 } from "./tool-handoff.js";
+import { markCallerFault } from "../lib/upstream-status.js";
 
 //TODO: Moving the traceMCP and catch block to the parent(server) function
 
@@ -563,6 +564,7 @@ export async function createLCAStepsTool(
         // requires_authentication was requested but no credentials could be
         // obtained (client can't elicit, or the user declined). Fail clearly
         // rather than creating a login test case with no credentials.
+        markCallerFault();
         return {
           content: [
             {

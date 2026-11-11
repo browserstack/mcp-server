@@ -5,6 +5,7 @@ import * as https from "https";
 import * as fs from "fs";
 import config from "../config.js";
 import { isDataUrlPayloadTooLarge } from "../lib/utils.js";
+import { recordUpstreamStatus } from "./upstream-status.js";
 
 type RequestOptions = {
   url: string;
@@ -149,8 +150,13 @@ class ApiClient {
       this.validateUrl(url, config);
 
       const res = await fn(this.axiosAgent);
+      recordUpstreamStatus(res.status);
       return new ApiResponse<T>(res);
     } catch (error: any) {
+      // Status 0: the request was sent and got no answer. A refused URL never was sent.
+      if (error.response) recordUpstreamStatus(error.response.status);
+      else if (axios.isAxiosError(error) && error.request)
+        recordUpstreamStatus(0);
       if (error.response && !raise_error) {
         return new ApiResponse<T>(error.response);
       }

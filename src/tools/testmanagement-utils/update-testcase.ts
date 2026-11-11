@@ -13,6 +13,7 @@ import { wrapUntrusted } from "../../lib/untrusted-content.js";
 import { getBrowserStackAuth } from "../../lib/get-auth.js";
 import { wrapRichText, wrapTestCaseSteps } from "./rich-text.js";
 import logger from "../../logger.js";
+import { markCallerFault } from "../../lib/upstream-status.js";
 
 export interface TestCaseUpdateRequest {
   project_identifier: string;
@@ -175,6 +176,7 @@ export async function updateTestCase(
     testCaseBody.automation_status = normalized.automation_status;
 
   if (Object.keys(testCaseBody).length === 0) {
+    markCallerFault();
     return {
       content: [
         {
@@ -204,6 +206,7 @@ export async function updateTestCase(
 
     const { data } = response.data;
     if (!data.success) {
+      markCallerFault();
       return {
         content: [
           {

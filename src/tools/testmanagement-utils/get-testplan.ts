@@ -6,6 +6,7 @@ import { getBrowserStackAuth } from "../../lib/get-auth.js";
 import { BrowserStackConfig } from "../../lib/types.js";
 import { getTMBaseURL } from "../../lib/tm-base-url.js";
 import { wrapUntrusted } from "../../lib/untrusted-content.js";
+import { markCallerFault } from "../../lib/upstream-status.js";
 
 /**
  * Schema for fetching a single test plan by identifier, including its linked test runs.
@@ -75,6 +76,7 @@ export async function getTestPlan(
     });
 
     if (!planResp.data?.success) {
+      markCallerFault();
       return {
         content: [
           {

@@ -1,4 +1,6 @@
 import { PercyIntegrationTypeEnum } from "../common/types.js";
+import { CallerError } from "../../../lib/error.js";
+import { trackedFetch } from "../../../lib/upstream-status.js";
 
 let globalPercyToken: string | null = null;
 let globalProjectName: string | null = null;
@@ -18,7 +20,9 @@ async function fetchTokenFromAPI(
   }
 
   const url = `${baseUrl}?${params.toString()}`;
-  const response = await fetch(url, { headers: { Authorization: authHeader } });
+  const response = await trackedFetch(url, {
+    headers: { Authorization: authHeader },
+  });
 
   if (!response.ok) {
     throw new Error(`Failed to fetch Percy token (status: ${response.status})`);
@@ -27,7 +31,7 @@ async function fetchTokenFromAPI(
   const data = await response.json();
 
   if (!data?.token || !data?.success) {
-    throw new Error(
+    throw new CallerError(
       "Project exists but is likely set up for Automate. Please use a different project name.",
     );
   }

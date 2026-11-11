@@ -1,5 +1,6 @@
 import { customFuzzySearch } from "../../lib/fuzzy.js";
 import { DeviceEntry } from "./types.js";
+import { CallerError } from "../../lib/error.js";
 
 /**
  * Find matching devices by name with exact match preference.
@@ -12,7 +13,7 @@ export function findDeviceByName(
   const matches = customFuzzySearch(devices, ["display_name"], desiredPhone, 5);
   if (matches.length === 0) {
     const options = [...new Set(devices.map((d) => d.display_name))].join(", ");
-    throw new Error(
+    throw new CallerError(
       `No devices matching "${desiredPhone}". Available devices: ${options}`,
     );
   }
@@ -24,7 +25,7 @@ export function findDeviceByName(
   // If no exact but multiple fuzzy, ask user
   if (matches.length > 1) {
     const names = matches.map((d) => d.display_name).join(", ");
-    throw new Error(
+    throw new CallerError(
       `Alternative Device/Device's found : ${names}. Please Select one.`,
     );
   }

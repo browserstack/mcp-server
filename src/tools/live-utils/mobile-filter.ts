@@ -5,6 +5,7 @@ import {
 import { resolveVersion } from "../../lib/version-resolver.js";
 import { customFuzzySearch } from "../../lib/fuzzy.js";
 import { MobileSearchArgs, MobileEntry } from "./types.js";
+import { CallerError } from "../../lib/error.js";
 
 // Extract all mobile entries from the data
 function getAllMobileEntries(data: any): MobileEntry[] {
@@ -21,7 +22,8 @@ function getAllMobileEntries(data: any): MobileEntry[] {
 // Filter entries by OS
 function filterByOS(entries: MobileEntry[], os: string): MobileEntry[] {
   const candidates = entries.filter((d) => d.os === os);
-  if (!candidates.length) throw new Error(`No mobile OS entries for "${os}".`);
+  if (!candidates.length)
+    throw new CallerError(`No mobile OS entries for "${os}".`);
   return candidates;
 }
 
@@ -33,21 +35,21 @@ function findMatchingDevice(
 ): MobileEntry[] {
   const matches = customFuzzySearch(entries, ["display_name"], deviceName, 5);
   if (!matches.length)
-    throw new Error(`No devices matching "${deviceName}" on ${os}.`);
+    throw new CallerError(`No devices matching "${deviceName}" on ${os}.`);
 
   const exact = matches.find(
     (m) => m.display_name.toLowerCase() === deviceName.toLowerCase(),
   );
   if (!exact) {
     const names = matches.map((m) => m.display_name).join(", ");
-    throw new Error(
+    throw new CallerError(
       `Alternative Device/Device's found : ${names}. Please Select one.`,
     );
   }
 
   const result = entries.filter((d) => d.display_name === exact.display_name);
   if (!result.length)
-    throw new Error(`No device "${exact.display_name}" on ${os}.`);
+    throw new CallerError(`No device "${exact.display_name}" on ${os}.`);
 
   return result;
 }
@@ -62,7 +64,7 @@ function findOSVersion(
 
   const result = entries.filter((d) => d.os_version === chosenVersion);
   if (!result.length)
-    throw new Error(`No entry for OS version "${requestedVersion}".`);
+    throw new CallerError(`No entry for OS version "${requestedVersion}".`);
 
   return { entries: result, chosenVersion };
 }

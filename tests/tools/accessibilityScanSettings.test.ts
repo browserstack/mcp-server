@@ -215,6 +215,7 @@ describe("startAccessibilityScan scan settings", () => {
       AccessibilityReportFetcher: class {
         setAuth = vi.fn();
         getReportLink = m.getReportLink;
+        score = vi.fn().mockResolvedValue(undefined);
       },
     }));
     vi.doMock("../../src/tools/accessiblity-utils/report-parser.js", () => ({

@@ -103,6 +103,13 @@ export function scanRunLink(source: ScanBuildSource): string {
  */
 export const MAX_SCAN_LIST_PAGES = 25;
 /**
+ * How far the score looks for a report link's scan. The score is read alongside the issues,
+ * after the export's wait, so a full walk would hold the issues up by ~30 s. A link to an
+ * earlier run is never found (the list has each scan's latest run only), so it would pay that
+ * in full on every first page. Two pages still find a scan someone just ran.
+ */
+export const SCORE_SCAN_LIST_PAGES = 2;
+/**
  * Runs already found by their build id. A build id names one fixed run, so the mapping never
  * changes: a link read again, or both sides of a compare, skip the scan-list walk. Keyed by
  * the account, so one account never sees another's, and bounded, oldest dropped first.
@@ -306,6 +313,46 @@ function comparedBuild(report: any): WebBuild {
     projectName: report?.projectName,
     buildNumber: report?.buildNumber,
     startedAt: report?.createdOn,
+  };
+}
+
+/** One severity's part in a report's score. */
+export interface SeverityScore {
+  severity: string;
+  /** The share of all the report's points (0–100) that this severity's failed checks lost. */
+  lost: number;
+  passed: number;
+  failed: number;
+}
+
+/** The dashboard's accessibility score for a report (0–100), and how each severity shaped it. */
+export interface ReportScore {
+  score: number;
+  severities: SeverityScore[];
+}
+
+const SCORE_SEVERITIES = ["critical", "serious", "moderate", "minor"];
+
+/**
+ * A report summary's `scoreData` — `{score, impact: {critical, criticalPassed,
+ * criticalFailed, serious, …}}`, where the bare severity is the share of points it lost — or
+ * undefined when the summary has no score (`{}` when the plan has none or the report is not
+ * finished).
+ */
+export function parseScore(data: any): ReportScore | undefined {
+  const score = data?.score;
+  if (typeof score !== "number" || !Number.isFinite(score)) return undefined;
+  const impact = data.impact ?? {};
+  const count = (value: unknown) =>
+    typeof value === "number" && Number.isFinite(value) ? value : 0;
+  return {
+    score,
+    severities: SCORE_SEVERITIES.map((severity) => ({
+      severity,
+      lost: count(impact[severity]),
+      passed: count(impact[`${severity}Passed`]),
+      failed: count(impact[`${severity}Failed`]),
+    })),
   };
 }
 
@@ -674,9 +721,13 @@ export class AccessibilityReportFetcher {
   /**
    * A run named by its build id, as its scan's ids: the newest scans are walked for the one
    * whose own link carries this thBuildId. What needs the ids (comparing runs) uses this, as
-   * does a link the API does not know by its build id.
+   * does a link the API does not know by its build id. `maxPages` caps the walk below
+   * MAX_SCAN_LIST_PAGES where a miss costs more than it is worth (the score).
    */
-  async findScanRun({ thBuildId, scanName }: ScanBuildSource): Promise<{
+  async findScanRun(
+    { thBuildId, scanName }: ScanBuildSource,
+    maxPages: number = MAX_SCAN_LIST_PAGES,
+  ): Promise<{
     kind: "scan";
     scanId: string;
     scanRunId: string;
@@ -686,7 +737,7 @@ export class AccessibilityReportFetcher {
     if (found) return { kind: "scan", ...found };
     let nextPage: string | undefined;
     let sameName: number | undefined;
-    for (let page = 0; page < MAX_SCAN_LIST_PAGES; page++) {
+    for (let page = 0; page < maxPages; page++) {
       const resp = await apiClient.get({
         url: `${apiBase()}/website-scanner/v1/scans${
           nextPage ? `?nextPage=${encodeURIComponent(nextPage)}` : ""
@@ -727,7 +778,7 @@ export class AccessibilityReportFetcher {
       );
     }
     // nextPage is still set only when the walk stopped at the page cap, not at the end.
-    throw new ScanNotInListError(nextPage !== undefined, MAX_SCAN_LIST_PAGES);
+    throw new ScanNotInListError(nextPage !== undefined, maxPages);
   }
 
   /**
@@ -867,6 +918,45 @@ export class AccessibilityReportFetcher {
       )
     )?.changesSinceLastRun;
     return changes ?? undefined;
+  }
+
+  /**
+   * The report's accessibility score as the dashboard shows it, from the report's own
+   * summary. Undefined when it has none (the plan has no scores, or the report is not
+   * finished), when the summary cannot be read, and for app builds and reports. A scanner
+   * run known only by its build id is found in the newest SCORE_SCAN_LIST_PAGES of the scan
+   * list first, which knows a scan's latest run only: an earlier run read by its link, or a
+   * scan older than those pages, has no score here.
+   */
+  async score(source: IssueSource): Promise<ReportScore | undefined> {
+    const q = encodeURIComponent;
+    let url: string;
+    switch (source.kind) {
+      case "scanBuild":
+        try {
+          return await this.score(
+            await this.findScanRun(source, SCORE_SCAN_LIST_PAGES),
+          );
+        } catch {
+          return undefined;
+        }
+      case "scan":
+        url = `${apiBase()}/website-scanner/v1/scans/${q(source.scanId)}/scan_runs/${q(source.scanRunId)}`;
+        break;
+      case "build":
+        url = `${apiBase()}/automated-tests/v1/builds/${q(source.buildId)}`;
+        break;
+      case "workflow":
+        url = `${apiBase()}/workflow-analyzer/v1/reports/${q(source.reportId)}`;
+        break;
+      default:
+        return undefined;
+    }
+    try {
+      return parseScore((await this.getData(url))?.scoreData);
+    } catch {
+      return undefined;
+    }
   }
 
   /**

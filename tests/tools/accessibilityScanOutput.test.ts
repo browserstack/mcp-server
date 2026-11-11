@@ -14,6 +14,7 @@ const m = vi.hoisted(() => ({
   appBuildReport: vi.fn(),
   appReportIssues: vi.fn(),
   findScanRun: vi.fn(),
+  score: vi.fn(),
   parse: vi.fn(),
   dashboardLink: vi.fn(),
   failureDetails: vi.fn(async () => ({ pages: [] })),
@@ -49,6 +50,7 @@ vi.mock("../../src/tools/accessiblity-utils/report-fetcher.js", async () => ({
     appBuildReport = m.appBuildReport;
     appReportIssues = m.appReportIssues;
     findScanRun = m.findScanRun;
+    score = m.score;
   },
   EXPORT_WAIT_MS: 45_000,
   ExportPendingError: class extends Error {
@@ -1208,5 +1210,114 @@ describe("what a web report's answer says about its issues", () => {
     expect(body).toContain(LINK);
     expect(body).not.toContain("Failed to start");
     expect(m.getReportLink).not.toHaveBeenCalled();
+  });
+});
+
+describe("the report's accessibility score", () => {
+  let handlers: Record<string, (...args: any[]) => any>;
+  const SCORE = {
+    score: 52,
+    severities: [
+      { severity: "critical", lost: 19, passed: 5, failed: 3 },
+      { severity: "serious", lost: 27, passed: 14, failed: 6 },
+      { severity: "moderate", lost: 2, passed: 5, failed: 1 },
+      { severity: "minor", lost: 0, passed: 2, failed: 0 },
+    ],
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    // Earlier tests leave resolveBuild turning sources into scanner build ids; ids stay ids.
+    m.resolveBuild.mockImplementation(async (source: unknown) => source);
+    m.startScan.mockResolvedValue({ data: { id: "scan-42", scanRunId: "run-7" } });
+    m.waitUntilComplete.mockResolvedValue("completed");
+    m.getReportLink.mockResolvedValue("https://csv");
+    m.parse.mockResolvedValue(GROUPED);
+    handlers = register();
+  });
+
+  it("fetchAccessibilityIssues gives the score, what lost the points and how it is worked out, on the first page", async () => {
+    m.score.mockResolvedValue(SCORE);
+    const body = text(
+      await handlers.fetchAccessibilityIssues({ scanId: "scan-42", scanRunId: "run-7" }, CONTEXT),
+    );
+
+    expect(m.score).toHaveBeenCalledWith({ kind: "scan", scanId: "scan-42", scanRunId: "run-7" });
+    expect(body).toContain("Accessibility score of the whole report: 52 out of 100, as the dashboard shows it.");
+    expect(body).toContain("Share of points lost by severity: critical 19, serious 27, moderate 2, minor 0.");
+    expect(body).toContain("Checks passed/failed by severity: critical 5/3, serious 14/6, moderate 5/1, minor 2/0.");
+    expect(body).toContain("a check is one rule on one page (best practices are not scored)");
+    expect(body).toContain("(critical 10, serious 7, moderate 3, minor 1), a failed check counts double");
+  });
+
+  it("does not read the score again for a later page", async () => {
+    m.score.mockResolvedValue(SCORE);
+    const body = text(
+      await handlers.fetchAccessibilityIssues({ scanId: "scan-42", scanRunId: "run-7", cursor: 140 }, CONTEXT),
+    );
+
+    expect(m.score).not.toHaveBeenCalled();
+    expect(body).not.toContain("Accessibility score");
+  });
+
+  it("says nothing about a score when the report has none", async () => {
+    m.score.mockResolvedValue(undefined);
+    const body = text(
+      await handlers.fetchAccessibilityIssues({ scanId: "scan-42", scanRunId: "run-7" }, CONTEXT),
+    );
+
+    expect(body).toContain("Retrieved 1 accessibility issues (Total: 79)");
+    expect(body).not.toContain("Accessibility score");
+  });
+
+  it("startAccessibilityScan gives the finished scan's score", async () => {
+    m.score.mockResolvedValue(SCORE);
+    const body = text(
+      await handlers.startAccessibilityScan({ name: "score", pageURL: "https://site.example" }, CONTEXT),
+    );
+
+    expect(m.score).toHaveBeenCalledWith({ kind: "scan", scanId: "scan-42", scanRunId: "run-7" });
+    expect(body).toContain("Accessibility score of the whole report: 52 out of 100");
+  });
+});
+
+describe("questions about a report beyond its issues", () => {
+  let handlers: Record<string, (...args: any[]) => any>;
+  const ASK = "call askBrowserStackAI with product a11y, the user's question and this report";
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    m.resolveBuild.mockImplementation(async (source: unknown) => source);
+    m.startScan.mockResolvedValue({ data: { id: "scan-42", scanRunId: "run-7" } });
+    m.waitUntilComplete.mockResolvedValue("completed");
+    m.getReportLink.mockResolvedValue("https://csv");
+    m.parse.mockResolvedValue(GROUPED);
+    handlers = register();
+  });
+
+  it("fetchAccessibilityIssues sends them to BrowserStack AI, naming the report, on the first page", async () => {
+    const body = text(
+      await handlers.fetchAccessibilityIssues({ scanId: "scan-42", scanRunId: "run-7" }, CONTEXT),
+    );
+
+    expect(body).toContain(`${ASK} (Website Scanner scan scan-42, run run-7)`);
+    expect(body).toContain("do not work out the plan yourself");
+    expect(body).toContain("If askBrowserStackAI says it is not enabled for this account, tell the user");
+  });
+
+  it("does not repeat it on a later page", async () => {
+    const body = text(
+      await handlers.fetchAccessibilityIssues({ scanId: "scan-42", scanRunId: "run-7", cursor: 140 }, CONTEXT),
+    );
+
+    expect(body).not.toContain("askBrowserStackAI");
+  });
+
+  it("startAccessibilityScan sends them to BrowserStack AI too", async () => {
+    const body = text(
+      await handlers.startAccessibilityScan({ name: "ask", pageURL: "https://site.example" }, CONTEXT),
+    );
+
+    expect(body).toContain(`${ASK} (Website Scanner scan scan-42, run run-7)`);
   });
 });

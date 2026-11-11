@@ -27,6 +27,7 @@ vi.mock("../../src/tools/accessiblity-utils/report-fetcher.js", () => ({
     scanRuns = m.scanRuns;
     changesSinceLastRun = m.changesSinceLastRun;
     findScanRun = m.findScanRun;
+    score = vi.fn().mockResolvedValue(undefined);
   },
   EXPORT_WAIT_MS: 45_000,
   ExportPendingError: class extends Error {

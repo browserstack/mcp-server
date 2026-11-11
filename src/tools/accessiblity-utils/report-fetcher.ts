@@ -1,13 +1,17 @@
 import { apiClient } from "../../lib/apiClient.js";
 import {
   AppAccessibilityApi,
+  BuildLookupError,
   manualReportIdFromDashboardLink,
   manualReportStatus,
   type AppBuildIssues,
   type AppBuildRef,
   type AppBuildReport,
   type AppManualReport,
+  type EarlierManualReport,
 } from "./app-report-fetcher.js";
+import { onErrorPage, samePage, type RunIssue } from "./report-parser.js";
+import { sortBySeverity } from "./paginate.js";
 import { SessionType } from "../../lib/constants.js";
 import { sessionsListUrl } from "../automate-utils/list-session-ids.js";
 import { getAutomationBaseUrl } from "../rca-agent-utils/constants.js";
@@ -70,6 +74,22 @@ export class ScanRunNotFoundError extends Error {
   }
 }
 
+/**
+ * No scan the scan list was searched across has a run with this build id; `capped` when
+ * the search stopped at the page limit rather than at the end of the list.
+ */
+export class ScanNotInListError extends Error {
+  constructor(
+    readonly capped: boolean,
+    readonly pages: number,
+  ) {
+    super(
+      `No Website Scanner scan${capped ? ` among the most recent scans (${pages} pages)` : ""} matches this link. Pass scanId and scanRunId instead`,
+    );
+    this.name = "ScanNotInListError";
+  }
+}
+
 /** The dashboard link of a run named by its build id, without the extra query a copied link carries. */
 export function scanRunLink(source: ScanBuildSource): string {
   return `${dashboard()}/site-scanner/projects/${encodeURIComponent(source.scanName ?? "")}/builds?thBuildId=${encodeURIComponent(source.thBuildId)}`;
@@ -81,12 +101,58 @@ export function scanRunLink(source: ScanBuildSource): string {
  * link someone just opened will be. It runs at the list's default page size (~1.2 s a page):
  * at limit=50 or 100 the cursor skips scans, so a larger page cannot be used to go faster.
  */
-export const MAX_SCAN_LIST_PAGES = 15;
+export const MAX_SCAN_LIST_PAGES = 25;
+/**
+ * How far the score looks for a report link's scan. The score is read alongside the issues,
+ * after the export's wait, so a full walk would hold the issues up by ~30 s. A link to an
+ * earlier run is never found (the list has each scan's latest run only), so it would pay that
+ * in full on every first page. Two pages still find a scan someone just ran.
+ */
+export const SCORE_SCAN_LIST_PAGES = 2;
+/**
+ * Runs already found by their build id. A build id names one fixed run, so the mapping never
+ * changes: a link read again, or both sides of a compare, skip the scan-list walk. Keyed by
+ * the account, so one account never sees another's, and bounded, oldest dropped first.
+ */
+export const foundScanRuns = new Map<
+  string,
+  { scanId: string; scanRunId: string }
+>();
+const MAX_FOUND_SCAN_RUNS = 200;
+
 /** How many pages of a scan's runs are read to find the run before a given one. */
 const MAX_SCAN_RUN_PAGES = 10;
 
 /** A build whose status is checked is one just run, so it sits at the top of its project's list. */
 const MAX_BUILD_LIST_PAGES = 3;
+
+/**
+ * The Workflow Analyzer report list holds the whole account's reports, newest first, with no
+ * page or date: a report is found in its newest pages, at the list's largest page size, and
+ * the pages of the earlier ones after it are read from their summaries, a batch at a time.
+ */
+const MAX_WORKFLOW_LIST_PAGES = 3;
+const WORKFLOW_LIST_PAGE_SIZE = 99;
+const MAX_WORKFLOW_CANDIDATES = 30;
+const WORKFLOW_SUMMARY_BATCH = 10;
+
+/** An earlier Workflow Analyzer report: of the same page, or else of the same site. */
+export interface EarlierWorkflowReport {
+  reportId: string;
+  /** When it started, as the API writes it. */
+  time?: string;
+  samePage: boolean;
+  link: string;
+}
+
+/** A page's site: its host, without a leading "www.". */
+function siteOf(url: string): string | undefined {
+  try {
+    return new URL(url).hostname.toLowerCase().replace(/^www\./, "");
+  } catch {
+    return undefined;
+  }
+}
 
 interface ScanListPage {
   scans?: {
@@ -100,8 +166,9 @@ interface ScanListPage {
 
 /**
  * How long one call waits on a CSV export. Export time grows with the report's rows: a few
- * seconds for hundreds, ~17 s for 18k rows, over 2 minutes for 30k issues. A call stays well
- * under the 60 s request timeout MCP clients default to; an export still running after this
+ * seconds for hundreds, ~17 s for 18k rows, over 2 minutes for 30k issues. The wait itself
+ * stays under the 60 s request timeout MCP clients default to, though finding a link's run
+ * and comparing two reports can add to a call's time; an export still running after this
  * is handed back to be continued by the next call rather than started again.
  */
 export const EXPORT_WAIT_MS = 45_000;
@@ -176,6 +243,117 @@ export interface RunChanges {
   newIssues: number;
   retainedIssues: number;
   resolvedIssues: number;
+}
+
+/** An Automated Tests (web) build, as its overview names it. */
+export interface WebBuild {
+  buildId: string;
+  name: string;
+  projectName?: string;
+  buildNumber?: number;
+  /** When the build started, as the API writes it (ISO 8601). */
+  startedAt?: string;
+}
+
+/** The compare API's three lists, in its own words (`retained` is still open). */
+export type CompareStatus = "new" | "resolved" | "retained";
+const COMPARE_STATUSES: CompareStatus[] = ["new", "retained", "resolved"];
+
+/** Two Automated Tests builds as the compare API compares them. */
+export interface WebBuildComparison {
+  /** The older build; `autoResolved` when the API chose it (no baseReport was passed). */
+  base: WebBuild & { autoResolved: boolean };
+  after: WebBuild;
+  counts: Record<CompareStatus, number>;
+  /** The first issues of each list, up to the list limit, most severe first. */
+  issues: Record<CompareStatus, RunIssue[]>;
+}
+
+/** Why the compare API gave no comparison, in its words. */
+export interface WebCompareRefusal {
+  refused: string;
+  /** The build has no earlier completed run with its name in its project. */
+  noPrevious?: true;
+}
+
+/**
+ * How long a call to the compare API is waited on. The API stops itself at 30 s and answers
+ * 504 "Request timed out"; this covers a gateway that never answers.
+ */
+export const WEB_COMPARE_TIMEOUT_MS = 40_000;
+/** The most issues the compare API hands out in one call. */
+const WEB_COMPARE_PAGE = 100;
+
+/**
+ * A compare API row as a comparison lists it. Its key is the API's own (signatureKey), which
+ * tells apart more than rule, element and page: a changed element's markup, for one.
+ */
+function comparedIssue(row: any): RunIssue {
+  const selector = [row?.target ?? []].flat().filter(Boolean).join(" ");
+  const issue_type = row?.ruleData?.id ?? "";
+  const affected_page = row?.url ?? "";
+  return {
+    key:
+      row?.signatureKey ||
+      [issue_type, selector || row?.componentId || "", affected_page].join("|"),
+    issue_type,
+    severity: (row?.impact || "unknown").trim(),
+    component: row?.componentId ?? "",
+    ...(selector ? { selector } : {}),
+    affected_page,
+    ...(onErrorPage(row?.html) ? { on_error_page: true as const } : {}),
+  };
+}
+
+/** A build as the compare API's summary names it. */
+function comparedBuild(report: any): WebBuild {
+  return {
+    buildId: report?.id,
+    name: report?.buildName,
+    projectName: report?.projectName,
+    buildNumber: report?.buildNumber,
+    startedAt: report?.createdOn,
+  };
+}
+
+/** One severity's part in a report's score. */
+export interface SeverityScore {
+  severity: string;
+  /** The share of all the report's points (0–100) that this severity's failed checks lost. */
+  lost: number;
+  passed: number;
+  failed: number;
+}
+
+/** The dashboard's accessibility score for a report (0–100), and how each severity shaped it. */
+export interface ReportScore {
+  score: number;
+  severities: SeverityScore[];
+}
+
+const SCORE_SEVERITIES = ["critical", "serious", "moderate", "minor"];
+
+/**
+ * A report summary's `scoreData` — `{score, impact: {critical, criticalPassed,
+ * criticalFailed, serious, …}}`, where the bare severity is the share of points it lost — or
+ * undefined when the summary has no score (`{}` when the plan has none or the report is not
+ * finished).
+ */
+export function parseScore(data: any): ReportScore | undefined {
+  const score = data?.score;
+  if (typeof score !== "number" || !Number.isFinite(score)) return undefined;
+  const impact = data.impact ?? {};
+  const count = (value: unknown) =>
+    typeof value === "number" && Number.isFinite(value) ? value : 0;
+  return {
+    score,
+    severities: SCORE_SEVERITIES.map((severity) => ({
+      severity,
+      lost: count(impact[severity]),
+      passed: count(impact[`${severity}Passed`]),
+      failed: count(impact[`${severity}Failed`]),
+    })),
+  };
 }
 
 /** The thBuildId a dashboard report link carries, if any. */
@@ -264,7 +442,7 @@ export class AccessibilityReportFetcher {
   private auth: { username: string; password: string } | undefined;
   private readonly app = new AppAccessibilityApi(() => this.authHeaders());
   /** Web builds whose overview was read, by id, so a status check need not read it again. */
-  private readonly webBuildProjects = new Map<string, string>();
+  private readonly webBuilds = new Map<string, WebBuild>();
 
   public setAuth(auth: { username: string; password: string }): void {
     this.auth = auth;
@@ -338,9 +516,11 @@ export class AccessibilityReportFetcher {
       return this.buildOfAutomateSession(automate.sessionId);
     }
     if (automate?.buildId) {
-      return this.buildOfAutomateSession(
-        await this.anyAutomateSession(automate.buildId),
-      );
+      const session = await this.automateSession(automate.buildId);
+      if (!session) {
+        throw new Error(`No Automate build with id ${automate.buildId}`);
+      }
+      return this.buildOfAutomateSession(session);
     }
     const thBuildId = url?.searchParams.get("thBuildId");
     if (url && thBuildId && url.pathname.includes("/automated-tests/")) {
@@ -386,18 +566,49 @@ export class AccessibilityReportFetcher {
     }
     const web = resp.ok ? resp.data?.data : undefined;
     if (web) {
-      if (web.projectName) {
-        this.webBuildProjects.set(source.buildId, web.projectName);
-      }
+      this.rememberWebBuild(source.buildId, web);
       return source;
     }
     const meta = await this.app.buildMeta(source.buildId);
     if (meta) return { kind: "appBuild", buildId: source.buildId };
+    // An Automate or App Automate build's own id, its hashed_id (40 hex characters; a TestHub
+    // id has other letters too), as the SDK prints it at the end of a run: its sessions name
+    // the accessibility build they ran in, as for the build's link. Asked before the scan list.
+    // A probe that could not be answered (not a 404) moves on to the next API, and is said
+    // if none knows the id; once a session is found, what it says is the answer.
+    const probeFailures: string[] = [];
+    if (/^[0-9a-f]{40}$/.test(source.buildId)) {
+      let session: string | undefined;
+      try {
+        session = await this.automateSession(source.buildId);
+      } catch (error) {
+        probeFailures.push(
+          error instanceof Error ? error.message : String(error),
+        );
+      }
+      if (session) return this.buildOfAutomateSession(session);
+      let appBuildId: string | undefined;
+      try {
+        appBuildId = await this.app.buildIdOfAppAutomateBuild(source.buildId);
+      } catch (error) {
+        if (!(error instanceof BuildLookupError)) throw error;
+        probeFailures.push(error.message);
+      }
+      if (appBuildId) return { kind: "appBuild", buildId: appBuildId };
+    }
     // A Website Scanner run's build id (a scanner link's thBuildId) is a TestHub id too, which
     // only the scanner's issues route knows: the caller reads it there, and says so if not.
-    if (orScanRun) return { kind: "scanBuild", thBuildId: source.buildId };
+    // A 40-hex id is an Automate id, not a TestHub one: when Automate could not be asked about
+    // it, that is the answer, not a missing scan run.
+    if (orScanRun && !probeFailures.length) {
+      return { kind: "scanBuild", thBuildId: source.buildId };
+    }
     throw new Error(
-      `No Automated Tests (web) or App Accessibility build with id "${source.buildId}". Pass the id the BrowserStack SDK printed as "testhub id" at the end of the run (40 lowercase letters and digits), or the report's dashboard link as reportUrl`,
+      `No Automated Tests (web) or App Accessibility build with id "${source.buildId}". Pass the id the BrowserStack SDK printed as "testhub id" at the end of the run (40 lowercase letters and digits), or the report's dashboard link as reportUrl${
+        probeFailures.length
+          ? ` (Automate could not be asked about it: ${probeFailures.join("; ")})`
+          : ""
+      }`,
     );
   }
 
@@ -429,16 +640,26 @@ export class AccessibilityReportFetcher {
     return this.app.appReportIssues(reportId, cursor, maxCharacterLength);
   }
 
-  /** Any one session of an Automate build; every session of an SDK run names the same build. */
-  private async anyAutomateSession(automateBuildId: string): Promise<string> {
+  /** The newest manual report of the same app recorded before this one, if any. */
+  previousManualReport(
+    reportId: string,
+  ): Promise<EarlierManualReport | undefined> {
+    return this.app.previousManualReport(reportId);
+  }
+
+  /**
+   * Any one session of an Automate build; every session of an SDK run names the same build.
+   * Undefined when Automate does not know the build (its 404).
+   */
+  private async automateSession(
+    automateBuildId: string,
+  ): Promise<string | undefined> {
     const resp = await apiClient.get({
       url: `${sessionsListUrl(SessionType.Automate, automateBuildId)}?limit=1`,
       headers: this.authHeaders(),
       raise_error: false,
     });
-    if (resp.status === 404) {
-      throw new Error(`No Automate build with id ${automateBuildId}`);
-    }
+    if (resp.status === 404) return undefined;
     if (!resp.ok) {
       throw new Error(
         `Could not list the sessions of Automate build ${automateBuildId}: HTTP ${resp.status}`,
@@ -500,16 +721,23 @@ export class AccessibilityReportFetcher {
   /**
    * A run named by its build id, as its scan's ids: the newest scans are walked for the one
    * whose own link carries this thBuildId. What needs the ids (comparing runs) uses this, as
-   * does a link the API does not know by its build id.
+   * does a link the API does not know by its build id. `maxPages` caps the walk below
+   * MAX_SCAN_LIST_PAGES where a miss costs more than it is worth (the score).
    */
-  async findScanRun({ thBuildId, scanName }: ScanBuildSource): Promise<{
+  async findScanRun(
+    { thBuildId, scanName }: ScanBuildSource,
+    maxPages: number = MAX_SCAN_LIST_PAGES,
+  ): Promise<{
     kind: "scan";
     scanId: string;
     scanRunId: string;
   }> {
+    const cacheKey = `${this.auth?.username ?? ""}|${thBuildId}`;
+    const found = foundScanRuns.get(cacheKey);
+    if (found) return { kind: "scan", ...found };
     let nextPage: string | undefined;
     let sameName: number | undefined;
-    for (let page = 0; page < MAX_SCAN_LIST_PAGES; page++) {
+    for (let page = 0; page < maxPages; page++) {
       const resp = await apiClient.get({
         url: `${apiBase()}/website-scanner/v1/scans${
           nextPage ? `?nextPage=${encodeURIComponent(nextPage)}` : ""
@@ -525,11 +753,14 @@ export class AccessibilityReportFetcher {
               `Website Scanner scan ${scan.id} has no completed run to read yet; wait for it to finish, or pass scanId and scanRunId`,
             );
           }
-          return {
-            kind: "scan",
-            scanId: String(scan.id),
-            scanRunId: String(scanRunId),
-          };
+          const run = { scanId: String(scan.id), scanRunId: String(scanRunId) };
+          foundScanRuns.delete(cacheKey);
+          foundScanRuns.set(cacheKey, run);
+          for (const oldest of foundScanRuns.keys()) {
+            if (foundScanRuns.size <= MAX_FOUND_SCAN_RUNS) break;
+            foundScanRuns.delete(oldest);
+          }
+          return { kind: "scan", ...run };
         }
         if (sameName === undefined && scanName && scan.name === scanName) {
           sameName = scan.id;
@@ -547,12 +778,7 @@ export class AccessibilityReportFetcher {
       );
     }
     // nextPage is still set only when the walk stopped at the page cap, not at the end.
-    const searched = nextPage
-      ? ` among the most recent scans (${MAX_SCAN_LIST_PAGES} pages)`
-      : "";
-    throw new Error(
-      `No Website Scanner scan${searched} matches this link. Pass scanId and scanRunId instead`,
-    );
+    throw new ScanNotInListError(nextPage !== undefined, maxPages);
   }
 
   /**
@@ -597,7 +823,10 @@ export class AccessibilityReportFetcher {
       }
       taskId = initData.data.task_id;
     }
-    rememberExport(key, { taskId });
+    // The task of a report still adding issues is not kept either: continued after the report
+    // finished, it would hand back the snapshot taken while it was processing as final.
+    if (options.stillProcessing) reportExports.delete(key);
+    else rememberExport(key, { taskId });
 
     const started = Date.now();
     for (let attempt = 0; ; attempt++) {
@@ -638,28 +867,43 @@ export class AccessibilityReportFetcher {
     }
   }
 
-  /** The run before `scanRunId` in its scan's history, or undefined for the first run. */
-  async previousScanRun(
+  /**
+   * A scan's runs, newest first, and whether the whole list was read: a list cut short at
+   * the page limit, or by a page that could not be read, may not hold a run that is the scan's.
+   */
+  async scanRuns(
     scanId: string,
-    scanRunId: string,
-  ): Promise<ScanRun | undefined> {
-    // The runs come a page at a time; the one before may be on a later page.
+  ): Promise<{ runs: ScanRun[]; complete: boolean }> {
+    // The runs come a page at a time.
     const runs: ScanRun[] = [];
     const base = `${apiBase()}/website-scanner/v1/scans/${encodeURIComponent(scanId)}/scan_runs`;
     let nextPage: string | undefined;
+    let complete = false;
     for (let page = 0; page < MAX_SCAN_RUN_PAGES; page++) {
       const data = await this.getData(
         nextPage ? `${base}?nextPage=${encodeURIComponent(nextPage)}` : base,
       );
       runs.push(...(data?.scanRuns ?? []));
-      if (!data?.pagination?.hasNext || !data.pagination.nextPage) break;
+      if (!data?.pagination?.hasNext || !data.pagination.nextPage) {
+        complete = data !== undefined;
+        break;
+      }
       nextPage = data.pagination.nextPage;
     }
-    const newestFirst = [...runs].sort((a, b) =>
-      b.scanDate.localeCompare(a.scanDate),
-    );
-    const at = newestFirst.findIndex((run) => String(run.id) === scanRunId);
-    return at >= 0 ? newestFirst[at + 1] : undefined;
+    return {
+      runs: runs.sort((a, b) => b.scanDate.localeCompare(a.scanDate)),
+      complete,
+    };
+  }
+
+  /** The run before `scanRunId` in its scan's history, or undefined for the first run. */
+  async previousScanRun(
+    scanId: string,
+    scanRunId: string,
+  ): Promise<ScanRun | undefined> {
+    const { runs } = await this.scanRuns(scanId);
+    const at = runs.findIndex((run) => String(run.id) === scanRunId);
+    return at >= 0 ? runs[at + 1] : undefined;
   }
 
   /** The dashboard's new / retained / resolved counts against the run before this one. */
@@ -674,6 +918,45 @@ export class AccessibilityReportFetcher {
       )
     )?.changesSinceLastRun;
     return changes ?? undefined;
+  }
+
+  /**
+   * The report's accessibility score as the dashboard shows it, from the report's own
+   * summary. Undefined when it has none (the plan has no scores, or the report is not
+   * finished), when the summary cannot be read, and for app builds and reports. A scanner
+   * run known only by its build id is found in the newest SCORE_SCAN_LIST_PAGES of the scan
+   * list first, which knows a scan's latest run only: an earlier run read by its link, or a
+   * scan older than those pages, has no score here.
+   */
+  async score(source: IssueSource): Promise<ReportScore | undefined> {
+    const q = encodeURIComponent;
+    let url: string;
+    switch (source.kind) {
+      case "scanBuild":
+        try {
+          return await this.score(
+            await this.findScanRun(source, SCORE_SCAN_LIST_PAGES),
+          );
+        } catch {
+          return undefined;
+        }
+      case "scan":
+        url = `${apiBase()}/website-scanner/v1/scans/${q(source.scanId)}/scan_runs/${q(source.scanRunId)}`;
+        break;
+      case "build":
+        url = `${apiBase()}/automated-tests/v1/builds/${q(source.buildId)}`;
+        break;
+      case "workflow":
+        url = `${apiBase()}/workflow-analyzer/v1/reports/${q(source.reportId)}`;
+        break;
+      default:
+        return undefined;
+    }
+    try {
+      return parseScore((await this.getData(url))?.scoreData);
+    } catch {
+      return undefined;
+    }
   }
 
   /**
@@ -716,15 +999,122 @@ export class AccessibilityReportFetcher {
     }
   }
 
+  /** A Workflow Analyzer report's start and the pages it scanned, from its summary. */
+  private async workflowReportPages(
+    reportId: string,
+  ): Promise<{ time?: string; pages: string[] } | undefined> {
+    const summary = (
+      await this.getData(
+        `${apiBase()}/workflow-analyzer/v1/reports/${encodeURIComponent(reportId)}`,
+      )
+    )?.summary;
+    if (!summary) return undefined;
+    const rows: { url?: unknown }[] = summary.issueCount?.issueCountByUrl ?? [];
+    return {
+      time: summary.time,
+      pages: rows
+        .map((row) => row?.url)
+        .filter((url): url is string => typeof url === "string"),
+    };
+  }
+
+  /**
+   * The newest Workflow Analyzer report before this one that scanned one of its pages, or
+   * else one on its site; undefined when none is among the account's newest reports.
+   */
+  async previousWorkflowReport(
+    reportId: string,
+  ): Promise<EarlierWorkflowReport | undefined> {
+    const own = await this.workflowReportPages(reportId);
+    if (!own?.pages.length) return undefined;
+    // Newest first: the completed reports listed after this one are earlier.
+    const earlier: string[] = [];
+    let reached = false;
+    let nextPage: string | undefined;
+    for (
+      let page = 0;
+      page < MAX_WORKFLOW_LIST_PAGES &&
+      earlier.length < MAX_WORKFLOW_CANDIDATES;
+      page++
+    ) {
+      const data = await this.getData(
+        `${apiBase()}/workflow-analyzer/v1/reports?limit=${WORKFLOW_LIST_PAGE_SIZE}${
+          nextPage ? `&next_page=${encodeURIComponent(nextPage)}` : ""
+        }`,
+      );
+      for (const row of data?.reports ?? []) {
+        if (String(row.id) === reportId) reached = true;
+        else if (reached && row.status === "completed") {
+          earlier.push(String(row.id));
+        }
+      }
+      if (!data?.pagination?.hasNext || !data.pagination.nextPage) break;
+      nextPage = data.pagination.nextPage;
+    }
+    const pages = new Set(own.pages.map(samePage));
+    const sites = new Set(
+      own.pages.map(siteOf).filter((site) => site !== undefined),
+    );
+    const onSite = (url: string) => {
+      const site = siteOf(url);
+      return site !== undefined && sites.has(site);
+    };
+    const started = (time?: string) => Date.parse(time ?? "");
+    let sameSite: EarlierWorkflowReport | undefined;
+    const candidates = earlier.slice(0, MAX_WORKFLOW_CANDIDATES);
+    for (let i = 0; i < candidates.length; i += WORKFLOW_SUMMARY_BATCH) {
+      const batch = candidates.slice(i, i + WORKFLOW_SUMMARY_BATCH);
+      const summaries = await Promise.all(
+        batch.map((id) => this.workflowReportPages(id)),
+      );
+      for (const [j, summary] of summaries.entries()) {
+        if (!summary || started(summary.time) >= started(own.time)) continue;
+        const report = {
+          reportId: batch[j],
+          time: summary.time,
+          link: `${dashboard()}/workflow-analyzer/report?ids=${encodeURIComponent(batch[j])}`,
+        };
+        if (summary.pages.some((url) => pages.has(samePage(url)))) {
+          return { ...report, samePage: true };
+        }
+        if (!sameSite && summary.pages.some(onSite)) {
+          sameSite = { ...report, samePage: false };
+        }
+      }
+    }
+    return sameSite;
+  }
+
+  /**
+   * When the run or build behind a report started, as its API writes it (ISO 8601), or
+   * undefined when it cannot be read.
+   */
+  async reportStartedAt(source: IssueSource): Promise<string | undefined> {
+    try {
+      switch (source.kind) {
+        case "build":
+          return (await this.webBuild(source.buildId))?.startedAt;
+        case "scan":
+          return (await this.scanRuns(source.scanId)).runs.find(
+            (run) => String(run.id) === source.scanRunId,
+          )?.scanDate;
+        case "workflow":
+          return (
+            await this.getData(
+              `${apiBase()}/workflow-analyzer/v1/reports/${encodeURIComponent(source.reportId)}`,
+            )
+          )?.summary?.time;
+        default:
+          return undefined;
+      }
+    } catch {
+      return undefined;
+    }
+  }
+
   private async buildStatus(buildId: string): Promise<string | undefined> {
     const q = encodeURIComponent;
-    const project =
-      this.webBuildProjects.get(buildId) ??
-      (
-        await this.getData(
-          `${apiBase()}/automated-tests/v1/builds/${q(buildId)}`,
-        )
-      )?.projectName;
+    const project = (await this.webBuild(buildId))?.projectName;
     if (!project) return undefined;
     let nextPage: string | undefined;
     for (let page = 0; page < MAX_BUILD_LIST_PAGES; page++) {
@@ -739,6 +1129,178 @@ export class AccessibilityReportFetcher {
       nextPage = data.pagination.next_page;
     }
     return undefined;
+  }
+
+  private rememberWebBuild(buildId: string, overview: any): WebBuild {
+    const build: WebBuild = {
+      buildId,
+      name: overview.name,
+      projectName: overview.projectName,
+      buildNumber: overview.buildNumber,
+      startedAt: overview.time,
+    };
+    this.webBuilds.set(buildId, build);
+    return build;
+  }
+
+  /** An Automated Tests build's name, project, number and start, from its overview. */
+  async webBuild(buildId: string): Promise<WebBuild | undefined> {
+    const known = this.webBuilds.get(buildId);
+    if (known) return known;
+    const overview = await this.getData(
+      `${apiBase()}/automated-tests/v1/builds/${encodeURIComponent(buildId)}`,
+    );
+    return overview ? this.rememberWebBuild(buildId, overview) : undefined;
+  }
+
+  /**
+   * The run before a build that the compare API would pick: the newest earlier build with
+   * the same name in its project whose accessibility run completed (`failed` in the build
+   * list is one that completed with no test cases). Found in the project's newest builds.
+   */
+  async previousWebBuild(
+    build: WebBuild,
+  ): Promise<(WebBuild & { status: string }) | undefined> {
+    if (!build.projectName) return undefined;
+    const q = encodeURIComponent;
+    let passed = false;
+    let nextPage: string | undefined;
+    for (let page = 0; page < MAX_BUILD_LIST_PAGES; page++) {
+      const data = await this.getData(
+        `${apiBase()}/automated-tests/v1/builds?project_name=${q(build.projectName)}&limit=100${
+          nextPage ? `&next_page=${q(nextPage)}` : ""
+        }`,
+      );
+      for (const row of data?.builds ?? []) {
+        if (row.id === build.buildId) passed = true;
+        else if (
+          passed &&
+          row.name === build.name &&
+          (row.status === "completed" || row.status === "failed")
+        ) {
+          return {
+            buildId: row.id,
+            name: row.name,
+            projectName: build.projectName,
+            buildNumber: row.buildNumber,
+            startedAt: row.time,
+            status: row.status,
+          };
+        }
+      }
+      if (!data?.pagination?.has_next || !data.pagination.next_page) break;
+      nextPage = data.pagination.next_page;
+    }
+    return undefined;
+  }
+
+  /**
+   * Two builds of one build name and project, compared by the Automated Tests compare API
+   * as the dashboard compares them: `newReport` against `baseReport`, or against the run
+   * before it when no base is given. The API takes them in that order and does not check it.
+   * The counts are the API's; each list holds up to `listLimit` issues, read from the first
+   * page and, for a list that page does not cover, a page of that list alone. The API refuses
+   * builds of different names or projects, builds over its issue-count threshold and calls
+   * that outlast its 30 s budget; any refusal is handed back in its words.
+   */
+  async compareWebBuilds(
+    newReport: string,
+    baseReport: string | undefined,
+    listLimit: number,
+  ): Promise<WebBuildComparison | WebCompareRefusal> {
+    const call = async (
+      params: Record<string, string>,
+    ): Promise<any | WebCompareRefusal> => {
+      const url = `${apiBase()}/automated-tests/v1/builds/compare/issues?${new URLSearchParams(params)}`;
+      let resp;
+      try {
+        resp = await apiClient.get({
+          url,
+          headers: this.authHeaders(),
+          raise_error: false,
+          timeout: WEB_COMPARE_TIMEOUT_MS,
+        });
+      } catch (error) {
+        const timedOut = /timeout|ECONNABORTED/i.test(
+          error instanceof Error
+            ? `${error.message} ${(error as any).code}`
+            : "",
+        );
+        return {
+          refused: timedOut
+            ? `no answer within ${WEB_COMPARE_TIMEOUT_MS / 1000} s`
+            : error instanceof Error
+              ? error.message
+              : "the request failed",
+        };
+      }
+      const body = resp.data;
+      if (resp.ok && body?.data?.summary) return body.data;
+      const reason =
+        (typeof body?.message === "string" && body.message) ||
+        [body?.error].flat().filter(Boolean).join("; ") ||
+        `HTTP ${resp.status}`;
+      return {
+        refused: reason,
+        ...(resp.status === 404 && /no previous completed run/i.test(reason)
+          ? { noPrevious: true as const }
+          : {}),
+      };
+    };
+
+    const first = await call({
+      newReport,
+      ...(baseReport ? { baseReport } : {}),
+      limit: String(WEB_COMPARE_PAGE),
+    });
+    if ("refused" in first) return first;
+    const summary = first.summary;
+    const counts: Record<CompareStatus, number> = {
+      new: Number(summary.newIssues) || 0,
+      retained: Number(summary.retainedIssues) || 0,
+      resolved: Number(summary.resolvedIssues) || 0,
+    };
+    const base = comparedBuild(summary.baseReport);
+    const rowsOf = (data: any, status: CompareStatus) =>
+      (data?.issues ?? [])
+        .filter((row: any) => row?.status === status)
+        .map(comparedIssue);
+    const issues = {} as Record<CompareStatus, RunIssue[]>;
+    for (const status of COMPARE_STATUSES) {
+      issues[status] = rowsOf(first, status);
+    }
+    // The first page runs new, then still open, then resolved: a list it cuts short is read
+    // on its own, against the base the first call settled on.
+    const short = COMPARE_STATUSES.filter(
+      (status) => issues[status].length < Math.min(counts[status], listLimit),
+    );
+    const pages = await Promise.all(
+      short.map((status) =>
+        call({
+          newReport,
+          baseReport: base.buildId ?? baseReport ?? "",
+          status,
+          limit: String(Math.max(10, Math.min(listLimit, WEB_COMPARE_PAGE))),
+        }),
+      ),
+    );
+    for (const [i, status] of short.entries()) {
+      const page = pages[i];
+      if ("refused" in page) return page;
+      issues[status] = rowsOf(page, status);
+    }
+    for (const status of COMPARE_STATUSES) {
+      issues[status] = sortBySeverity(issues[status].slice(0, listLimit));
+    }
+    return {
+      base: {
+        ...base,
+        autoResolved: Boolean(summary.baseReport?.autoResolved),
+      },
+      after: comparedBuild(summary.newReport),
+      counts,
+      issues,
+    };
   }
 
   /** The `data` of a successful API response, or undefined. */

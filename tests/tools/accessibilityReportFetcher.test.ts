@@ -12,9 +12,14 @@ import {
   ExportPendingError,
   IssueSource,
   MAX_SCAN_LIST_PAGES,
+  SCORE_SCAN_LIST_PAGES,
   reportExports,
   MAX_REPORT_EXPORTS,
+  foundScanRuns,
 } from "../../src/tools/accessiblity-utils/report-fetcher.js";
+
+// Runs found by build id are cached for the process; each test starts without them.
+beforeEach(() => foundScanRuns.clear());
 
 const get = apiClient.get as Mock;
 const API = "https://api-accessibility.browserstack.com/api";
@@ -151,6 +156,19 @@ describe("AccessibilityReportFetcher.sourceFromReportUrl", () => {
       `${API}/website-scanner/v1/scans`,
       `${API}/website-scanner/v1/scans?nextPage=tok2`,
     ]);
+  });
+
+  it("remembers the run a link's build id names, so a second lookup does not walk the list again", async () => {
+    get
+      .mockResolvedValueOnce(scansPage([scan(1, "other", "aaa", 11)], "tok2"))
+      .mockResolvedValueOnce(scansPage([scan(1234, "checkout fix", "bbb", 5678)]));
+
+    const first = await fetcher().findScanRun(linkRun("checkout fix", "bbb"));
+    get.mockClear();
+    const again = await fetcher().findScanRun(linkRun("checkout fix", "bbb"));
+
+    expect(again).toEqual(first);
+    expect(get).not.toHaveBeenCalled();
   });
 
   it("names the scan when the link is to one of its earlier runs", async () => {
@@ -471,6 +489,47 @@ describe("AccessibilityReportFetcher.getReportLink on a large report", () => {
     expect(urls().filter((u) => u.includes("scan_run_id="))).toHaveLength(2);
   });
 
+  it("does not keep the task of an export started while the report is processing", async () => {
+    get.mockResolvedValueOnce(ok({ task_id: "t:1", message: "started" }));
+    get.mockResolvedValue(pending);
+    const first = fetcher().getReportLink(SOURCE, { stillProcessing: true });
+    const pendingFirst = expect(first).rejects.toBeInstanceOf(ExportPendingError);
+    await vi.advanceTimersByTimeAsync(EXPORT_WAIT_MS + 10_000);
+    await pendingFirst;
+
+    // Once the report has finished, the next call starts a new export instead of taking
+    // the snapshot that one was making as final.
+    get.mockReset();
+    get
+      .mockResolvedValueOnce(ok({ task_id: "t:2", message: "started" }))
+      .mockResolvedValueOnce(ok({ reportLink: "https://csv2?Expires=9999999999" }));
+    await expect(fetcher().getReportLink(SOURCE)).resolves.toBe("https://csv2?Expires=9999999999");
+    expect(urls()[0]).toBe(
+      "https://api-accessibility.browserstack.com/api/website-scanner/v1/scans/1234/scan_runs/issues?scan_run_id=5678",
+    );
+    expect(urls().some((u) => u.includes("task_id=t%3A1"))).toBe(false);
+  });
+
+  it("reuses a run read by its build id for 5 minutes at most, as its processing status is not checked", async () => {
+    const BY_BUILD_ID: IssueSource = { kind: "scanBuild", thBuildId: BUILD_ID };
+    const expires = Math.floor(Date.now() / 1000) + 12 * 3600;
+    get
+      .mockResolvedValueOnce(ok({ task_id: "t:1", message: "started" }))
+      .mockResolvedValueOnce(ok({ reportLink: `https://csv?Expires=${expires}` }));
+
+    await fetcher().getReportLink(BY_BUILD_ID);
+    vi.setSystemTime(Date.now() + 4 * 60 * 1000);
+    await expect(fetcher().getReportLink(BY_BUILD_ID)).resolves.toBe(`https://csv?Expires=${expires}`);
+    expect(get).toHaveBeenCalledTimes(2);
+
+    vi.setSystemTime(Date.now() + 2 * 60 * 1000);
+    get
+      .mockResolvedValueOnce(ok({ task_id: "t:2", message: "started" }))
+      .mockResolvedValueOnce(ok({ reportLink: "https://csv2?Expires=9999999999" }));
+    await expect(fetcher().getReportLink(BY_BUILD_ID)).resolves.toBe("https://csv2?Expires=9999999999");
+    expect(get).toHaveBeenCalledTimes(4);
+  });
+
   it("remembers a bounded number of reports' exports", async () => {
     get.mockResolvedValue(ok({ reportLink: "https://csv?Expires=9999999999" }));
 
@@ -562,5 +621,100 @@ describe("AccessibilityReportFetcher scan run history", () => {
       resolvedIssues: 5,
     });
     expect(get.mock.calls[0][0].url).toBe(`${API}/website-scanner/v1/scans/1234/scan_runs/30`);
+  });
+});
+
+describe("AccessibilityReportFetcher.score", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  // As the API returns it (scan 4320391 run 2442237): the bare severity is the share of points lost.
+  const SCORE_DATA = {
+    score: 52,
+    impact: {
+      critical: 19, criticalPassed: 5, criticalFailed: 3,
+      serious: 27, seriousPassed: 14, seriousFailed: 6,
+      moderate: 2, moderatePassed: 5, moderateFailed: 1,
+      minor: 0, minorPassed: 2, minorFailed: 0,
+    },
+  };
+  const SCORE = {
+    score: 52,
+    severities: [
+      { severity: "critical", lost: 19, passed: 5, failed: 3 },
+      { severity: "serious", lost: 27, passed: 14, failed: 6 },
+      { severity: "moderate", lost: 2, passed: 5, failed: 1 },
+      { severity: "minor", lost: 0, passed: 2, failed: 0 },
+    ],
+  };
+
+  it.each<[string, IssueSource, string]>([
+    ["a Website Scanner run", { kind: "scan", scanId: "1234", scanRunId: "30" }, `${API}/website-scanner/v1/scans/1234/scan_runs/30`],
+    ["an Automated Tests build", { kind: "build", buildId: BUILD_ID }, `${API}/automated-tests/v1/builds/${BUILD_ID}`],
+    ["a Workflow Analyzer report", { kind: "workflow", reportId: "278684" }, `${API}/workflow-analyzer/v1/reports/278684`],
+  ])("reads %s's score from its summary", async (_name, source, url) => {
+    get.mockResolvedValueOnce(ok({ scoreData: SCORE_DATA }));
+
+    await expect(fetcher().score(source)).resolves.toEqual(SCORE);
+    expect(get.mock.calls[0][0].url).toBe(url);
+  });
+
+  it("has no score when the summary carries none: a plan without scores, or an unfinished report", async () => {
+    get.mockResolvedValueOnce(ok({ scoreData: {} }));
+    await expect(fetcher().score({ kind: "workflow", reportId: "1" })).resolves.toBeUndefined();
+
+    get.mockResolvedValueOnce(ok({ status: "completed" }));
+    await expect(fetcher().score({ kind: "scan", scanId: "1", scanRunId: "2" })).resolves.toBeUndefined();
+  });
+
+  it("has no score when the summary cannot be read", async () => {
+    get.mockResolvedValueOnce(failed(404, ["Scan run not found"]));
+    await expect(fetcher().score({ kind: "scan", scanId: "1", scanRunId: "2" })).resolves.toBeUndefined();
+
+    get.mockRejectedValueOnce(new Error("socket hang up"));
+    await expect(fetcher().score({ kind: "build", buildId: BUILD_ID })).resolves.toBeUndefined();
+  });
+
+  it("finds a scanner run known only by its build id in the scan list, then reads its score", async () => {
+    get
+      .mockResolvedValueOnce(
+        ok({
+          scans: [{ id: 4320391, name: "home", scanUrl: `https://accessibility.browserstack.com/site-scanner/projects/home/builds?thBuildId=${BUILD_ID}`, lastScanDetails: { scanRunId: 2442237 } }],
+          pagination: { hasNext: false },
+        }),
+      )
+      .mockResolvedValueOnce(ok({ scoreData: SCORE_DATA }));
+
+    await expect(fetcher().score({ kind: "scanBuild", thBuildId: BUILD_ID })).resolves.toEqual(SCORE);
+    expect(get.mock.calls[1][0].url).toBe(`${API}/website-scanner/v1/scans/4320391/scan_runs/2442237`);
+  });
+
+  it("has no score for a scanner build id the scan list does not have", async () => {
+    get.mockResolvedValueOnce(ok({ scans: [], pagination: { hasNext: false } }));
+
+    await expect(fetcher().score({ kind: "scanBuild", thBuildId: BUILD_ID })).resolves.toBeUndefined();
+    expect(get).toHaveBeenCalledTimes(1);
+  });
+
+  it("looks for a scanner run's score in the newest 2 pages of the scan list only", async () => {
+    // A link to an earlier run is never in the list, which shows each scan's latest run only:
+    // a full walk (~1.2 s a page) would hold up the issues read with it, on every first page.
+    const page = (n: number) =>
+      ok({
+        scans: [{ id: n, name: `scan ${n}`, scanUrl: `https://accessibility.browserstack.com/site-scanner/projects/p/builds?thBuildId=latest-${n}`, lastScanDetails: { scanRunId: n } }],
+        pagination: { hasNext: true, nextPage: `p${n + 1}` },
+      });
+    get.mockResolvedValueOnce(page(1)).mockResolvedValueOnce(page(2));
+
+    await expect(fetcher().score({ kind: "scanBuild", thBuildId: "an-earlier-run" })).resolves.toBeUndefined();
+    expect(get).toHaveBeenCalledTimes(SCORE_SCAN_LIST_PAGES);
+    expect(SCORE_SCAN_LIST_PAGES).toBeLessThan(MAX_SCAN_LIST_PAGES);
+  });
+
+  it.each<[string, IssueSource]>([
+    ["an app build", { kind: "appBuild", buildId: "app-1" }],
+    ["an app report", { kind: "appReport", reportId: "9" }],
+  ])("does not look for a score on %s", async (_name, source) => {
+    await expect(fetcher().score(source)).resolves.toBeUndefined();
+    expect(get).not.toHaveBeenCalled();
   });
 });

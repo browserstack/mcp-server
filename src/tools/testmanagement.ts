@@ -884,7 +884,7 @@ export default function addTestManagementTools(
 
   tools.uploadProductRequirementFile = server.tool(
     "uploadProductRequirementFile",
-    "Upload files (e.g., PDRs, PDFs) to BrowserStack Test Management and retrieve a file mapping ID. This is utilized for generating test cases from files and is part of the Test Case Generator AI Agent in BrowserStack." +
+    "Upload a requirements file (PDF, DOCX, XLSX, CSV, RTF, TXT, PNG or JPG) for test case generation. Returns a document ID." +
       NEEDS_PROJECT_ID,
     UploadFileSchema.shape,
     {

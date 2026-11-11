@@ -24,7 +24,44 @@ const lastRow = () =>
 describe("telemetry by the account's region", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it.each(["eu", "in", "unknown"])(
+  it("keeps only usage fields and the error text when the region is unknown", () => {
+    withAccountRegion("unknown", () =>
+      trackMCP("invokeCapability", clientInfo, new Error("boom"), config, {
+        capability: "listTestRuns",
+        change_summary: "close the checkout regression run",
+        search_query: "checkout runs",
+        feedback_message: "it failed",
+      }),
+    );
+    const row = lastRow();
+    expect(row).toMatchObject({
+      error_type: "Error",
+      error_message: "boom",
+      capability: "listTestRuns",
+    });
+    for (const field of ["change_summary", "search_query", "feedback_message"])
+      expect(row).not.toHaveProperty(field);
+  });
+
+  it("keeps the error text of a returned failure when the region is unknown", async () => {
+    await withAccountRegion("unknown", () =>
+      withToolCall(
+        "listTestCases",
+        () => clientInfo,
+        config,
+        async () => ({
+          content: [{ type: "text", text: "Project PR-1 not found" }],
+          isError: true,
+        }),
+      ),
+    );
+    expect(lastRow()).toMatchObject({
+      outcome: "error_result",
+      error_message: "Project PR-1 not found",
+    });
+  });
+
+  it.each(["eu", "in"])(
     "drops free text but keeps usage fields for a %s account",
     (region) => {
       withAccountRegion(region as any, () =>
@@ -57,7 +94,7 @@ describe("telemetry by the account's region", () => {
     },
   );
 
-  it.each(["eu", "in", "unknown"])(
+  it.each(["eu", "in"])(
     "drops the error text of a returned failure for a %s account",
     async (region) => {
       await withAccountRegion(region as any, () =>

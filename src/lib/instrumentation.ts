@@ -102,11 +102,16 @@ function forDataRegion(
   account: AccountRegion | undefined,
 ): MCPEventPayload["event_properties"] {
   if (!isRestrictedRegion(account)) return props;
+  // Most accounts whose region can't be confirmed are US accounts, so their error text
+  // is kept to diagnose the failure.
+  const keepsErrorText = account === "unknown";
   return Object.fromEntries(
     Object.entries(props).filter(
       // A product name the agent typed is free text, so only a known product is kept.
       ([key, value]) =>
-        USAGE_FIELDS.has(key) && (key !== "product" || isKnownProduct(value)),
+        (USAGE_FIELDS.has(key) &&
+          (key !== "product" || isKnownProduct(value))) ||
+        (keepsErrorText && key === "error_message"),
     ),
   ) as MCPEventPayload["event_properties"];
 }

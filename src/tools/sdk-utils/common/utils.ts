@@ -12,6 +12,8 @@ import {
 } from "./types.js";
 import { IMPORTANT_SETUP_WARNING } from "./index.js";
 import { PackageJsonVersion } from "../../../index.js";
+import { CallerError } from "../../../lib/error.js";
+import { markCallerFault } from "../../../lib/upstream-status.js";
 
 export function checkPercyIntegrationSupport(input: {
   integrationType: string;
@@ -126,6 +128,7 @@ export function percyUnsupportedResult(
 ): CallToolResult {
   const defaultMessage = `Percy ${integrationType} integration is not supported for this configuration.`;
 
+  markCallerFault();
   return {
     content: [
       {
@@ -143,7 +146,7 @@ export function validatePercyPathandFolders(input: any): void {
   const hasFilePaths = input.filePaths && input.filePaths.length > 0;
 
   if (!hasFolderPaths && !hasFilePaths) {
-    throw new Error(
+    throw new CallerError(
       "Please provide either:\n" +
         "• folderPaths: Array of directory paths containing test files\n" +
         "• filePaths: Array of specific test file paths\n\n" +

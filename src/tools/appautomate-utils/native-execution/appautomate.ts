@@ -12,6 +12,7 @@ import {
 } from "../../../lib/upload-validator.js";
 import appConfig from "../../../config.js";
 import { getRegionalHost } from "../../../lib/regional-host.js";
+import { CallerError } from "../../../lib/error.js";
 
 interface Device {
   device: string;
@@ -40,7 +41,7 @@ export function findMatchingDevice(
     const availableDevices = [
       ...new Set(devices.map((d) => d.display_name)),
     ].join(", ");
-    throw new Error(
+    throw new CallerError(
       `No devices found matching "${deviceName}". Available devices: ${availableDevices}`,
     );
   }
@@ -53,7 +54,7 @@ export function findMatchingDevice(
     const suggestions = [...new Set(matches.map((d) => d.display_name))].join(
       ", ",
     );
-    throw new Error(
+    throw new CallerError(
       `Alternative devices found: ${suggestions}. Please select one of these exact device names.`,
     );
   }
@@ -85,7 +86,7 @@ export function resolveVersion(
 
   const match = versions.find((v) => v === requestedVersion);
   if (!match) {
-    throw new Error(
+    throw new CallerError(
       `Version "${requestedVersion}" not found. Available versions: ${versions.join(", ")}`,
     );
   }
@@ -112,29 +113,33 @@ export function validateArgs(args: {
   } = args;
 
   if (!desiredPlatform || !desiredPhone) {
-    throw new Error(
+    throw new CallerError(
       "Missing required arguments: desiredPlatform and desiredPhone are required",
     );
   }
 
   if (!desiredPlatformVersion) {
-    throw new Error(
+    throw new CallerError(
       "Missing required arguments: desiredPlatformVersion is required",
     );
   }
 
   if (!appPath && !browserstackAppUrl) {
-    throw new Error("Either appPath or browserstackAppUrl must be provided");
+    throw new CallerError(
+      "Either appPath or browserstackAppUrl must be provided",
+    );
   }
 
   // Only validate app path format if appPath is provided
   if (appPath) {
     if (desiredPlatform === "android" && !appPath.endsWith(".apk")) {
-      throw new Error("You must provide a valid Android app path (.apk).");
+      throw new CallerError(
+        "You must provide a valid Android app path (.apk).",
+      );
     }
 
     if (desiredPlatform === "ios" && !appPath.endsWith(".ipa")) {
-      throw new Error("You must provide a valid iOS app path (.ipa).");
+      throw new CallerError("You must provide a valid iOS app path (.ipa).");
     }
   }
 }

@@ -6,6 +6,7 @@ import { apiClient } from "../../lib/apiClient.js";
 import globalConfig from "../../config.js";
 import { sessionApiHost } from "../../lib/regional-host.js";
 import { MAX_LOG_BYTES } from "../failurelogs-utils/utils.js";
+import { CallerError } from "../../lib/error.js";
 
 export const MAX_SCREENSHOT_BYTES = globalConfig.REMOTE_MCP
   ? 10 * 1024 * 1024
@@ -35,7 +36,7 @@ async function extractScreenshotUrls(
   });
 
   if (response.status === 413) {
-    throw new Error(
+    throw new CallerError(
       "The logs for this session are too large (over 5 MB) to find screenshots here. Open the session in the BrowserStack dashboard to view them.",
     );
   }
@@ -159,7 +160,7 @@ async function convertUrlsToBase64(urls: string[]): Promise<Screenshot[]> {
 
   const screenshots = results.filter((s): s is Screenshot => s !== null);
   if (urls.length > 0 && screenshots.length === 0) {
-    throw new Error(
+    throw new CallerError(
       "The screenshots in this session are too large (over 10 MB each) to fetch here. Open the session in the BrowserStack dashboard to view them.",
     );
   }

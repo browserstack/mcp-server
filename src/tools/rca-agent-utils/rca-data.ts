@@ -1,5 +1,6 @@
 import { RCAState, RCATestCase, RCAResponse } from "./types.js";
 import { getRegionalHost } from "../../lib/regional-host.js";
+import { trackedFetch } from "../../lib/upstream-status.js";
 
 interface ScanProgressContext {
   sendNotification: (notification: any) => Promise<void>;
@@ -105,7 +106,7 @@ async function fetchInitialRCA(
   const url = baseUrl.replace("{testId}", testId.toString());
 
   try {
-    const response = await fetch(url, { headers });
+    const response = await trackedFetch(url, { headers });
 
     if (!response.ok) {
       return {
@@ -181,7 +182,7 @@ async function pollRCAResults(
         inProgressCases.map(async (tc) => {
           try {
             const pollUrl = baseUrl.replace("{testId}", tc.id.toString());
-            const response = await fetch(pollUrl, { headers });
+            const response = await trackedFetch(pollUrl, { headers });
             if (!response.ok) {
               const errorText = await response.text();
               tc.state = RCAState.LOG_FETCH_ERROR;

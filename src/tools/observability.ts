@@ -6,6 +6,7 @@ import { getLatestO11YBuildInfo } from "../lib/api.js";
 import { trackMCP } from "../lib/instrumentation.js";
 import logger from "../logger.js";
 import { BrowserStackConfig } from "../lib/types.js";
+import { CallerError } from "../lib/error.js";
 
 export async function getFailuresInLastRun(
   buildName: string,
@@ -19,13 +20,13 @@ export async function getFailuresInLastRun(
   );
 
   if (!buildsData.data) {
-    throw new Error(
+    throw new CallerError(
       "No observability URL found in build data, this is likely because the build is not yet available on BrowserStack Observability.",
     );
   }
   const observabilityUrl = buildsData.data.observability_url;
   if (!observabilityUrl) {
-    throw new Error(
+    throw new CallerError(
       "No observability URL found in build data, this is likely because the build is not yet available on BrowserStack Observability.",
     );
   }

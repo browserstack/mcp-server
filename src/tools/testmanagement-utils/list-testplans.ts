@@ -6,6 +6,7 @@ import { getBrowserStackAuth } from "../../lib/get-auth.js";
 import { BrowserStackConfig } from "../../lib/types.js";
 import { getTMBaseURL } from "../../lib/tm-base-url.js";
 import { wrapUntrusted } from "../../lib/untrusted-content.js";
+import { markCallerFault } from "../../lib/upstream-status.js";
 
 /**
  * Schema for listing test plans in a BrowserStack Test Management project.
@@ -60,6 +61,7 @@ export async function listTestPlans(
 
     const data = resp.data;
     if (!data.success) {
+      markCallerFault();
       return {
         content: [
           {

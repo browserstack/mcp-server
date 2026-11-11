@@ -12,6 +12,7 @@ import { SessionType } from "../../lib/constants.js";
 import { sessionsListUrl } from "../automate-utils/list-session-ids.js";
 import { getAutomationBaseUrl } from "../rca-agent-utils/constants.js";
 import { getRegionalHost } from "../../lib/regional-host.js";
+import { CallerError } from "../../lib/error.js";
 
 export { MAX_APP_BUILD_LIST_PAGES } from "./app-report-fetcher.js";
 
@@ -229,7 +230,7 @@ function exportUrls(source: IssueSource): {
     }
     case "appBuild":
     case "appReport":
-      throw new Error(
+      throw new CallerError(
         "An App Accessibility build or report has no CSV export; its issues are read inline",
       );
   }
@@ -304,7 +305,7 @@ export class AccessibilityReportFetcher {
       /\/(workflow-analyzer|reports|assisted-test)\/report\/?$/,
     )?.[1];
     if (url && reportPage === "assisted-test") {
-      throw new Error(
+      throw new CallerError(
         "This is an Assisted Test report link: fetchAccessibilityIssues does not read Assisted Test reports. It reads Website Scanner runs, Automated Tests and App Accessibility builds, and Workflow Analyzer reports",
       );
     }
@@ -315,12 +316,12 @@ export class AccessibilityReportFetcher {
         .map((id) => id.trim())
         .filter(Boolean);
       if (!ids.length) {
-        throw new Error(
+        throw new CallerError(
           "This Workflow Analyzer link's ids parameter names no report. Pass the report's id as workflowReportId, or copy the link again",
         );
       }
       if (ids.length > 1) {
-        throw new Error(
+        throw new CallerError(
           `This link opens several Workflow Analyzer reports (${ids.length}). Pass the one to read as workflowReportId`,
         );
       }
@@ -356,7 +357,7 @@ export class AccessibilityReportFetcher {
         scanName: decodeURIComponent(scanName),
       };
     }
-    throw new Error(
+    throw new CallerError(
       "This link does not name a report the API can look up. Pass an Automated Tests or Website Scanner report link from the Accessibility dashboard (both carry thBuildId), a Workflow Analyzer report link (workflow-analyzer/report?ids=…), an App Accessibility build link (automated-tests/projects/…/builds/…), an Automate or App Automate build or session link, a scanner share link, an App Accessibility manual report link (report/…), or the ids: scanId with scanRunId, buildId, workflowReportId, or appReportId",
     );
   }
@@ -396,7 +397,7 @@ export class AccessibilityReportFetcher {
     // A Website Scanner run's build id (a scanner link's thBuildId) is a TestHub id too, which
     // only the scanner's issues route knows: the caller reads it there, and says so if not.
     if (orScanRun) return { kind: "scanBuild", thBuildId: source.buildId };
-    throw new Error(
+    throw new CallerError(
       `No Automated Tests (web) or App Accessibility build with id "${source.buildId}". Pass the id the BrowserStack SDK printed as "testhub id" at the end of the run (40 lowercase letters and digits), or the report's dashboard link as reportUrl`,
     );
   }
@@ -437,7 +438,7 @@ export class AccessibilityReportFetcher {
       raise_error: false,
     });
     if (resp.status === 404) {
-      throw new Error(`No Automate build with id ${automateBuildId}`);
+      throw new CallerError(`No Automate build with id ${automateBuildId}`);
     }
     if (!resp.ok) {
       throw new Error(
@@ -446,7 +447,9 @@ export class AccessibilityReportFetcher {
     }
     const sessionId = resp.data?.[0]?.automation_session?.hashed_id;
     if (!sessionId) {
-      throw new Error(`Automate build ${automateBuildId} has no sessions`);
+      throw new CallerError(
+        `Automate build ${automateBuildId} has no sessions`,
+      );
     }
     return sessionId;
   }
@@ -475,7 +478,7 @@ export class AccessibilityReportFetcher {
       ? resp.data?.build_uuid
       : undefined;
     if (!buildId) {
-      throw new Error(
+      throw new CallerError(
         `Automate session ${sessionId} is not linked to a BrowserStack SDK build (it was not run through the SDK, or belongs to another account), so it has no accessibility results`,
       );
     }
@@ -485,7 +488,7 @@ export class AccessibilityReportFetcher {
       raise_error: false,
     });
     if (build.status === 404) {
-      throw new Error(
+      throw new CallerError(
         `This Automate run belongs to build ${buildId}, which has no accessibility results: accessibility testing was not on for it`,
       );
     }
@@ -521,7 +524,7 @@ export class AccessibilityReportFetcher {
         if (thBuildIdOf(scan.scanUrl) === thBuildId) {
           const scanRunId = scan.lastScanDetails?.scanRunId;
           if (scanRunId === undefined) {
-            throw new Error(
+            throw new CallerError(
               `Website Scanner scan ${scan.id} has no completed run to read yet; wait for it to finish, or pass scanId and scanRunId`,
             );
           }
@@ -542,7 +545,7 @@ export class AccessibilityReportFetcher {
       nextPage = data.pagination.nextPage;
     }
     if (sameName !== undefined) {
-      throw new Error(
+      throw new CallerError(
         `This link is to an earlier run of scan "${scanName}" (scanId ${sameName}). A link resolves only to a scan's latest run; ask the user for that run's scanRunId and pass it with scanId ${sameName}, or read the latest run with compareWith: "previous" to compare it with the run before it`,
       );
     }
@@ -550,7 +553,7 @@ export class AccessibilityReportFetcher {
     const searched = nextPage
       ? ` among the most recent scans (${MAX_SCAN_LIST_PAGES} pages)`
       : "";
-    throw new Error(
+    throw new CallerError(
       `No Website Scanner scan${searched} matches this link. Pass scanId and scanRunId instead`,
     );
   }
@@ -593,7 +596,7 @@ export class AccessibilityReportFetcher {
         throw new ScanRunNotFoundError(source.thBuildId, routeMissing);
       }
       if (!initResp.ok || !initData?.success) {
-        throw new Error(startFailure(source, initResp.status, initData));
+        throw new CallerError(startFailure(source, initResp.status, initData));
       }
       taskId = initData.data.task_id;
     }
@@ -609,7 +612,7 @@ export class AccessibilityReportFetcher {
         reportResp.data;
       if (!reportData.success) {
         reportExports.delete(key);
-        throw new Error(`Failed to fetch report: ${reportData.error}`);
+        throw new CallerError(`Failed to fetch report: ${reportData.error}`);
       }
       const link = reportData.data?.reportLink;
       if (link) {

@@ -5,6 +5,7 @@ import {
 import { resolveVersion } from "../../../lib/version-resolver.js";
 import { customFuzzySearch } from "../../../lib/fuzzy.js";
 import { SDKSupportedBrowserAutomationFrameworkEnum } from "./types.js";
+import { CallerError } from "../../../lib/error.js";
 
 // ============================================================================
 // SHARED TYPES AND INTERFACES
@@ -310,7 +311,7 @@ export async function validateDevices(
         DEFAULTS.ios.browser,
       );
     } else {
-      throw new Error(`Unsupported platform: ${discriminator}`);
+      throw new CallerError(`Unsupported platform: ${discriminator}`);
     }
 
     validatedEnvironments.push(validatedEnv);
@@ -355,7 +356,7 @@ function validateDesktopEnvironment(
   // Use nested index for O(1) lookup
   const osVersionMap = osMap.get(validatedOSVersion);
   if (!osVersionMap) {
-    throw new Error(
+    throw new CallerError(
       `OS version "${validatedOSVersion}" not available for ${platform}`,
     );
   }
@@ -370,7 +371,7 @@ function validateDesktopEnvironment(
   // Use nested index for O(1) lookup
   const browserEntries = osVersionMap.get(validatedBrowser);
   if (!browserEntries || browserEntries.length === 0) {
-    throw new Error(
+    throw new CallerError(
       `Browser "${validatedBrowser}" not available for ${platform} ${validatedOSVersion}`,
     );
   }
@@ -414,7 +415,7 @@ function validateMobileEnvironment(
     5,
   );
   if (deviceMatches.length === 0) {
-    throw new Error(
+    throw new CallerError(
       `No ${platform} devices matching "${deviceName}". Available devices: ${platformEntries
         .map((d) => d.display_name || "unknown")
         .slice(0, 5)
@@ -430,7 +431,7 @@ function validateMobileEnvironment(
   // If no exact match, throw error instead of using fuzzy match
   if (!exactMatch) {
     const suggestions = deviceMatches.map((m) => m.display_name).join(", ");
-    throw new Error(
+    throw new CallerError(
       `Device "${deviceName}" not found exactly for ${platform}. Available similar devices: ${suggestions}. Please use the exact device name.`,
     );
   }
@@ -550,7 +551,9 @@ export async function validateAppAutomateDevices(
     );
 
     if (!platformGroup) {
-      throw new Error(`Platform "${platform}" not supported for App Automate`);
+      throw new CallerError(
+        `Platform "${platform}" not supported for App Automate`,
+      );
     }
 
     const platformDevices = platformGroup.devices;
@@ -608,7 +611,7 @@ export async function validateAppAutomateDevices(
         ? `Device "${deviceName}" not found for platform "${platform}".\nAvailable similar devices: ${suggestions}`
         : `Device "${deviceName}" not found for platform "${platform}".\nAvailable devices: ${fallbackDevices}`;
 
-      throw new Error(errorMessage);
+      throw new CallerError(errorMessage);
     }
 
     validatedDevices.push(validatedDevice);
@@ -633,7 +636,7 @@ function validateBrowserExact(
     return exactMatch;
   }
 
-  throw new Error(
+  throw new CallerError(
     `Browser "${requestedBrowser}" not found. Available options: ${availableBrowsers.join(", ")}`,
   );
 }

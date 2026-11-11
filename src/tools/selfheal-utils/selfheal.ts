@@ -45,6 +45,7 @@ import { getBrowserStackAuth } from "../../lib/get-auth.js";
 import { BrowserStackConfig } from "../../lib/types.js";
 import { apiClient } from "../../lib/apiClient.js";
 import { getRegionalHost, sessionApiHost } from "../../lib/regional-host.js";
+import { CallerError } from "../../lib/error.js";
 
 type SessionType = "automate" | "app-automate";
 
@@ -63,7 +64,7 @@ export async function fetchSelfHealingReportByBuild(
   config: BrowserStackConfig,
 ): Promise<SelfHealingReport> {
   if (!buildUuid) {
-    throw new Error("buildUuid is required");
+    throw new CallerError("buildUuid is required");
   }
 
   const authString = getBrowserStackAuth(config);

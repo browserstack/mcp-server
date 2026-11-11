@@ -17,6 +17,7 @@ import {
 import { getBrowserStackAuth } from "../../lib/get-auth.js";
 import { BrowserStackConfig } from "../../lib/types.js";
 import envConfig from "../../config.js";
+import { CallerError } from "../../lib/error.js";
 
 /**
  * Prepares local tunnel setup based on URL type
@@ -28,7 +29,7 @@ async function prepareLocalTunnel(
 ): Promise<boolean> {
   const isLocal = isLocalURL(url);
   if (isLocal && envConfig.REMOTE_MCP) {
-    throw new Error(
+    throw new CallerError(
       "Local URLs are not supported in this remote mcp. Please use a public URL.",
     );
   }
@@ -57,7 +58,7 @@ export async function startBrowserSession(
   const [username, password] = authString.split(":");
 
   if (!username || !password) {
-    throw new Error(
+    throw new CallerError(
       "BrowserStack credentials are not set. Please configure them in the server settings.",
     );
   }

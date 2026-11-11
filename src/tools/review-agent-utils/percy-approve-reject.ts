@@ -1,6 +1,7 @@
 import { BrowserStackConfig } from "../../lib/types.js";
 import { getBrowserStackAuth } from "../../lib/get-auth.js";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import { trackedFetch } from "../../lib/upstream-status.js";
 
 export async function approveOrDeclinePercyBuild(
   args: { buildId: string; action: "approve" | "unapprove" | "reject" },
@@ -24,7 +25,7 @@ export async function approveOrDeclinePercyBuild(
   };
 
   // Send request to Percy API
-  const response = await fetch("https://percy.io/api/v1/reviews", {
+  const response = await trackedFetch("https://percy.io/api/v1/reviews", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

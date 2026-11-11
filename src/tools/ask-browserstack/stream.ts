@@ -27,6 +27,7 @@ import { apiClient } from "../../lib/apiClient.js";
 import logger from "../../logger.js";
 import { AskError } from "./config.js";
 import type { AgentRequest, PermissionAsk } from "./types.js";
+import { trackedFetch } from "../../lib/upstream-status.js";
 
 /** One SSE frame, already parsed. `data` is whatever JSON the frame carried. */
 export interface StreamEvent {
@@ -197,7 +198,7 @@ export function fetchAgentStreamTransport(
         try {
           let response: Response;
           try {
-            response = await fetch(url, {
+            response = await trackedFetch(url, {
               method: "POST",
               headers: { ...headers, Accept: "text/event-stream" },
               body: JSON.stringify(body),

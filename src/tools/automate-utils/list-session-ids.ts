@@ -3,6 +3,7 @@ import { getBrowserStackAuth } from "../../lib/get-auth.js";
 import { BrowserStackConfig } from "../../lib/types.js";
 import { apiClient } from "../../lib/apiClient.js";
 import { getRegionalHost } from "../../lib/regional-host.js";
+import { CallerError } from "../../lib/error.js";
 
 export const DEFAULT_SESSION_LIST_LIMIT = 10;
 
@@ -114,7 +115,7 @@ export async function listSessionIds(
 ): Promise<SessionIdRecord[]> {
   const buildId = args.buildId.trim();
   if (!buildId) {
-    throw new Error("Hashed Automate/App Automate build ID is required");
+    throw new CallerError("Hashed Automate/App Automate build ID is required");
   }
 
   const authString = getBrowserStackAuth(config);

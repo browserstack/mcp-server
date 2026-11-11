@@ -6,6 +6,7 @@ import { getBrowserStackAuth } from "../../lib/get-auth.js";
 import { BrowserStackConfig } from "../../lib/types.js";
 import { getTMBaseURL } from "../../lib/tm-base-url.js";
 import { wrapUntrusted } from "../../lib/untrusted-content.js";
+import { markCallerFault } from "../../lib/upstream-status.js";
 
 /**
  * Schema for listing sub-test-plans under a parent test plan in a BrowserStack
@@ -64,6 +65,7 @@ export async function listSubTestPlans(
 
     const data = resp.data;
     if (!data.success) {
+      markCallerFault();
       return {
         content: [
           {

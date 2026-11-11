@@ -9,6 +9,9 @@ import globalConfig from "../config.js";
 import { redact } from "../tools/capability-registry/redact.js";
 import { isKnownProduct } from "../tools/capability-registry/config.js";
 import { accountRegion } from "./account-region.js";
+import { AxiosError } from "axios";
+import { HttpError } from "./error.js";
+import { UpstreamScope, withUpstreamScope } from "./upstream-status.js";
 import {
   AccountRegion,
   currentRegionScope,
@@ -20,6 +23,14 @@ const INSTRUMENTATION_ENDPOINT = "https://api.browserstack.com/sdk/v1/event";
 export type ClientInfo = { name?: string; version?: string };
 
 export type ToolOutcome = "ok" | "error_result" | "threw";
+
+/**
+ * Who a failed call is attributed to. `caller`: the input or account was rejected (bad
+ * parameter, 4xx). `upstream`: the product API failed or was unreachable (5xx, 408, no
+ * answer). `mcp`: this server failed (threw, programming error, registry fault).
+ * `unknown`: a returned error with no evidence either way.
+ */
+export type FailureClass = "caller" | "upstream" | "mcp" | "unknown";
 
 /**
  * Extra fields a caller may attach to its own row (the capability registry records what
@@ -51,6 +62,8 @@ interface MCPEventPayload {
     is_remote?: boolean;
     duration_ms?: number;
     outcome?: ToolOutcome;
+    failure_class?: FailureClass;
+    upstream_status?: number;
   } & MCPEventExtras;
 }
 
@@ -95,6 +108,7 @@ const USAGE_FIELDS = new Set([
   "coverage",
   "upstream_ok",
   "upstream_status",
+  "failure_class",
 ]);
 
 function forDataRegion(
@@ -233,9 +247,56 @@ function isErrorResult(result: unknown): boolean {
   );
 }
 
+/** The HTTP status an error carries; 0 when the request got no answer. */
+function statusOf(error: unknown): number | undefined {
+  if (error instanceof HttpError) return error.status;
+  if (error instanceof AxiosError) {
+    if (error.response) return error.response.status;
+    return error.request ? 0 : undefined;
+  }
+  // What Node's fetch rejects with when the request never got an answer.
+  if (error instanceof TypeError && error.message === "fetch failed") return 0;
+  return undefined;
+}
+
+// Registry refusals that are this server's fault; every other refusal is the caller's.
+const MCP_REFUSALS = new Set(["unexpected_error", "no_base_url"]);
+
+const PROGRAMMING_ERRORS = [TypeError, RangeError, ReferenceError, SyntaxError];
+
+/**
+ * Attributes a failed call. Evidence is read in order: the registry's refusal reason,
+ * an upstream outage, a programming error, a rejection of the caller's input
+ * (`CallerError`, `markCallerFault`), a 4xx, then whether the handler threw. A handler
+ * that knows better passes `failure_class` in its trackMCP extras, which wins.
+ */
+function failureClassOf(
+  outcome: ToolOutcome,
+  error: unknown,
+  status: number | undefined,
+  callerFault: boolean,
+  extras: MCPEventExtras | undefined,
+): FailureClass | undefined {
+  if (outcome === "ok" && error === undefined) return undefined;
+  const reason = extras?.refusal_reason;
+  if (typeof reason === "string") {
+    if (MCP_REFUSALS.has(reason)) return "mcp";
+    return reason === "token_mint_failed" ? "upstream" : "caller";
+  }
+  if (status !== undefined) {
+    if (status === 0 || status === 408 || status >= 500) return "upstream";
+  }
+  if (PROGRAMMING_ERRORS.some((kind) => error instanceof kind)) return "mcp";
+  if (callerFault) return "caller";
+  if (status !== undefined && status >= 400) return "caller";
+  if (outcome === "threw") return "mcp";
+  return "unknown";
+}
+
 /**
  * Runs a tool handler and writes one MCPInstrumentation row when it settles: success,
- * duration_ms, outcome (ok / error_result / threw), error fields on failure.
+ * duration_ms, outcome (ok / error_result / threw), error fields on failure, the last
+ * upstream_status seen, and on a failure the failure_class it is attributed to.
  */
 export async function withToolCall<T>(
   toolName: string,
@@ -244,11 +305,14 @@ export async function withToolCall<T>(
   fn: () => Promise<T> | T,
 ): Promise<T> {
   const ctx: CallContext = { toolName, clientInfo: {}, config };
+  const upstream: UpstreamScope = {};
   const startedAt = performance.now();
   let outcome: ToolOutcome = "ok";
   let errorText: string | undefined;
   try {
-    const result = await callContext.run(ctx, fn);
+    const result = await withUpstreamScope(upstream, () =>
+      callContext.run(ctx, fn),
+    );
     if (isErrorResult(result)) {
       outcome = "error_result";
       // A returned failure never sets ctx.error, so the reason is read off the result.
@@ -268,6 +332,18 @@ export async function withToolCall<T>(
       } catch {
         /* client info is optional */
       }
+      // The error the handler reported is the cause; the last status seen is the fallback.
+      const upstreamStatus =
+        typeof ctx.extras?.upstream_status === "number"
+          ? ctx.extras.upstream_status
+          : (statusOf(ctx.error) ?? upstream.status);
+      const failureClass = failureClassOf(
+        outcome,
+        ctx.error,
+        upstreamStatus,
+        upstream.callerFault === true,
+        ctx.extras,
+      );
       const event: MCPEventPayload = {
         event_type: "MCPInstrumentation",
         event_properties: {
@@ -275,6 +351,10 @@ export async function withToolCall<T>(
           success: ctx.error === undefined && outcome !== "threw",
           duration_ms: Math.max(0, Math.round(performance.now() - startedAt)),
           outcome,
+          ...(upstreamStatus !== undefined
+            ? { upstream_status: upstreamStatus }
+            : {}),
+          ...(failureClass ? { failure_class: failureClass } : {}),
           ...(ctx.error !== undefined ? errorProperties(ctx.error) : {}),
           ...(outcome === "error_result" && ctx.error === undefined && errorText
             ? { error_message: errorText }

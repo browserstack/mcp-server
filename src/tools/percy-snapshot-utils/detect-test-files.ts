@@ -15,6 +15,7 @@ import {
 
 import { DetectionConfig } from "../percy-snapshot-utils/types.js";
 import logger from "../../logger.js";
+import { CallerError } from "../../lib/error.js";
 
 async function walkDir(
   dir: string,
@@ -120,7 +121,7 @@ export async function listTestFiles(
   }
 
   if (files.length === 0) {
-    throw new Error("No files found with the specified extensions");
+    throw new CallerError("No files found with the specified extensions");
   }
 
   const candidateFiles: Map<string, number> = new Map();

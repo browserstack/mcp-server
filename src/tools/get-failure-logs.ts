@@ -30,6 +30,8 @@ import {
   SessionType,
   SessionVideoLogType,
 } from "../lib/constants.js";
+import { CallerError } from "../lib/error.js";
+import { markCallerFault } from "../lib/upstream-status.js";
 
 type LogType = AutomateLogType | AppAutomateLogType;
 type SessionTypeValues = SessionType;
@@ -63,7 +65,7 @@ export async function getFailureLogs(
   const notes: string[] = [];
 
   if (!args.sessionId) {
-    throw new Error("Session ID is required");
+    throw new CallerError("Session ID is required");
   }
 
   const allTypes = [
@@ -141,6 +143,7 @@ export async function getFailureLogs(
   }
 
   if (validLogTypes.length === 0) {
+    markCallerFault();
     return {
       content: [
         {

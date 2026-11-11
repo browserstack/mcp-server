@@ -5,6 +5,7 @@ import {
 import { resolveVersion } from "../../lib/version-resolver.js";
 import { customFuzzySearch } from "../../lib/fuzzy.js";
 import { DesktopSearchArgs, DesktopEntry } from "./types.js";
+import { CallerError } from "../../lib/error.js";
 
 export async function filterDesktop(
   args: DesktopSearchArgs,
@@ -37,7 +38,9 @@ export async function filterDesktop(
     (e) => e.browser_version === chosenBrowserVersion,
   );
   if (!finalEntry) {
-    throw new Error(`No entry for browser version "${args.browserVersion}".`);
+    throw new CallerError(
+      `No entry for browser version "${args.browserVersion}".`,
+    );
   }
 
   // Add notes if versions were adjusted
@@ -59,7 +62,7 @@ function getAllDesktopEntries(data: any): DesktopEntry[] {
 
 function filterByOS(entries: DesktopEntry[], os: string): DesktopEntry[] {
   const filtered = entries.filter((e) => e.os === os);
-  if (!filtered.length) throw new Error(`No OS entries for "${os}".`);
+  if (!filtered.length) throw new CallerError(`No OS entries for "${os}".`);
   return filtered;
 }
 
@@ -69,7 +72,8 @@ function filterByBrowser(
   os: string,
 ): DesktopEntry[] {
   const filtered = entries.filter((e) => e.browser === browser);
-  if (!filtered.length) throw new Error(`No browser "${browser}" on ${os}.`);
+  if (!filtered.length)
+    throw new CallerError(`No browser "${browser}" on ${os}.`);
   return filtered;
 }
 

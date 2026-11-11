@@ -7,6 +7,7 @@ import {
   getRegionalHost,
   isRegionalHostname,
 } from "../../lib/regional-host.js";
+import { CallerError } from "../../lib/error.js";
 
 /**
  * App Accessibility: the issues of a mobile app build run through App Automate with
@@ -746,7 +747,7 @@ export class AppAccessibilityApi {
       }
     }
     if (numbered.length === 1) return numbered[0].th_build_id;
-    throw new Error(
+    throw new CallerError(
       `No build ${build.number} of "${build.name}" is among the project's newest builds (${MAX_APP_BUILD_LIST_PAGES} pages). Pass the build id instead, as buildId: the BrowserStack SDK prints it as "testhub id" at the end of the run`,
     );
   }
@@ -782,7 +783,7 @@ export class AppAccessibilityApi {
     }
     const buildId = resp.ok ? resp.data?.build_uuid : undefined;
     if (!buildId) {
-      throw new Error(
+      throw new CallerError(
         `App Automate session ${sessionId} has no accessibility report: accessibility was not on for this run, or this is not an SDK (Appium) session. Run it again with accessibility on (browserstack.yml \`accessibility: true\`)`,
       );
     }
@@ -818,7 +819,7 @@ export class AppAccessibilityApi {
   private async buildOfNativeBuild(buildId: string): Promise<string> {
     const native = await this.nativeBuild(buildId);
     if (!native?.project) {
-      throw new Error(
+      throw new CallerError(
         `No session found for App Automate build ${buildId}, and it is not an Espresso or XCUITest build with a project, so it cannot be mapped to its accessibility report. Pass the build id the BrowserStack SDK printed as "testhub id" as buildId, or the build's App Accessibility dashboard link as reportUrl`,
       );
     }
@@ -832,7 +833,7 @@ export class AppAccessibilityApi {
 
     const name = await this.appAutomateBuildName(buildId);
     if (!name) {
-      throw new Error(
+      throw new CallerError(
         `App Automate build ${buildId} is not among the account's newest builds (${MAX_APP_AUTOMATE_BUILD_PAGES} pages of ${APP_AUTOMATE_BUILDS_PAGE_SIZE}), so its accessibility report cannot be found by name. Pass the build's App Accessibility dashboard link as reportUrl instead`,
       );
     }
@@ -841,7 +842,7 @@ export class AppAccessibilityApi {
       (started.find((row) => row.name === name)?.th_build_id ??
         (await this.findBuild(projectId, name, (row) => row.name === name)));
     if (!found) {
-      throw new Error(
+      throw new CallerError(
         `No App Accessibility build named "${name}" in project "${project}": accessibility was not on for this run. Run it again with \`accessibility: true\` in the Espresso/XCUITest build request`,
       );
     }
@@ -1052,7 +1053,7 @@ export class AppAccessibilityApi {
   ): Promise<AppManualReport> {
     const detail = await this.manualReport(reportId);
     if (!detail) {
-      throw new Error(
+      throw new CallerError(
         `No App Accessibility manual report with id "${reportId}". Pass the report's dashboard link (app-accessibility.browserstack.com/report/…) as reportUrl, or an id from the capability functions' list of manual App Accessibility reports`,
       );
     }
@@ -1132,7 +1133,7 @@ export class AppAccessibilityApi {
     const meta = await this.requireBuildMeta(buildId);
     const projectId = await this.projectId(meta.project_name);
     if (projectId === undefined) {
-      throw new Error(
+      throw new CallerError(
         `No App Accessibility project is named "${meta.project_name}", the project of build ${buildId}, so the build before it cannot be found here. Pass the earlier build's id or link as compareWith instead`,
       );
     }
@@ -1162,17 +1163,17 @@ export class AppAccessibilityApi {
     }
     // Stopping at the page limit is not the end of the list: say so rather than guess.
     if (!reached && more) {
-      throw new Error(
+      throw new CallerError(
         `App Accessibility build ${buildId} is not among its project's newest builds (${MAX_APP_BUILD_LIST_PAGES} pages), so the build before it cannot be found here. Pass the earlier build's id or link as compareWith instead`,
       );
     }
     if (!reached) {
-      throw new Error(
+      throw new CallerError(
         `App Accessibility build ${buildId} is not in the build list of its project ("${meta.project_name}"), so the build before it cannot be found here. Pass the earlier build's id or link as compareWith instead`,
       );
     }
     if (!justBefore && more) {
-      throw new Error(
+      throw new CallerError(
         `App Accessibility build ${buildId} is the last of its project's newest builds read (${MAX_APP_BUILD_LIST_PAGES} pages): the build before it is older than the newest builds read. Pass the earlier build's id or link as compareWith instead`,
       );
     }
@@ -1229,7 +1230,7 @@ export class AppAccessibilityApi {
   private async requireBuildMeta(buildId: string): Promise<AppBuildMeta> {
     const meta = await this.buildMeta(buildId);
     if (!meta) {
-      throw new Error(
+      throw new CallerError(
         `No App Accessibility build with id "${buildId}". Pass the id the BrowserStack SDK printed as "testhub id" at the end of the run, or the build's App Accessibility dashboard link as reportUrl`,
       );
     }

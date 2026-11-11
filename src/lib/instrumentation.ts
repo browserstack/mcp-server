@@ -102,8 +102,6 @@ function forDataRegion(
   account: AccountRegion | undefined,
 ): MCPEventPayload["event_properties"] {
   if (!isRestrictedRegion(account)) return props;
-  // Most accounts whose region can't be confirmed are US accounts, so their error text
-  // is kept to diagnose the failure.
   const keepsErrorText = account === "unknown";
   return Object.fromEntries(
     Object.entries(props).filter(

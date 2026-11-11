@@ -104,6 +104,15 @@ export function isConnectFailure(error: any): boolean {
   );
 }
 
+/**
+ * A body read as a stream, such as a file upload's form-data. The first try reads it even
+ * when the connection never opens, so a second try would send only what is left of it and
+ * then wait for the rest with no time limit.
+ */
+function isStreamBody(body: unknown): boolean {
+  return typeof (body as { pipe?: unknown } | undefined)?.pipe === "function";
+}
+
 // Utility to create HTTPS agent if needed (proxy/CA)
 function getAxiosAgent(): AxiosRequestConfig["httpsAgent"] | undefined {
   const proxyHost = config.browserstackLocalOptions.proxyHost;
@@ -196,9 +205,11 @@ class ApiClient {
         res = await fn(this.axiosAgent);
       } catch (error: any) {
         // A connection that never opened sent nothing, so one more try is safe even for a
-        // POST; a second failure is reported as before. Only a fast failure is retried.
+        // POST; a second failure is reported as before. Only a fast failure is retried, and
+        // never a stream body, which the first try has already used up.
         if (
           !isConnectFailure(error) ||
+          isStreamBody(config?.data) ||
           Date.now() - started >= CONNECT_RETRY_WINDOW_MS
         )
           throw error;

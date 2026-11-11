@@ -1,3 +1,4 @@
+import { Readable } from "node:stream";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // The hosted server failed calls with "connect ETIMEDOUT <IPv4>; connect ENETUNREACH <IPv6>"
@@ -47,6 +48,20 @@ describe("apiClient connect failures", () => {
 
     expect(res.data).toEqual({ ok: true });
     expect(m.post).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not try an upload again: its stream body was used up by the first try", async () => {
+    const FormData = (await import("form-data")).default;
+    const form = new FormData();
+    form.append("file", Readable.from([Buffer.from("app binary")]), "app.apk");
+    m.post
+      .mockRejectedValueOnce(connectFailure())
+      .mockResolvedValueOnce({ status: 200, data: { ok: true } });
+
+    await expect(
+      (await client()).post({ url: "https://api.example/upload", headers: form.getHeaders(), body: form }),
+    ).rejects.toMatchObject({ code: "ETIMEDOUT" });
+    expect(m.post).toHaveBeenCalledTimes(1);
   });
 
   it("reports the failure when the second try fails too", async () => {

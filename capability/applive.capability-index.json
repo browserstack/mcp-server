@@ -1521,7 +1521,7 @@
         "guidance": [
           "hide_keyboard already presses these keys on an iPhone when its plain call is refused — Done-type keys first, then Return — and reports each attempt. Call this directly to press exactly the key you choose: Return alone, or every key but Return when a submit must not happen.",
           "The key must EXIST on that keyboard or this returns the same 400: list the keyboard's keys with find_elements using class name XCUIElementTypeKey and read each with get_element_text, then pick from the keys that are really there. An iPad carries \"Hide keyboard\"; an iPhone keyboard of this kind usually offers only Return.",
-          "Several candidates may be listed in one call and it costs nothing, but it still fails when the keyboard carries none of them — measured with [\"Done\",\"done\",\"Hide keyboard\",\"Dismiss\"].",
+          "Several candidates may be listed in one call and it costs nothing, but it still fails when the keyboard carries none of them, so a set such as [\"Done\",\"done\",\"Hide keyboard\",\"Dismiss\"] is only as good as the keys that keyboard really has.",
           "PRESSING RETURN SUBMITS. An app that commits when the field stops being edited will commit however the keyboard is closed, so check the field afterwards rather than assuming only the keyboard moved.",
           "Confirm with is_keyboard_shown; on Android and on an iPad hide_keyboard closes it on its own."
         ],
@@ -1722,7 +1722,7 @@
         "intent": "Get the device screen size in pixels — use this to plan gesture coordinates, or as a cheap keep-alive so an idle session is not ended while deciding the next step.",
         "guidance": [
           "Call get_session once after the launch and pass its session_id, hostname, port and path to every session capability; they are where the session is driven, not query parameters. The first command on a session first brings its Appium session up — the device creates it when the endpoint's session list is read — and waits for that, up to five minutes, before sending the command once; a wait is reported under `readiness`. Nothing is sent twice. Later commands answer in a second or two.",
-          "On Android the height is the WHOLE screen including the status bar — 2340 on a Galaxy S24 whose usable area starts 91px down — so the top strip of that rectangle is not the app's. On iOS it is the app's window in points."
+          "On Android the height is the WHOLE screen including the status bar, so the top strip of that rectangle is not the app's — the usable area starts below it, by the status bar's height. On iOS it is the app's window in points."
         ],
         "path_params": [
           {
@@ -2911,7 +2911,7 @@
         "entity": "app_live_session",
         "intent": "Bring an app to the foreground, starting it if it is not running — use this to open the app under test, return to it after the home button, or switch to another installed app.",
         "guidance": [
-          "An App Live session runs Appium 1.x on both platforms — 1.22 with uiautomator2 on Android, 1.21 with XCUITest on iOS. Android's mobile: command list has no activateApp, terminateApp or queryAppState, so the mobile: form answers \"unknown command\" there and silently does nothing; iOS does have them. The classic /appium/device endpoint used here works on BOTH, so one wire shape serves the whole fleet. Confirmed on a Samsung Galaxy S23 (Android 13) and an iPhone 15 (iOS 17.5): state 4, terminate, state dropped, activate, state 4 again.",
+          "An App Live session runs Appium 1.x on both platforms — 1.22 with uiautomator2 on Android, 1.21 with XCUITest on iOS. Android's mobile: command list has no activateApp, terminateApp or queryAppState, so the mobile: form answers \"unknown command\" there and silently does nothing; iOS does have them. The classic /appium/device endpoint used here works on BOTH, so one wire shape serves the whole fleet.",
           "A package that is not installed fails rather than installing it, and the error quotes the adb command with the id in it — check the id against get_current_app before assuming the call is wrong, since a guessed package is the likelier fault.",
           "Launching an app that is already in the foreground does nothing and still reports success.",
           "To restart an app from a clean state, call terminate_app first and then this.",
@@ -2931,7 +2931,7 @@
             "name": "appId",
             "type": "string",
             "required": true,
-            "description": "The package name on Android, the bundle id on iOS — appId is the field name on both, checked on each platform (iOS takes bundleId as an alias as well, so appId is the one to send). Nothing in the upload or the app listings returns this id, so read it off the running session: get_current_app on Android, get_active_app_info on iOS.",
+            "description": "The package name on Android, the bundle id on iOS — appId is the field name on both (iOS takes bundleId as an alias as well, so appId is the one to send). Nothing in the upload or the app listings returns this id, so read it off the running session: get_current_app on Android, get_active_app_info on iOS.",
             "example": "com.example.app"
           }
         ],
@@ -3000,12 +3000,12 @@
         "entity": "app_live_session",
         "intent": "Close an app and stop it running — use this to end a session inside the app, or as the first half of a restart.",
         "guidance": [
-          "An App Live session runs Appium 1.x on both platforms — 1.22 with uiautomator2 on Android, 1.21 with XCUITest on iOS. Android's mobile: command list has no activateApp, terminateApp or queryAppState, so the mobile: form answers \"unknown command\" there and silently does nothing; iOS does have them. The classic /appium/device endpoint used here works on BOTH, so one wire shape serves the whole fleet. Confirmed on a Samsung Galaxy S23 (Android 13) and an iPhone 15 (iOS 17.5): state 4, terminate, state dropped, activate, state 4 again.",
+          "An App Live session runs Appium 1.x on both platforms — 1.22 with uiautomator2 on Android, 1.21 with XCUITest on iOS. Android's mobile: command list has no activateApp, terminateApp or queryAppState, so the mobile: form answers \"unknown command\" there and silently does nothing; iOS does have them. The classic /appium/device endpoint used here works on BOTH, so one wire shape serves the whole fleet.",
           "A package that is not installed fails rather than installing it, and the error quotes the adb command with the id in it — check the id against get_current_app before assuming the call is wrong, since a guessed package is the likelier fault.",
           "Returns true when the app was running and false when it was not; false is not an error.",
           "The app stays installed and keeps its data; only the running process is stopped.",
           "This does not clear state between runs — relaunching shows the app where it was unless the app itself resets.",
-          "Measured on Android: get_app_state read 3 straight after a successful terminate rather than 1, so treat anything below 4 as closed rather than waiting for a particular number."
+          "get_app_state can read 3 rather than 1 straight after a successful terminate on Android, so treat anything below 4 as closed rather than waiting for a particular number."
         ],
         "path_params": [
           {
@@ -3021,7 +3021,7 @@
             "name": "appId",
             "type": "string",
             "required": true,
-            "description": "The package name on Android, the bundle id on iOS — appId is the field name on both, checked on each platform (iOS takes bundleId as an alias as well, so appId is the one to send). Nothing in the upload or the app listings returns this id, so read it off the running session: get_current_app on Android, get_active_app_info on iOS.",
+            "description": "The package name on Android, the bundle id on iOS — appId is the field name on both (iOS takes bundleId as an alias as well, so appId is the one to send). Nothing in the upload or the app listings returns this id, so read it off the running session: get_current_app on Android, get_active_app_info on iOS.",
             "example": "com.example.app"
           }
         ],
@@ -3090,7 +3090,7 @@
         "entity": "app_live_session",
         "intent": "Check whether an app is installed, running or in the foreground — use this to confirm a launch or a close actually took effect.",
         "guidance": [
-          "An App Live session runs Appium 1.x on both platforms — 1.22 with uiautomator2 on Android, 1.21 with XCUITest on iOS. Android's mobile: command list has no activateApp, terminateApp or queryAppState, so the mobile: form answers \"unknown command\" there and silently does nothing; iOS does have them. The classic /appium/device endpoint used here works on BOTH, so one wire shape serves the whole fleet. Confirmed on a Samsung Galaxy S23 (Android 13) and an iPhone 15 (iOS 17.5): state 4, terminate, state dropped, activate, state 4 again.",
+          "An App Live session runs Appium 1.x on both platforms — 1.22 with uiautomator2 on Android, 1.21 with XCUITest on iOS. Android's mobile: command list has no activateApp, terminateApp or queryAppState, so the mobile: form answers \"unknown command\" there and silently does nothing; iOS does have them. The classic /appium/device endpoint used here works on BOTH, so one wire shape serves the whole fleet.",
           "The value is a number: 0 not installed, 1 installed but not running, 2 running in the background and suspended, 3 running in the background, 4 running in the foreground.",
           "4 is the only state in which the app is on screen and can be driven.",
           "0 against an app you know is installed means the id is wrong, not that the app is missing — the usual cause is a guessed package name.",
@@ -3110,7 +3110,7 @@
             "name": "appId",
             "type": "string",
             "required": true,
-            "description": "The package name on Android, the bundle id on iOS — appId is the field name on both, checked on each platform (iOS takes bundleId as an alias as well, so appId is the one to send). Nothing in the upload or the app listings returns this id, so read it off the running session: get_current_app on Android, get_active_app_info on iOS.",
+            "description": "The package name on Android, the bundle id on iOS — appId is the field name on both (iOS takes bundleId as an alias as well, so appId is the one to send). Nothing in the upload or the app listings returns this id, so read it off the running session: get_current_app on Android, get_active_app_info on iOS.",
             "example": "com.example.app"
           }
         ],
@@ -4407,7 +4407,7 @@
         "guidance": [
           "The attribute names are the platform's own: on Android text, content-desc, resource-id, class, package, bounds, checked, checkable, clickable, enabled, focused, selected, displayed, scrollable, long-clickable, password; on iOS name, label, value, type, enabled, visible, accessible, focused, index, rect.",
           "Booleans come back as the strings \"true\" and \"false\", not JSON booleans, so compare as text.",
-          "An attribute the element does not carry answers the STRING \"null\" on Android — not a JSON null and not an error — so compare as text; measured on an ImageView's resource-id.",
+          "An attribute the element does not carry answers the STRING \"null\" on Android — not a JSON null and not an error — so compare as text.",
           "For the element's text use get_element_text and for its position get_element_rect; this is for everything else."
         ],
         "path_params": [

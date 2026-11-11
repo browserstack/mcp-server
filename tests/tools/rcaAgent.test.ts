@@ -1,3 +1,4 @@
+import { HttpError } from "../../src/lib/error";
 import { describe, it, expect, vi, beforeEach, Mock } from "vitest";
 import {
   getBuildIdTool,
@@ -5,20 +6,28 @@ import {
   listTestIdsTool,
   listBuildIdTool,
 } from "../../src/tools/rca-agent";
-import { getBuildId } from "../../src/tools/rca-agent-utils/get-build-id";
-import { listBuildId } from "../../src/tools/rca-agent-utils/list-build-id";
+import { resolveBuild } from "../../src/tools/rca-agent-utils/resolve-build";
+import { mapHashedToTra } from "../../src/tools/automate-utils/resolve-tra-build-id";
 import { getTestIds } from "../../src/tools/rca-agent-utils/get-failed-test-id";
 import { getRCAData } from "../../src/tools/rca-agent-utils/rca-data";
 import { formatRCAData } from "../../src/tools/rca-agent-utils/format-rca";
 import { getBrowserStackAuth } from "../../src/lib/get-auth";
 import { TestStatus } from "../../src/tools/rca-agent-utils/types";
 
-vi.mock("../../src/tools/rca-agent-utils/get-build-id", () => ({
-  getBuildId: vi.fn(),
-}));
-vi.mock("../../src/tools/rca-agent-utils/list-build-id", () => ({
-  listBuildId: vi.fn(),
-}));
+vi.mock(
+  "../../src/tools/rca-agent-utils/resolve-build",
+  async (importOriginal) => ({
+    ...(await importOriginal<any>()),
+    resolveBuild: vi.fn(),
+  }),
+);
+vi.mock(
+  "../../src/tools/automate-utils/resolve-tra-build-id",
+  async (importOriginal) => ({
+    ...(await importOriginal<any>()),
+    mapHashedToTra: vi.fn(),
+  }),
+);
 vi.mock("../../src/tools/rca-agent-utils/get-failed-test-id", () => ({
   getTestIds: vi.fn(),
 }));
@@ -46,7 +55,7 @@ describe("RCA Agent Tools", () => {
 
   describe("getBuildIdTool", () => {
     it("SUCCESS: returns build ID string", async () => {
-      (getBuildId as Mock).mockResolvedValue("build-abc-123");
+      (resolveBuild as Mock).mockResolvedValue({ buildId: "build-abc-123" });
 
       const result = await getBuildIdTool(
         {
@@ -58,11 +67,16 @@ describe("RCA Agent Tools", () => {
 
       expect(result.isError).toBeFalsy();
       expect(result.content[0].text).toBe("build-abc-123");
+      expect(result.content).toHaveLength(1);
       expect(getBrowserStackAuth).toHaveBeenCalledWith(mockConfig);
+      // Prefers the caller's own builds.
+      expect((resolveBuild as Mock).mock.calls[0][2]).toEqual({
+        userName: "fake-user",
+      });
     });
 
     it("FAIL: returns isError on API failure", async () => {
-      (getBuildId as Mock).mockRejectedValue(new Error("Not found"));
+      (resolveBuild as Mock).mockRejectedValue(new Error("Not found"));
 
       const result = await getBuildIdTool(
         {
@@ -133,6 +147,36 @@ describe("RCA Agent Tools", () => {
       expect(parsed[0].failure.category).toBe("Assertion");
     });
 
+    it("SUCCESS: maps an Automate hashed id to its TRA build on 404", async () => {
+      const hashed = "ca9cccc228cf0e3ff3cb90dd62e2e2bfb4b20bc7";
+      (getTestIds as Mock)
+        .mockRejectedValueOnce(
+          new HttpError("Failed to fetch test runs: 404 Not Found", 404),
+        )
+        .mockResolvedValueOnce([{ test_id: "1" }]);
+      (mapHashedToTra as Mock).mockResolvedValue({ traBuildId: "tra-build-1" });
+
+      const result = await listTestIdsTool({ buildId: hashed }, mockConfig);
+
+      expect(result.isError).toBeFalsy();
+      expect((getTestIds as Mock).mock.calls[1][0]).toBe("tra-build-1");
+      expect(result.content[1].text).toContain("maps to TRA build tra-build-1");
+    });
+
+    it("FAIL: does not map non-hex ids on 404", async () => {
+      (getTestIds as Mock).mockRejectedValue(
+        new HttpError("Failed to fetch test runs: 404 Not Found", 404),
+      );
+
+      const result = await listTestIdsTool(
+        { buildId: "zz00000000000000000000000000000000000003" },
+        mockConfig,
+      );
+
+      expect(result.isError).toBe(true);
+      expect(mapHashedToTra).not.toHaveBeenCalled();
+    });
+
     it("FAIL: returns isError on API failure", async () => {
       (getTestIds as Mock).mockRejectedValue(new Error("Invalid build"));
 
@@ -145,7 +189,10 @@ describe("RCA Agent Tools", () => {
 
   describe("listBuildIdTool", () => {
     it("SUCCESS: returns build ID string (all users, no user filter)", async () => {
-      (listBuildId as Mock).mockResolvedValue("build-xyz-789");
+      (resolveBuild as Mock).mockResolvedValue({
+        buildId: "build-xyz-789",
+        note: 'Found "junit" #3 by its dashboard name.',
+      });
 
       const result = await listBuildIdTool(
         {
@@ -156,12 +203,14 @@ describe("RCA Agent Tools", () => {
       );
 
       expect(result.isError).toBeFalsy();
+      // The id stays alone in content[0]; how it was found follows.
       expect(result.content[0].text).toBe("build-xyz-789");
-      expect(getBrowserStackAuth).toHaveBeenCalledWith(mockConfig);
+      expect(result.content[1].text).toContain("dashboard name");
+      expect((resolveBuild as Mock).mock.calls[0][2]).toBeUndefined();
     });
 
     it("FAIL: returns isError on API failure", async () => {
-      (listBuildId as Mock).mockRejectedValue(new Error("Not found"));
+      (resolveBuild as Mock).mockRejectedValue(new Error("Not found"));
 
       const result = await listBuildIdTool(
         {

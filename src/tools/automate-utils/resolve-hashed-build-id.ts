@@ -1,20 +1,19 @@
+import { HttpError } from "../../lib/error.js";
 import { SessionType } from "../../lib/constants.js";
 import { getBrowserStackAuth } from "../../lib/get-auth.js";
 import { BrowserStackConfig } from "../../lib/types.js";
 import { apiClient } from "../../lib/apiClient.js";
 import logger from "../../logger.js";
-import { getAutomationBaseUrl } from "../rca-agent-utils/constants.js";
 import { extractTestIds } from "../rca-agent-utils/get-failed-test-id.js";
 import { TestRun } from "../rca-agent-utils/types.js";
+import { getRegionalHost, sessionApiHost } from "../../lib/regional-host.js";
 
-// Observability (Test Reporting & Analytics) build ids are usually UUIDs but
-// some are 40-char hex, the same shape as Automate / App Automate "hashed ids".
-// The two are never interchangeable, and the observability build API does not
-// expose the hashed id. The deterministic bridge is any BrowserStack session that belongs to the
-// build: the session detail endpoint reports its parent `build_hashed_id`.
+// Automate build ids are hex; TRA build ids are base-36 (older ones UUIDs). A TRA
+// id can be all hex by chance, so hex only means "probably Automate".
 const OBSERVABILITY_UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const HASHED_BUILD_ID_RE = /^[a-f0-9]{40}$/i;
+const TRA_BUILD_ID_RE = /^[a-z0-9]{40}$/i;
 
 // Only the first session id is needed; most builds surface one on page one.
 const MAX_TEST_RUN_PAGES = 5;
@@ -27,16 +26,40 @@ export function isHashedBuildId(id: string): boolean {
   return HASHED_BUILD_ID_RE.test(id.trim());
 }
 
+export function isTraBuildId(id: string): boolean {
+  const trimmed = id.trim();
+  if (OBSERVABILITY_UUID_RE.test(trimmed)) return true;
+  return TRA_BUILD_ID_RE.test(trimmed) && !HASHED_BUILD_ID_RE.test(trimmed);
+}
+
+export function otherSessionType(sessionType: SessionType): SessionType {
+  return sessionType === SessionType.Automate
+    ? SessionType.AppAutomate
+    : SessionType.Automate;
+}
+
+export class NoSessionsError extends Error {
+  constructor(buildId: string) {
+    super(
+      `TRA build "${buildId}" has no BrowserStack sessions: its results were uploaded ` +
+        "(e.g. a JUnit report), so it has no Automate sessions, logs or video. " +
+        "Use listTestIds and fetchRCA for this build instead.",
+    );
+    this.name = "NoSessionsError";
+  }
+}
+
 export function sessionDetailsUrl(
   sessionType: SessionType,
   sessionId: string,
+  host = sessionApiHost(sessionType),
 ): string {
   const encoded = encodeURIComponent(sessionId);
   switch (sessionType) {
     case SessionType.Automate:
-      return `https://api.browserstack.com/automate/sessions/${encoded}.json`;
+      return `${host}/automate/sessions/${encoded}.json`;
     case SessionType.AppAutomate:
-      return `https://api.browserstack.com/app-automate/sessions/${encoded}.json`;
+      return `${host}/app-automate/sessions/${encoded}.json`;
     default: {
       const _exhaustive: never = sessionType;
       throw new Error(`Unsupported session type: ${_exhaustive}`);
@@ -44,10 +67,26 @@ export function sessionDetailsUrl(
   }
 }
 
+export async function detectSession(
+  sessionId: string,
+  preferred: SessionType,
+  config: BrowserStackConfig,
+): Promise<{ sessionType: SessionType; hashedBuildId: string } | undefined> {
+  for (const candidate of [preferred, otherSessionType(preferred)]) {
+    const hashedBuildId = await resolveBuildIdFromSession(
+      sessionId,
+      candidate,
+      config,
+    );
+    if (hashedBuildId) return { sessionType: candidate, hashedBuildId };
+  }
+  return undefined;
+}
+
 /**
  * Resolve the hashed build id that a session belongs to via the Automate /
- * App Automate session detail endpoint. Returns undefined when the session
- * cannot be fetched or does not report a build.
+ * App Automate session detail endpoint. Returns undefined when the product does
+ * not know the session (404) or it reports no build; other failures throw.
  */
 export async function resolveBuildIdFromSession(
   sessionId: string,
@@ -66,11 +105,12 @@ export async function resolveBuildIdFromSession(
     raise_error: false,
   });
 
+  if (response.status === 404) return undefined;
   if (!response.ok) {
-    logger.warn(
-      `Could not resolve build id for ${sessionType} session ${sessionId}: ${response.status}`,
+    throw new HttpError(
+      `Failed to read ${sessionType} session "${sessionId}": ${response.status} ${response.statusText}`.trim(),
+      response.status,
     );
-    return undefined;
   }
 
   const session = (response.data as any)?.automation_session;
@@ -91,7 +131,7 @@ export async function findSessionIdForObservabilityBuild(
 ): Promise<string | undefined> {
   const authString = getBrowserStackAuth(config);
   const auth = Buffer.from(authString).toString("base64");
-  const baseUrl = `${getAutomationBaseUrl()}/ext/v1/builds/${encodeURIComponent(observabilityBuildId)}/testRuns`;
+  const baseUrl = `${getRegionalHost("automationApi")}/ext/v1/builds/${encodeURIComponent(observabilityBuildId)}/testRuns`;
 
   let nextPage: string | undefined;
   for (let page = 0; page < MAX_TEST_RUN_PAGES; page++) {
@@ -106,9 +146,10 @@ export async function findSessionIdForObservabilityBuild(
     });
 
     if (!response.ok) {
-      throw new Error(
+      throw new HttpError(
         `Failed to fetch test runs for observability build "${observabilityBuildId}": ` +
           `${response.status} ${response.statusText}`,
+        response.status,
       );
     }
 
@@ -143,7 +184,7 @@ export interface ResolvedHashedBuildId {
  * build id in two deterministic API calls: pick any session of the build from
  * its test runs, then read `build_hashed_id` from that session's details.
  *
- * When `sessionType` is omitted, Automate is tried first, then App Automate.
+ * The given `sessionType` is tried first (Automate when omitted), then the other.
  */
 export async function resolveHashedBuildId(
   observabilityBuildId: string,
@@ -154,16 +195,11 @@ export async function resolveHashedBuildId(
 
   const sessionId = await findSessionIdForObservabilityBuild(buildId, config);
   if (!sessionId) {
-    throw new Error(
-      `No BrowserStack sessions found for observability build "${buildId}". ` +
-        "Only builds that ran on Automate or App Automate have sessions to list; " +
-        "uploaded-report builds (e.g. JUnit) do not.",
-    );
+    throw new NoSessionsError(buildId);
   }
 
-  const candidates: SessionType[] = sessionType
-    ? [sessionType]
-    : [SessionType.Automate, SessionType.AppAutomate];
+  const first = sessionType ?? SessionType.Automate;
+  const candidates: SessionType[] = [first, otherSessionType(first)];
 
   for (const candidate of candidates) {
     const hashedBuildId = await resolveBuildIdFromSession(

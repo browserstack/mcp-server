@@ -126,6 +126,21 @@ describe("parseScreenshotUrls", () => {
     expect(parseScreenshotUrls(logs)).toEqual([`${S3}/screenshot-4.jpeg`]);
   });
 
+  it("accepts single-digit month and day in log timestamps", () => {
+    const logs = [
+      `2026-11-2 9:12:46:632 DEBUG ${S3}/screenshot-1.jpeg`,
+      `2026-11-2 9:18:20:871 REQUEST [2026-11-2 9:18:20:871] GET /session/${S}/screenshot {}`,
+      `2026-11-2 9:18:21:3 RESPONSE {"value":"${S3}/screenshot-playwright-2.png"}`,
+      `2026-1-9 10:0:0:5 DEBUG ${S3}/screenshot-3.jpeg`,
+    ].join("\n");
+
+    expect(parseScreenshotUrls(logs)).toEqual([
+      `${S3}/screenshot-1.jpeg`,
+      `${S3}/screenshot-playwright-2.png`,
+      `${S3}/screenshot-3.jpeg`,
+    ]);
+  });
+
   it("returns nothing when the session has no screenshots", () => {
     const logs = [
       `2026-10-13 9:21:1:278 REQUEST [2026-10-13 9:21:1:278] POST /session/${S}/url {"url":"https://example.com"}`,

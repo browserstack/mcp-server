@@ -28,6 +28,14 @@ vi.mock("../../src/tools/accessiblity-utils/report-fetcher.js", () => ({
     previousAppBuild = m.previousAppBuild;
   },
 }));
+// A completed scan's read also reads its scan logs, for the pages it could not scan.
+vi.mock("../../src/tools/accessiblity-utils/scanner.js", () => ({
+  AccessibilityScanner: class {
+    setAuth = vi.fn();
+    unscannedPages = vi.fn(async () => []);
+  },
+  ScanTimeoutError: class extends Error {},
+}));
 vi.mock("../../src/tools/accessiblity-utils/report-parser.js", () => ({
   parseAccessibilityReportFromCSV: m.parse,
 }));
@@ -489,16 +497,22 @@ describe("fetchAccessibilityIssues comparing app builds", () => {
     expect(text(result)).toMatch(/itself/);
   });
 
-  it("compares scan runs and app builds only, not web builds", async () => {
-    m.resolveBuild.mockImplementation(async (source: unknown) => source);
-    m.reportStatus.mockResolvedValue("completed");
-
-    const result = await fetchIssues()({
-      buildId: "q7m2k9x4c1v8b3n6z0w5r2t9y4p1s8d3f6g0h2ja",
-      compareWith: "previous",
+  it("says to read both when compareWith names a report that is not an app build", async () => {
+    m.sourceFromReportUrl.mockResolvedValue({
+      kind: "appReport",
+      reportId: "6d1f0a2b-3c4d-4e5f-8a9b-0c1d2e3f4a5b",
     });
 
-    expect(result.isError).toBe(true);
-    expect(text(result)).toMatch(/Website Scanner runs and App Accessibility builds/);
+    const result = await fetchIssues()({
+      buildId: BUILD_ID,
+      compareWith:
+        "https://app-accessibility.browserstack.com/report/6d1f0a2b-3c4d-4e5f-8a9b-0c1d2e3f4a5b",
+    });
+
+    expect(result.isError).toBeFalsy();
+    expect(text(result).trim()).toBe(
+      'compareWith names App Accessibility manual report 6d1f0a2b-3c4d-4e5f-8a9b-0c1d2e3f4a5b, which is not an App Accessibility build; an app build is compared here only with another ("previous", or an earlier build\'s id or link). Read both reports with fetchAccessibilityIssues and match issues by rule and component (the element\'s id or class); an issue in the later report only is new, in the earlier only is fixed, in both is still open.',
+    );
+    expect(m.appBuildIssues).not.toHaveBeenCalled();
   });
 });

@@ -10,9 +10,10 @@ import { signedUrlMap } from "../../lib/inmemory-store.js";
 import { projectIdentifierToId } from "./TCG-utils/api.js";
 import { BrowserStackConfig } from "../../lib/types.js";
 import { getTMBaseURL } from "../../lib/tm-base-url.js";
+import { wrapUntrusted } from "../../lib/untrusted-content.js";
 import {
   validateUploadPath,
-  TEST_MANAGEMENT_ATTACHMENT_EXTENSIONS,
+  TEST_CASE_GENERATION_MIME_TYPES,
   MAX_ATTACHMENT_UPLOAD_BYTES,
 } from "../../lib/upload-validator.js";
 import appConfig from "../../config.js";
@@ -29,7 +30,7 @@ export const UploadFileSchema = z.object({
   file_path: z
     .string()
     .describe(
-      "Full path to the file that should be uploaded. Must be inside the " +
+      "Full path to the file. Must be inside the " +
         "directory configured via the MCP_UPLOAD_BASE_DIR environment variable.",
     ),
 });
@@ -62,10 +63,12 @@ export async function uploadFile(
     // Canonicalize path and enforce upload safety rules (extension, size,
     // hidden-directory traversal, base-dir containment).
     const safePath = validateUploadPath(file_path, {
-      allowedExtensions: TEST_MANAGEMENT_ATTACHMENT_EXTENSIONS,
+      allowedExtensions: Object.keys(TEST_CASE_GENERATION_MIME_TYPES),
       maxSizeBytes: MAX_ATTACHMENT_UPLOAD_BYTES,
       allowedBaseDir: appConfig.UPLOAD_BASE_DIR,
     });
+    const mimeType =
+      TEST_CASE_GENERATION_MIME_TYPES[path.extname(safePath).toLowerCase()];
 
     // Get the project ID
     const projectIdResponse = await projectIdentifierToId(
@@ -104,6 +107,7 @@ export async function uploadFile(
           const data = {
             fileId: attachment.id,
             downloadUrl: attachment.download_url,
+            mimeType,
           };
 
           signedUrlMap.set(fileId, data);
@@ -131,7 +135,9 @@ export async function uploadFile(
         ],
       };
     } else {
-      throw new Error(`Unexpected response: ${JSON.stringify(response.data)}`);
+      throw new Error(
+        `Unexpected response: ${wrapUntrusted("API response", JSON.stringify(response.data))}`,
+      );
     }
   } catch (error) {
     return {

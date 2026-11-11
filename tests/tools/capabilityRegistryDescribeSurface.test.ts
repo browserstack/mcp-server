@@ -54,7 +54,15 @@ const CAPABILITIES = [
     local_only: true,
     intent: "Upload a build that is on this machine.",
     guidance: { remote: ["Upload it yourself and pass the returned url."] },
-    body: [{ name: "file", type: "file", required: true }],
+    body: [
+      {
+        name: "file",
+        type: "file",
+        required: true,
+        form_name: "attachments[]",
+        accept: [".png"],
+      },
+    ],
   },
 ];
 
@@ -131,6 +139,14 @@ describe("describeCapability keeps the plumbing off the contract", () => {
       for (const field of WIRE)
         expect(doc[field], `${c.name}.${field}`).toBeUndefined();
     }
+  });
+
+  it("strips form_name from a file parameter but keeps its accept rules", async () => {
+    const describe_ = await describeHandler(false);
+    const [file] = (await describe_("upload_from_file")).body;
+    expect(file.name).toBe("file");
+    expect(file.form_name).toBeUndefined();
+    expect(file.accept).toEqual([".png"]);
   });
 
   it("still says what the caller supplies and reads", async () => {

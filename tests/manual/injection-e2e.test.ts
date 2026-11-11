@@ -20,6 +20,8 @@ import { queryAccessibilityRAG } from "../../src/tools/accessiblity-utils/access
 import { parseAccessibilityReportFromCSV } from "../../src/tools/accessiblity-utils/report-parser.js";
 import { formatRCAData } from "../../src/tools/rca-agent-utils/format-rca.js";
 import { wrapUntrusted } from "../../src/lib/untrusted-content.js";
+import { retrieveFrameworkLogs } from "../../src/tools/failurelogs-utils/framework.js";
+import { AppAutomateLogType } from "../../src/lib/constants.js";
 
 const cfg: any = {
   "browserstack-username": "u",
@@ -58,6 +60,44 @@ describe("indirect prompt injection is contained per tool", () => {
       expect(out).toContain("UNTRUSTED");
       expect(out).toMatch(/never follow/i);
     }
+  });
+
+  it("framework test logs (Maestro / Espresso / XCUITest / Flutter)", async () => {
+    get
+      .mockResolvedValueOnce(
+        ok({
+          testcases: {
+            data: [
+              {
+                class: "flows",
+                testcases: [
+                  {
+                    name: INJECT,
+                    status: "failed",
+                    maestro_log: "https://api.browserstack.com/log.txt",
+                  },
+                ],
+              },
+            ],
+          },
+        }),
+      )
+      .mockResolvedValueOnce(ok(`step ok\n${INJECT}\n`));
+    const out = await retrieveFrameworkLogs(
+      {
+        framework: { name: "maestro", path: "maestro/v2" },
+        buildId: "build-1",
+        data: {},
+      },
+      "session-1",
+      AppAutomateLogType.AppiumLogs,
+      cfg,
+    );
+    show("retrieveFrameworkLogs", out);
+    expect(out).toContain("UNTRUSTED");
+    expect(out).toMatch(/never follow/i);
+    // The injected text appears only inside the untrusted block.
+    expect(out.indexOf("UNTRUSTED")).toBeLessThan(out.indexOf("IGNORE ALL"));
   });
 
   it("network / session / console logs (automate)", async () => {

@@ -7,11 +7,216 @@ import {
   killExistingBrowserStackLocalProcesses,
 } from "../../lib/local.js";
 import config from "../../config.js";
+import { getRegionalHost } from "../../lib/regional-host.js";
 
 export interface AccessibilityScanResponse {
   success: boolean;
   data?: { id: string; scanRunId: string };
   errors?: string[];
+  /** The name the scan was started under, when it differs from the name asked for. */
+  scanName?: string;
+  /** Why it differs: characters a scan name cannot hold, and/or a name already taken. */
+  nameChanges?: ("characters" | "taken")[];
+}
+
+/** Why a run failed, as far as the API says: the run's own reason and each page's log. */
+export interface ScanFailureDetails {
+  reason?: string;
+  pages: { pageUrl: string; status: string; reason: string }[];
+}
+
+/** The scans API on the account's region (GRR). */
+const scansApi = () =>
+  `${getRegionalHost("accessibilityApi")}/api/website-scanner/v1/scans`;
+
+/** How long startAccessibilityScan waits for a scan to finish before handing back its ids. */
+export const SCAN_WAIT_MS = 5 * 60 * 1000;
+
+/** Run statuses after which a scan does no more work. */
+const FINAL_SCAN_STATUSES = new Set(["completed", "failed", "cancelled"]);
+
+/**
+ * The wait ran out while the scan was still running. Only the wait ends: the scan carries
+ * on server-side, so the caller still has a scan to come back to.
+ */
+export class ScanTimeoutError extends Error {
+  constructor(public readonly waitedMs: number) {
+    super(`Scan still running after ${Math.round(waitedMs / 60000)} minutes`);
+    this.name = "ScanTimeoutError";
+  }
+}
+
+/**
+ * A refusal whose message is the whole answer, given as a plain result: not as a failure to
+ * start the scan with the advice to open an issue (or to send feedback, which an error
+ * result gets), since nothing is broken and the message says what to do instead.
+ */
+export class ScanRefusedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ScanRefusedError";
+  }
+}
+
+/**
+ * central-scanner's refusal of a scan over the plan's limit, "You don't have access to make
+ * over 50 scans". It read as a failure to report on GitHub, with no hint of the limit.
+ */
+const SCAN_LIMIT_REFUSAL = /make over (\d+) scans/i;
+
+/** The plan-limit refusal, with the limit the API named (50 on the plans seen so far). */
+export function scanLimitMessage(limit?: string): string {
+  return `${limit ? `Your plan allows ${limit} saved scans and this account has reached that limit` : "This account has reached your plan's limit of saved scans"}. Delete scans you no longer need in the dashboard, or upgrade the plan to create more.`;
+}
+
+/** Hosts on the user's own machine, which a scan reaches as bs-local.com through the tunnel. */
+const LOCAL_HOSTS = new Set(["127.0.0.1", "localhost", "0.0.0.0"]);
+const BS_LOCAL_DOMAIN = "bs-local.com";
+
+/** The URL as a scan is created with it, and so as the scan saves it. */
+export function scanUrl(url: string): string {
+  try {
+    const parsed = new URL(url);
+    if (LOCAL_HOSTS.has(parsed.hostname)) {
+      parsed.hostname = BS_LOCAL_DOMAIN;
+      return parsed.toString();
+    }
+    return url;
+  } catch (e) {
+    logger.warn(`[AccessibilityScan] Invalid URL skipped: ${e}`);
+    return url;
+  }
+}
+
+/**
+ * Whether a scan's saved URL is this page: the page is put as a scan would save it
+ * (scanUrl), and the case of the host and a trailing slash are not told apart.
+ */
+export function samePage(savedUrl: string, pageURL: string): boolean {
+  const key = (url: string) => {
+    const trimmed = url.trim();
+    try {
+      const parsed = new URL(scanUrl(trimmed));
+      parsed.pathname = parsed.pathname.replace(/\/+$/, "");
+      return parsed.toString();
+    } catch {
+      return trimmed.replace(/\/+$/, "");
+    }
+  };
+  return key(savedUrl) === key(pageURL);
+}
+
+/** A scan id this account cannot see, or that is no scan's. */
+function notVisible(scanId: string): string {
+  return `No scan with id ${scanId} is visible to this account, so nothing was started. Leave out scanId to start a new scan.`;
+}
+
+/**
+ * A scan's saved setup, from its overview: what a re-run of it runs with. A setting left out
+ * is one the overview does not give.
+ */
+export interface SavedScan {
+  name?: string;
+  urlList: string[];
+  settings: ScanSettings;
+  /** Whether a login (auth config) is saved; which one, the overview does not say. */
+  authEnabled?: boolean;
+  /** Whether the scan goes through BrowserStack Local; its identifier is not given. */
+  localTestingEnabled?: boolean;
+}
+
+/** How to scan through a tunnel the user starts, which the scan API takes by identifier. */
+const OWN_TUNNEL_HINT =
+  "Start BrowserStack Local yourself (the BrowserStack Local app, or BrowserStackLocal --key <your access key> --local-identifier <a name>) and pass that name as localIdentifier.";
+
+/** The longest scan name the API takes. */
+const MAX_SCAN_NAME_LENGTH = 255;
+
+/**
+ * One character central-scanner takes in a scan name (lib/util.rb validate_project_name),
+ * which also refuses "--". It takes "(" but not ")", so both become square brackets.
+ */
+const NAME_CHARACTER = /[A-Za-z0-9_:*.@!$ '{}[\]-]/;
+
+/**
+ * The name with every character central-scanner refuses replaced, rather than the scan
+ * refused: agents name scans after page titles and paths, with "/", "|", "&" or ",". Accents
+ * are dropped first ("Café" becomes "Cafe"), and a run of replaced characters becomes one
+ * "-", or " - " where it stood between words. A name left with no letters or digits, as a
+ * name in another script is, falls back to the given one.
+ */
+export function cleanScanName(name: string, fallback: string): string {
+  const cleaned = Array.from(
+    name
+      .normalize("NFD")
+      .replace(/[̀-ͯ]/g, "")
+      .replace(/\(/g, "[")
+      .replace(/\)/g, "]")
+      .replace(/\s+/g, " "),
+  )
+    .map((ch) => (NAME_CHARACTER.test(ch) ? ch : "-"))
+    .join("")
+    .replace(/[\s-]*-[\s-]*/g, (run) => (/\s/.test(run) ? " - " : "-"))
+    .replace(/^[\s-]+|[\s-]+$/g, "")
+    .slice(0, MAX_SCAN_NAME_LENGTH)
+    .replace(/[\s-]+$/, "");
+  return /[A-Za-z0-9]/.test(cleaned) ? cleaned : fallback;
+}
+
+/** A scan name to fall back on: the first page's host, which is always a valid name. */
+function hostName(urlList: string[]): string {
+  try {
+    return new URL(urlList[0]).hostname || "Accessibility scan";
+  } catch {
+    return "Accessibility scan";
+  }
+}
+
+/**
+ * The name with the time appended, as "<name> 2026-11-03 07:45:12 UTC". Only digits,
+ * "-", ":" and spaces are added, all of which the API allows in a name, and the name is
+ * shortened to keep the whole within the API's length limit.
+ */
+export function timestampedName(name: string, now: Date = new Date()): string {
+  const stamp = `${now.toISOString().slice(0, 19).replace("T", " ")} UTC`;
+  return `${name.slice(0, MAX_SCAN_NAME_LENGTH - stamp.length - 1).trimEnd()} ${stamp}`;
+}
+
+/** The API's own reason for refusing a request, when its body gives one. */
+function refusalReason(err: any): string | undefined {
+  const data = err?.response?.data;
+  return (
+    data?.error ||
+    data?.message ||
+    (Array.isArray(data?.errors) ? data.errors.join(", ") : undefined)
+  );
+}
+
+/**
+ * A 422 for a name already in use. A 422 also refuses a setting (a WCAG version the API
+ * does not take), so only one that says so, or gives no reason at all, is read this way.
+ */
+function nameIsTaken(err: any): boolean {
+  if (err?.response?.status !== 422) return false;
+  const reason = refusalReason(err);
+  return !reason || /already exists/i.test(String(reason));
+}
+
+function scanStartError(err: any): Error {
+  // apiClient throws generic errors, try to extract message.
+  const reason = refusalReason(err);
+  const limit = SCAN_LIMIT_REFUSAL.exec(String(reason ?? ""));
+  if (err?.response?.status === 402 && limit) {
+    return new ScanRefusedError(scanLimitMessage(limit[1]));
+  }
+  if (err?.response?.status === 422 && !reason) {
+    return new Error(
+      "A scan with this name already exists. please update the name and run again.",
+    );
+  }
+  return new Error(
+    `Failed to start scan: ${reason || err?.message || String(err)}`,
+  );
 }
 
 export interface AccessibilityScanStatus {
@@ -49,6 +254,7 @@ export class AccessibilityScanner {
     urlList: string[],
     authConfigId?: number,
     settings: ScanSettings = {},
+    ownTunnel?: string,
   ): Promise<AccessibilityScanResponse> {
     if (!this.auth?.username || !this.auth?.password) {
       throw new Error(
@@ -57,51 +263,46 @@ export class AccessibilityScanner {
     }
     // Check if any URL is local
     const hasLocal = urlList.some(isLocalURL);
-    const localIdentifier = randomUUID();
-    const localHosts = new Set(["127.0.0.1", "localhost", "0.0.0.0"]);
-    const BS_LOCAL_DOMAIN = "bs-local.com";
+    const localIdentifier = ownTunnel ?? randomUUID();
 
-    if (config.USE_OWN_LOCAL_BINARY_PROCESS && hasLocal) {
-      throw new Error(
-        "Cannot start scan with local URLs when using own BrowserStack Local binary process. Please set USE_OWN_LOCAL_BINARY_PROCESS to false.",
-      );
-    }
-
-    if (config.REMOTE_MCP && hasLocal) {
-      throw new Error(
-        "Local URLs are not supported in this remote mcp. Please use a public URL.",
-      );
-    }
-
-    if (hasLocal) {
-      await ensureLocalBinarySetup(
-        this.auth.username,
-        this.auth.password,
-        localIdentifier,
-      );
-    } else {
-      await killExistingBrowserStackLocalProcesses();
-    }
-
-    const transformedUrlList = urlList.map((url) => {
-      try {
-        const parsed = new URL(url);
-        if (localHosts.has(parsed.hostname)) {
-          parsed.hostname = BS_LOCAL_DOMAIN;
-          return parsed.toString();
-        }
-        return url;
-      } catch (e) {
-        logger.warn(`[AccessibilityScan] Invalid URL skipped: ${e}`);
-        return url;
+    // A tunnel the user started is theirs to run: none is started here, and none is killed,
+    // as killing every BrowserStackLocal process would take theirs down with it.
+    if (!ownTunnel) {
+      // Both refusals are limits of how this MCP runs, not failures: the scan API takes the
+      // identifier of a tunnel the user started.
+      if (config.USE_OWN_LOCAL_BINARY_PROCESS && hasLocal) {
+        throw new ScanRefusedError(
+          `This BrowserStack MCP is set to use your own BrowserStack Local (USE_OWN_LOCAL_BINARY_PROCESS), so it starts no tunnel for a local URL. ${OWN_TUNNEL_HINT} Or scan a public URL.`,
+        );
       }
-    });
+
+      // The hosted server cannot start a tunnel on the user's machine, but the scan API
+      // takes the identifier of one the user started.
+      if (config.REMOTE_MCP && hasLocal) {
+        throw new ScanRefusedError(
+          `This hosted BrowserStack MCP runs on BrowserStack's servers, so it cannot open a tunnel to a local URL on your machine. ${OWN_TUNNEL_HINT} Or scan a public URL.`,
+        );
+      }
+
+      if (hasLocal) {
+        await ensureLocalBinarySetup(
+          this.auth.username,
+          this.auth.password,
+          localIdentifier,
+        );
+      } else {
+        await killExistingBrowserStackLocalProcesses();
+      }
+    }
+
+    const transformedUrlList = urlList.map(scanUrl);
 
     const scanSettings = Object.fromEntries(
       Object.entries(settings).filter(([, value]) => value !== undefined),
     );
+    const cleanName = cleanScanName(name, hostName(urlList));
     const baseRequestBody = {
-      name,
+      name: cleanName,
       urlList: transformedUrlList,
       recurring: false,
       ...(authConfigId && { authConfigId }),
@@ -109,7 +310,7 @@ export class AccessibilityScanner {
     };
 
     let requestBody = baseRequestBody;
-    if (hasLocal) {
+    if (hasLocal || ownTunnel) {
       const localConfig = {
         localTestingInfo: {
           localIdentifier,
@@ -119,18 +320,17 @@ export class AccessibilityScanner {
       requestBody = { ...baseRequestBody, ...localConfig };
     }
 
-    try {
+    const { username, password } = this.auth;
+    const create = async (body: typeof requestBody) => {
       const response = await apiClient.post<AccessibilityScanResponse>({
-        url: "https://api-accessibility.browserstack.com/api/website-scanner/v1/scans",
+        url: `${getRegionalHost("accessibilityApi")}/api/website-scanner/v1/scans`,
         headers: {
           Authorization:
             "Basic " +
-            Buffer.from(`${this.auth.username}:${this.auth.password}`).toString(
-              "base64",
-            ),
+            Buffer.from(`${username}:${password}`).toString("base64"),
           "Content-Type": "application/json",
         },
-        body: requestBody,
+        body,
       });
       const data = response.data;
       if (!data.success)
@@ -138,22 +338,29 @@ export class AccessibilityScanner {
           `Unable to start scan: ${data.errors?.join(", ") || JSON.stringify(data)}`,
         );
       return data;
+    };
+
+    const cleaned = cleanName !== name;
+    try {
+      const data = await create(requestBody);
+      return cleaned
+        ? { ...data, scanName: cleanName, nameChanges: ["characters"] }
+        : data;
     } catch (err: any) {
-      // apiClient throws generic errors, try to extract message. A 422 also refuses a
-      // setting (a WCAG version the API does not take), so its own reason comes first.
-      const data = err?.response?.data;
-      const reason =
-        data?.error ||
-        data?.message ||
-        (Array.isArray(data?.errors) ? data.errors.join(", ") : undefined);
-      if (err?.response?.status === 422 && !reason) {
-        throw new Error(
-          "A scan with this name already exists. please update the name and run again.",
-        );
-      }
-      throw new Error(
-        `Failed to start scan: ${reason || err?.message || String(err)}`,
-      );
+      if (!nameIsTaken(err)) throw scanStartError(err);
+    }
+    // Scan names are unique per account, so an agent re-scanning a page under the name it
+    // used before is refused. Starting it once more under a timestamped name is what the
+    // user would do by hand.
+    const scanName = timestampedName(cleanName);
+    try {
+      return {
+        ...(await create({ ...requestBody, name: scanName })),
+        scanName,
+        nameChanges: cleaned ? ["characters", "taken"] : ["taken"],
+      };
+    } catch (err: any) {
+      throw scanStartError(err);
     }
   }
 
@@ -171,7 +378,7 @@ export class AccessibilityScanner {
     const read = (path: string) =>
       apiClient
         .get({
-          url: `https://api-accessibility.browserstack.com/api/website-scanner/v1/scans/${path}`,
+          url: `${getRegionalHost("accessibilityApi")}/api/website-scanner/v1/scans/${path}`,
           headers: {
             Authorization:
               "Basic " +
@@ -216,7 +423,7 @@ export class AccessibilityScanner {
   async dashboardLink(scanId: string): Promise<string | undefined> {
     const resp = await apiClient
       .get({
-        url: "https://api-accessibility.browserstack.com/api/website-scanner/v1/scans",
+        url: `${getRegionalHost("accessibilityApi")}/api/website-scanner/v1/scans`,
         headers: {
           Authorization:
             "Basic " +
@@ -236,13 +443,259 @@ export class AccessibilityScanner {
     return typeof link === "string" && link ? link : undefined;
   }
 
+  /**
+   * Why a run failed. The run's own reason is only on the scans list (lastScanDetails.error,
+   * such as "The requested page is not reachable"), so it is taken only when the list's last
+   * run is this one; each page's reason is in the run's scan logs ("[HTTP 403] Forbidden",
+   * "Failed to start the test"). Either can be missing, and a read that fails gives nothing
+   * rather than an error on top of the failed scan.
+   */
+  async failureDetails(
+    scanId: string,
+    scanRunId: string,
+  ): Promise<ScanFailureDetails> {
+    const [list, pages] = await Promise.all([
+      this.readQuietly(scansApi()),
+      this.unscannedPages(scanId, scanRunId),
+    ]);
+    const last = (
+      list?.ok
+        ? ((list.data?.data?.scans ?? []) as any[]).find(
+            (scan) => String(scan?.id) === String(scanId),
+          )
+        : undefined
+    )?.lastScanDetails;
+    const reason =
+      last &&
+      String(last.scanRunId) === String(scanRunId) &&
+      typeof last.error === "string" &&
+      last.error.trim()
+        ? last.error.trim()
+        : undefined;
+    return { ...(reason ? { reason } : {}), pages };
+  }
+
+  /**
+   * The pages of a run whose scan log is not a success, each with the log's reason. Only
+   * the run's logs are read, not the scans list failureDetails also reads: a completed run
+   * names the pages it could not scan here too, and they are otherwise simply absent from
+   * its report. A read that fails gives none.
+   */
+  async unscannedPages(
+    scanId: string,
+    scanRunId: string,
+  ): Promise<ScanFailureDetails["pages"]> {
+    const logs = await this.readQuietly(
+      `${scansApi()}/${encodeURIComponent(scanId)}/scan_runs/${encodeURIComponent(scanRunId)}/scan_logs`,
+    );
+    const entries: unknown = logs?.ok ? logs.data?.data?.scanLogs : undefined;
+    if (!Array.isArray(entries)) return [];
+    return entries
+      .filter((entry) => entry && entry.status !== "success")
+      .map((entry) => {
+        const said = [entry.description, entry.error]
+          .filter((part) => typeof part === "string" && part.trim())
+          .map((part: string) => part.trim());
+        const redirect =
+          typeof entry.finalRedirectUrl === "string" && entry.finalRedirectUrl
+            ? `redirected to ${entry.finalRedirectUrl}`
+            : "";
+        return {
+          pageUrl: String(entry.pageUrl ?? ""),
+          status: String(entry.status ?? ""),
+          reason:
+            [...new Set(said), redirect].filter(Boolean).join("; ") ||
+            String(entry.status ?? "unknown"),
+        };
+      });
+  }
+
+  /**
+   * A GET of the scanner API, or undefined when it fails: for reads that only add detail to
+   * an answer, so their failure must not become the answer.
+   */
+  private async readQuietly(url: string) {
+    try {
+      return await apiClient.get({
+        url,
+        headers: {
+          Authorization:
+            "Basic " +
+            Buffer.from(
+              `${this.auth?.username}:${this.auth?.password}`,
+            ).toString("base64"),
+        },
+        raise_error: false,
+      });
+    } catch {
+      return undefined;
+    }
+  }
+
+  private authHeaders(): Record<string, string> {
+    return {
+      Authorization:
+        "Basic " +
+        Buffer.from(`${this.auth?.username}:${this.auth?.password}`).toString(
+          "base64",
+        ),
+    };
+  }
+
+  /**
+   * A scan's saved setup, which a re-run of it runs with. An id that is no scan this account
+   * can see is a refusal to say as it is; the API takes only a number.
+   */
+  async savedScan(scanId: string): Promise<SavedScan> {
+    if (!/^\d+$/.test(scanId)) throw new ScanRefusedError(notVisible(scanId));
+    const resp = await apiClient.get({
+      url: `${scansApi()}/${scanId}/overview`,
+      headers: this.authHeaders(),
+      raise_error: false,
+    });
+    if (resp.status === 404) throw new ScanRefusedError(notVisible(scanId));
+    if (!resp.ok) {
+      const reason = refusalReason({ response: resp });
+      throw new Error(
+        `Could not read scan ${scanId} to check it is for this page (${reason || `HTTP ${resp.status}`}); nothing was started`,
+      );
+    }
+    const data = resp.data?.data ?? {};
+    const info = data.scanConfigInfo ?? {};
+    const flag = (value: unknown) =>
+      typeof value === "boolean" ? value : undefined;
+    const settings: ScanSettings = {
+      ...(typeof info.wcagVersion === "string" && info.wcagVersion
+        ? { wcagVersion: info.wcagVersion }
+        : {}),
+      ...(flag(info.bestPractices) !== undefined
+        ? { bestPractices: info.bestPractices }
+        : {}),
+      ...(flag(info.needsReview) !== undefined
+        ? { needsReview: info.needsReview }
+        : {}),
+      ...(flag(info.advanced) !== undefined
+        ? { advancedRules: info.advanced }
+        : {}),
+      ...(flag(info.experimental) !== undefined
+        ? { experimentalRules: info.experimental }
+        : {}),
+    };
+    return {
+      ...(typeof info.name === "string" && info.name
+        ? { name: info.name }
+        : {}),
+      urlList: Array.isArray(data.urlList) ? data.urlList.map(String) : [],
+      settings,
+      authEnabled: flag(info.authEnabled),
+      localTestingEnabled: flag(info.localTestingEnabled),
+    };
+  }
+
+  /**
+   * Starts a new run of a saved scan. The endpoint takes no settings: the run has the
+   * scan's saved ones, Local and login included. Its refusals are said as they are.
+   */
+  async rerunScan(scanId: string): Promise<{ scanRunId: string }> {
+    let data: any;
+    try {
+      const response = await apiClient.post({
+        url: `${scansApi()}/${scanId}/new_scan`,
+        headers: {
+          ...this.authHeaders(),
+          "Content-Type": "application/json",
+        },
+        body: {},
+      });
+      data = response.data;
+    } catch (err: any) {
+      throw await this.rerunRefusal(scanId, err);
+    }
+    const scanRunId = data?.data?.scanRunId;
+    if (!data?.success || scanRunId === undefined || scanRunId === null) {
+      throw new Error(
+        `Unable to re-run scan ${scanId}: ${data?.error || JSON.stringify(data)}`,
+      );
+    }
+    return { scanRunId: String(scanRunId) };
+  }
+
+  private async rerunRefusal(scanId: string, err: any): Promise<Error> {
+    const status = err?.response?.status;
+    const reason = refusalReason(err);
+    const said = String(reason ?? "");
+    if (status === 422 && /already in progress/i.test(said)) {
+      const run = await this.runInProgress(scanId);
+      return new ScanRefusedError(
+        run
+          ? `A run of scan ${scanId} is still going (run ${run.id}, ${run.status}), so a new run was not started. Read that run's issues with fetchAccessibilityIssues (scanId "${scanId}", scanRunId "${run.id}") once it finishes, or wait for it to finish and call startAccessibilityScan with scanId "${scanId}" again for another run.`
+          : `A run of scan ${scanId} is still going, so a new run was not started; its run id could not be read (the scan's page in the dashboard shows it). Wait for it to finish, then read its issues with fetchAccessibilityIssues, or call startAccessibilityScan with scanId "${scanId}" again for another run.`,
+      );
+    }
+    if (status === 403 && /auth config/i.test(said)) {
+      return new ScanRefusedError(
+        `Scan ${scanId} can't be re-run: the login config (auth config) it was saved with has been deleted. Start a new scan instead: call startAccessibilityScan without scanId, with an authConfigId that exists if the page needs a login.`,
+      );
+    }
+    if (status === 404) return new ScanRefusedError(notVisible(scanId));
+    if (typeof status === "number" && status >= 400 && status < 500 && said) {
+      // 402 is the plan: its message names what the plan does not include.
+      return new ScanRefusedError(
+        `Scan ${scanId} was not re-run: ${said}${/[.!?]$/.test(said) ? "" : "."}`,
+      );
+    }
+    return new Error(
+      `Failed to re-run scan ${scanId}: ${said || err?.message || String(err)}`,
+    );
+  }
+
+  /**
+   * The run of a scan that is still going, or undefined when it cannot be told. The scans
+   * list gives each scan's last run with its status, but only for a scan on its first page;
+   * the scan's own runs list has every run, newest by date, but no status.
+   */
+  async runInProgress(
+    scanId: string,
+  ): Promise<{ id: string; status: string } | undefined> {
+    const read = (url: string) =>
+      apiClient
+        .get({ url, headers: this.authHeaders(), raise_error: false })
+        .catch(() => undefined);
+    const going = (status: unknown): status is string =>
+      typeof status === "string" && !FINAL_SCAN_STATUSES.has(status);
+    const [list, runs] = await Promise.all([
+      read(scansApi()),
+      read(`${scansApi()}/${scanId}/scan_runs`),
+    ]);
+    const last = (
+      list?.ok
+        ? ((list.data?.data?.scans ?? []) as any[]).find(
+            (scan) => String(scan?.id) === String(scanId),
+          )
+        : undefined
+    )?.lastScanDetails;
+    if (last?.scanRunId && going(last.scanStatus)) {
+      return { id: String(last.scanRunId), status: last.scanStatus };
+    }
+    const newest = (
+      runs?.ok ? ((runs.data?.data?.scanRuns ?? []) as any[]) : []
+    )
+      .filter((run) => run?.id !== undefined)
+      .sort((a, b) => String(b.scanDate).localeCompare(String(a.scanDate)))[0];
+    if (!newest) return undefined;
+    const status = (
+      await read(`${scansApi()}/${scanId}/scan_runs/${newest.id}/status`)
+    )?.data?.data?.status;
+    return going(status) ? { id: String(newest.id), status } : undefined;
+  }
+
   async pollStatus(
     scanId: string,
     scanRunId: string,
   ): Promise<AccessibilityScanStatus> {
     try {
       const response = await apiClient.get<AccessibilityScanStatus>({
-        url: `https://api-accessibility.browserstack.com/api/website-scanner/v1/scans/${scanId}/scan_runs/${scanRunId}/status`,
+        url: `${getRegionalHost("accessibilityApi")}/api/website-scanner/v1/scans/${scanId}/scan_runs/${scanRunId}/status`,
         headers: {
           Authorization:
             "Basic " +
@@ -277,10 +730,10 @@ export class AccessibilityScanner {
           const progress = status === "completed" ? 100 : timepercent;
           const dots = ".".repeat(dotCount);
           dotCount = (dotCount % 4) + 1;
-          const message =
-            status === "completed" || status === "failed"
-              ? `Scan completed with status: ${status}`
-              : `Scan in progress${dots}`;
+          const finished = FINAL_SCAN_STATUSES.has(status);
+          const message = finished
+            ? `Scan completed with status: ${status}`
+            : `Scan in progress${dots}`;
           await context.sendNotification({
             method: "notifications/progress",
             params: {
@@ -290,23 +743,22 @@ export class AccessibilityScanner {
               total: 100,
             },
           });
-          if (status === "completed" || status === "failed") {
+          if (finished) {
             clearInterval(interval);
+            clearTimeout(timeout);
             resolve(status);
           }
         } catch (e) {
           clearInterval(interval);
+          clearTimeout(timeout);
           reject(e);
         }
       }, 5000);
 
-      setTimeout(
-        () => {
-          clearInterval(interval);
-          reject(new Error("Scan timed out after 5 minutes"));
-        },
-        5 * 60 * 1000,
-      );
+      const timeout = setTimeout(() => {
+        clearInterval(interval);
+        reject(new ScanTimeoutError(SCAN_WAIT_MS));
+      }, SCAN_WAIT_MS);
     });
   }
 }

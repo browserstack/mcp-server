@@ -1,9 +1,9 @@
 import { z } from "zod";
-import appConfig from "../../config.js";
+import { getRegionalHost } from "../../lib/regional-host.js";
 import { TestStatus } from "./types.js";
 
 export function getAutomationBaseUrl(): string {
-  return appConfig.BROWSERSTACK_AUTOMATION_BASE_URL;
+  return getRegionalHost("automationApi");
 }
 
 export const FETCH_RCA_PARAMS = {
@@ -16,25 +16,30 @@ export const FETCH_RCA_PARAMS = {
 export const GET_BUILD_ID_PARAMS = {
   browserStackProjectName: z
     .string()
-    .describe(
-      "BrowserStack project name from the test run config (e.g. browserstack.yml). Exact match; no default.",
-    ),
+    .optional()
+    .describe("Project name, as in browserstack.yml or the dashboard."),
   browserStackBuildName: z
     .string()
-    .describe(
-      "BrowserStack build name from the test run config (e.g. browserstack.yml). Exact match; no default.",
-    ),
+    .optional()
+    .describe("Build name from browserstack.yml; latest run."),
+  buildNumber: z
+    .number()
+    .int()
+    .positive()
+    .optional()
+    .describe("Build #N; then give the dashboard build name."),
+  buildUrl: z
+    .string()
+    .optional()
+    .describe("TRA or Automate dashboard link to the build."),
 };
 
 export const LIST_TEST_IDS_PARAMS = {
-  buildId: z
-    .string()
-    .describe("Build id; get it with getBuildId or listBuildId."),
+  buildId: z.string().describe("TRA build id from listBuildId."),
   status: z
     .nativeEnum(TestStatus)
-    .describe(
-      "Filter tests by status. If not provided, all tests are returned. Example for RCA usecase always use failed status",
-    ),
+    .optional()
+    .describe("Only tests with this status; use failed for RCA."),
   includeFailureDetail: z
     .boolean()
     .optional()

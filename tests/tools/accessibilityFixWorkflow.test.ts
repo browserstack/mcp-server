@@ -48,7 +48,7 @@ describe("the fix workflow over MCP", () => {
     const text = (messages[0].content as { text: string }).text;
     expect(text).toMatch(/^You are fixing accessibility issues in this codebase/);
     expect(text).toContain("- **Target:** http://localhost:3000/cart\n- **Scope:** critical only");
-    expect(text).toMatch(/If either is empty, settle it in Step 1\. Don't guess\./);
+    expect(text).toMatch(/If either is empty, ask for it in Stage 1\./);
     expect(text).toMatch(/use the user's full words: some clients split arguments on spaces\.$/);
     await client.close();
   });

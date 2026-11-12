@@ -1,5 +1,10 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
+import {
+  FIX_WORKFLOW_NAME,
+  FIX_WORKFLOW_TITLE,
+  fixWorkflowText,
+} from "./accessiblity-utils/fix-workflow.js";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import {
   AccessibilityScanner,
@@ -2318,4 +2323,41 @@ export default function addAccessibilityTools(
   );
 
   return tools;
+}
+
+/**
+ * The fix workflow, for a server that lists the accessibility tools: a prompt the user starts
+ * on purpose, filled in with what they asked to check and to fix.
+ */
+export function addAccessibilityFixWorkflow(server: McpServer): void {
+  server.registerPrompt(
+    FIX_WORKFLOW_NAME,
+    {
+      title: FIX_WORKFLOW_TITLE,
+      description:
+        "Find, fix and verify accessibility issues in this codebase with BrowserStack.",
+      argsSchema: {
+        target: z
+          .string()
+          .optional()
+          .describe(
+            "What to check: a page URL, a local dev URL, or a BrowserStack report link.",
+          ),
+        scope: z
+          .string()
+          .optional()
+          .describe(
+            "What to fix: e.g. critical issues only, one component, or files changed on this branch.",
+          ),
+      },
+    },
+    ({ target, scope }) => ({
+      messages: [
+        {
+          role: "user",
+          content: { type: "text", text: fixWorkflowText({ target, scope }) },
+        },
+      ],
+    }),
+  );
 }

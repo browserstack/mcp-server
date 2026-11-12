@@ -157,6 +157,15 @@ function toInvocationError(
   product: string,
 ): InvocationError | unknown {
   if (!(error instanceof CentralAuthError)) return error;
+  const refusal = toTokenMintRefusal(error, product);
+  refusal.authKind = error.kind;
+  return refusal;
+}
+
+function toTokenMintRefusal(
+  error: CentralAuthError,
+  product: string,
+): InvocationError {
   const prefix = `token_mint_failed: could not sign in to '${product}'`;
   switch (error.kind) {
     case "no_credentials":

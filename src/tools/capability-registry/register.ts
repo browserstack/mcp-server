@@ -24,6 +24,7 @@ import { z } from "zod";
 
 import logger from "../../logger.js";
 import { MCPEventExtras, trackMCP } from "../../lib/instrumentation.js";
+import { RegionProbeError } from "../../lib/error.js";
 import { BrowserStackConfig } from "../../lib/types.js";
 import { GroupedArguments, replacedFixed, withoutFixed } from "./bind.js";
 import { indexPaths, isEnabled, resolveBaseUrl } from "./config.js";
@@ -1451,18 +1452,34 @@ export function addCapabilityRegistryTools(
             invocationReason(error.message, error),
             error.message,
             undefined,
-            identity,
+            {
+              ...identity,
+              ...(error.authKind ? { auth_failure_kind: error.authKind } : {}),
+            },
           );
-        logger.error(
-          "invokeCapability failed: %s",
-          error instanceof Error ? error.message : String(error),
-        );
+        // The Test Management host probe found no host for the account. The caller gets
+        // the same text the direct tools show, with each host's answer; telemetry gets
+        // the US host's status, which is what decides whose fault it is.
+        if (error instanceof RegionProbeError)
+          return refuse(
+            "invokeCapability",
+            "region_probe_failed",
+            error.message,
+            undefined,
+            { ...identity, probe_status: error.usStatus },
+          );
+        const detail = error instanceof Error ? error.message : String(error);
+        // No %s: the remote server's logger does not interpolate, and this line was
+        // reaching production as the literal placeholder.
+        logger.error(`invokeCapability failed: ${detail}`);
+        // The caller still gets the fixed text; the row keeps what actually happened,
+        // through the same redaction as every other message.
         return refuse(
           "invokeCapability",
           "unexpected_error",
           "that capability could not be invoked",
           undefined,
-          identity,
+          { ...identity, error_message: redact(detail) },
         );
       }
     },

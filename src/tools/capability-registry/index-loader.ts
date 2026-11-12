@@ -37,6 +37,13 @@ export class InvocationError extends Error {
    * whether withholding it was the right call.
    */
   withheld?: boolean;
+  /**
+   * Set when the refusal is a failed token mint, with central auth's classification of
+   * why. The message already says it in prose; the field keeps it countable: refused
+   * credentials are the caller's, a refused scope is our provisioning, an unreachable
+   * auth server is the platform's.
+   */
+  authKind?: string;
 }
 
 /** The file inside a product subdirectory, for the earlier nested layout. */

@@ -4,6 +4,7 @@ import { BrowserStackConfig } from "./types.js";
 import { getBrowserStackAuth } from "./get-auth.js";
 import appConfig from "../config.js";
 import { getRegionalHost, usesRegionalHosts } from "./regional-host.js";
+import { RegionProbeError } from "./error.js";
 
 // Probe order when the account has no regional hosts here.
 const TM_BASE_URLS = [
@@ -41,6 +42,8 @@ export async function getTMBaseURL(
     "Basic " + Buffer.from(`${username}:${password}`).toString("base64");
 
   const failures: string[] = [];
+  // One entry per host tried, in probe order; status 0 means no answer at all.
+  const results: { host: string; status: number }[] = [];
 
   for (const baseUrl of TM_BASE_URLS) {
     try {
@@ -52,6 +55,7 @@ export async function getTMBaseURL(
 
       if (!res.ok) {
         failures.push(`${baseUrl}: HTTP ${res.status}`);
+        results.push({ host: baseUrl, status: res.status });
       }
 
       if (res.ok) {
@@ -66,11 +70,13 @@ export async function getTMBaseURL(
     } catch (err) {
       const code = (err as { code?: string })?.code ?? (err as Error)?.message;
       failures.push(`${baseUrl}: ${code}`);
+      results.push({ host: baseUrl, status: 0 });
       logger.debug(`Failed TM base URL: ${baseUrl} (${err})`);
     }
   }
 
-  throw new Error(
+  throw new RegionProbeError(
     `Unable to connect to BrowserStack Test Management. Please check your credentials and network connection.Please open an issue on GitHub if the problem persists. Details: ${failures.join("; ")}`,
+    results,
   );
 }

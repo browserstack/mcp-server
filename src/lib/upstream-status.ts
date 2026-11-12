@@ -9,6 +9,12 @@ import { AsyncLocalStorage } from "node:async_hooks";
 export interface UpstreamScope {
   status?: number;
   callerFault?: boolean;
+  /**
+   * Set when the Test Management region probe failed before any product call: the
+   * US host's answer (an HTTP status, or 0 when the connection was never answered).
+   * Survives a catch block that rewraps the error into a returned result.
+   */
+  probeStatus?: number;
 }
 
 const upstreamScope = new AsyncLocalStorage<UpstreamScope>();
@@ -30,6 +36,15 @@ export function recordUpstreamStatus(status: number): void {
 export function markCallerFault(): void {
   const scope = upstreamScope.getStore();
   if (scope) scope.callerFault = true;
+}
+
+/**
+ * Marks the current tool call as having failed in the Test Management region probe,
+ * with what the US host answered. A no-op outside a call.
+ */
+export function recordRegionProbeFailure(usStatus: number): void {
+  const scope = upstreamScope.getStore();
+  if (scope && Number.isInteger(usStatus)) scope.probeStatus = usStatus;
 }
 
 /** `fetch` that records the answer's status, or 0 when there was none. */

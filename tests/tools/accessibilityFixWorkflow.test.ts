@@ -53,14 +53,14 @@ describe("the fix workflow over MCP", () => {
     await client.close();
   });
 
-  it("doesn't send the agent to accessibilityExpert, which is deprecated", async () => {
+  it("sends general WCAG questions to askBrowserStackAI, not the deprecated accessibilityExpert", async () => {
     const client = await connected();
 
     const { messages } = await client.getPrompt({ name: "fix-accessibility-issues", arguments: {} });
     const text = (messages[0].content as { text: string }).text;
     expect(text).not.toContain("accessibilityExpert");
     expect(text).toContain(
-      "For general WCAG or ARIA questions that are not about this report, answer from what you know, and name the WCAG success criterion (number and name) the answer rests on.",
+      "For general WCAG or ARIA questions that are not about this report, also ask BrowserStack AI: call `askBrowserStackAI` with `product: \"a11y\"` and the question.",
     );
     await client.close();
   });

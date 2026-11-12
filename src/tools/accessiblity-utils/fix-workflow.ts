@@ -63,7 +63,7 @@ When that data doesn't answer your question, ask BrowserStack AI instead of gues
 
 Keep these calls few and focused. Ask only what the issue data can't answer, and ask one clear question per call. Don't call it once per issue: put related questions about the same rule into one call. If it says Ask AI is not enabled for this account, tell the user and carry on from the issue data.
 
-For general WCAG or ARIA questions that are not about this report, answer from what you know, and name the WCAG success criterion (number and name) the answer rests on.
+For general WCAG or ARIA questions that are not about this report, also ask BrowserStack AI: call \`askBrowserStackAI\` with \`product: "a11y"\` and the question.
 
 ## Stage 3: Fix
 

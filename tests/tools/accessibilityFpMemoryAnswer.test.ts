@@ -18,6 +18,7 @@ vi.mock("../../src/tools/accessiblity-utils/report-fetcher.js", () => ({
     getReportLink = vi.fn(async () => "https://exports.example/report.csv");
     reportStatus = vi.fn(async () => "completed");
     resolveBuild = vi.fn(async (source: unknown) => source);
+    score = vi.fn(async () => undefined);
   },
   EXPORT_WAIT_MS: 45_000,
   ExportPendingError: class extends Error {},

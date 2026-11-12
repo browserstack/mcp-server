@@ -322,3 +322,26 @@ describe("hide reasons are offered before the contract is read", () => {
     },
   );
 });
+
+// Asked for "the report link", an agent had no way to build one: the Workflow Analyzer list
+// returns no link and nothing described the dashboard's routes, so it fell back to clicking
+// through a browser. Every list that returns a report says how to link it, on the first
+// guidance line, which rides on each search row.
+describe("report lists say how to link a report", () => {
+  const web = () => shipped().web_accessibility.capabilities as any[];
+
+  it.each([
+    ["list_workflow_analyzer_reports", "/workflow-analyzer/report?ids={id}"],
+    ["list_assisted_test_reports", "/assisted-test/report?ar_ids={id}"],
+    ["list_accessibility_reports", "/assisted-test/report?ar_ids={id}"],
+    ["list_automated_tests_builds", "?thBuildId={id}"],
+    ["list_build_report_runs", "/site-scanner/projects/{scan name}/builds?thBuildId={thBuildId}"],
+    ["list_website_scanner_scan_runs", "/site-scanner/projects/{scan name}/builds?thBuildId={thBuildId}"],
+    ["list_custom_dashboards", "/dashboards/{id}"],
+    ["get_report_comparison_summary", "/compare?ids={older thBuildId},{newer thBuildId}"],
+  ])("%s links with %s", (name, route) => {
+    const first: string = web().find((c) => c.name === name).guidance[0];
+    expect(first).toContain("https://accessibility.browserstack.com");
+    expect(first).toContain(route);
+  });
+});

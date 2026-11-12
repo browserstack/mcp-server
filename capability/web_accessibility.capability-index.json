@@ -57,6 +57,7 @@
         ],
         "intent": "List the account's Workflow Analyzer reports newest first, with each report's id, name, creator, status, settings and issue counts - use this to find someone's latest reports, a report by name, or the id that reads its issues.",
         "guidance": [
+          "Link a report as https://accessibility.browserstack.com/workflow-analyzer/report?ids={id}, with the bare id (39252, never workflowScan:39252); several reports open together as ids=1,2,3. The same address works in every region.",
           "id is the workflowReportId fetchAccessibilityIssues takes to read a report's issues.",
           "There is no filter by person, name or date: the list holds every report in the account, newest first. For someone's latest reports, read pages in order, with limit 99 to need fewer, and keep the rows whose createdBy.name or createdBy.id is theirs, stopping once you have enough.",
           "Paging is data.pagination.hasNext and data.pagination.nextPage; send nextPage back as next_page with the same limit.",
@@ -192,6 +193,7 @@
         ],
         "intent": "List one Website Scanner scan's runs newest first, with each run's id, date, issue and component counts and how many pages loaded - use this to pick an earlier run or follow a site's issues over time.",
         "guidance": [
+          "Link a run as https://accessibility.browserstack.com/site-scanner/projects/{scan name}/builds?thBuildId={thBuildId}, with the scan's display name (name in list_website_scanner_scans, URL-encoded), never the CS_<name>_CS projectName. The same address works in every region.",
           "id is the scanRunId fetchAccessibilityIssues takes with this scan's scanId, also as compareWith.",
           "Runs are ordered by scanDate, newest first. A run started by hand can carry a later id than a newer scheduled run, so do not order them by id.",
           "reportSummary.failure counts the pages that did not load in that run; their issues are missing from its count.",
@@ -321,6 +323,7 @@
         ],
         "intent": "List the account's Automated Tests builds newest first, or one project's, with each build's id, number, name, creator, status and issue counts - use this to find a suite's latest run, someone's builds, or the build id that reads its issues.",
         "guidance": [
+          "Link a build as https://accessibility.browserstack.com/automated-tests/projects/{project name}/builds/{name}/{buildNumber}?thBuildId={id}, every value from the same row and URL-encoded (a space is %20). The row has only projectId: take the project name from list_automated_tests_projects, or use list_build_report_runs, whose rows carry projectName. Without thBuildId the page loads nothing. The same address works in every region.",
           "id is the 40-character build id fetchAccessibilityIssues takes as buildId, the thBuildId in the build's dashboard link.",
           "A project_name that matches no project answers 200 with data null and info ['No Projects found']: no match, not an error.",
           "Builds that ran without accessibility checks are left out, so a page can hold fewer rows than limit.",
@@ -390,6 +393,7 @@
         ],
         "intent": "List the account's Assisted Test reports newest first, with each report's id, name, creator, status, test type and issue counts - use this to find a guided keyboard, forms or other assisted check someone ran.",
         "guidance": [
+          "Link a report as https://accessibility.browserstack.com/assisted-test/report?ar_ids={id}, with the bare id (never assistiveTest:<id>). The same address works in every region.",
           "fetchAccessibilityIssues does not read Assisted Test reports: the counts here are what an agent can get, and the report itself is read on the Accessibility dashboard.",
           "scanSettings.assistedTestType is a number: 0 keyboard, 1 interactive elements, 2 modals, 3 forms, 4 images, 5 layout, 6 tables, 7 responsiveness.",
           "There is no filter by person, name or date: the list holds every report in the account, newest first; read pages in order, with limit 99 to need fewer, and keep the rows whose createdBy.name or createdBy.id is theirs.",
@@ -446,6 +450,7 @@
         ],
         "intent": "List the account's custom dashboards newest first, with each one's id, name, creator and cached issue count, page count and score - use this to find a dashboard by name or person, or the id the other custom dashboard capabilities take.",
         "guidance": [
+          "Link a dashboard as https://accessibility.browserstack.com/dashboards/{id}. The same address works in every region.",
           "id is the {id} every get_custom_dashboard_* capability takes.",
           "The list is not paginated: every dashboard comes back in one response, newest created first.",
           "summary is a cache written the last time someone opened the dashboard, so it can be stale; summary.score is null when it was never computed or the dashboard has no scans. For current numbers call get_custom_dashboard_issue_summary and get_custom_dashboard_score_summary.",
@@ -1568,6 +1573,7 @@
         ],
         "intent": "List the account's manual-testing reports - Workflow Analyzer, Assisted Tests or PDF Scanner - newest first, with each report's id, name, creator, status, issue counts and score, filterable by name, person, team and date - use this to find someone's latest manual reports or a report by name.",
         "guidance": [
+          "Link a row with its bare id, never uniqueId: Workflow Analyzer as https://accessibility.browserstack.com/workflow-analyzer/report?ids={id}, Assisted Test as https://accessibility.browserstack.com/assisted-test/report?ar_ids={id}. The same address works in every region.",
           "product is required; without it the call answers 422 'Parameter product is required'.",
           "Paging is page and page_size; info.count is the total, info.next the next page number or null. A page can hold fewer rows than page_size when a report is still being created.",
           "isColdStart true means this page came back empty with no filter sent (product other than extension). On page 1 that means the account has no reports of that product, and the rows, if any, are BrowserStack sample reports. Past the last page it is also true, with reports [], info.count 0 and info.page 1, so read info.next rather than paging until empty. A filtered empty result and product=extension always answer false.",
@@ -1812,6 +1818,7 @@
         ],
         "intent": "List the account's Automated Tests builds (or one Website Scanner scan's runs) newest first, with build name, number, project, status, creator and issue summary - use this to find a build and the thBuildId every other build report capability needs.",
         "guidance": [
+          "Link an Automated Tests build as https://accessibility.browserstack.com/automated-tests/projects/{projectName}/builds/{name}/{buildNumber}?thBuildId={thBuildId}, every value from the same row and URL-encoded (a space is %20). A Website Scanner run is https://accessibility.browserstack.com/site-scanner/projects/{scan name}/builds?thBuildId={thBuildId}, with the scan's display name from list_website_scanner_scans, never the CS_<name>_CS projectName. The same address works in every region.",
           "thBuildId is the key every build report capability takes as th_build_id. Pair it with name, buildNumber and projectName when talking to the user.",
           "testRuns[].id is the TestHub build id, NOT the local id that meta and overview return as id. Never pass it anywhere.",
           "Paging: follow info.next until it is null. info.count is not a total; it grows page by page.",
@@ -4609,6 +4616,7 @@
         ],
         "intent": "Compare two runs of the same build or scan: how many issues are new, retained and resolved, by severity, page, component and test - use this to answer 'what got better or worse since the last run'.",
         "guidance": [
+          "Link the comparison as https://accessibility.browserstack.com/automated-tests/compare?ids={older thBuildId},{newer thBuildId} (or /site-scanner/compare for scan runs), older first: the page calls the first one the base run. The same address works in every region.",
           "Base is always the older run and new the newer one, whatever the ids order.",
           "newIssues, retainedIssues and resolvedIssues are the totals; severityBreakdown has one row each for 'New issues', 'Retained' and 'Resolved' with minor, moderate, serious and critical counts.",
           "Inside pageComparison.chartData, componentComparison.chartData and tests.tableData the counts sit under the lowercase keys new, resolved and retained.",

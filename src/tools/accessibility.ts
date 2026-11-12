@@ -163,6 +163,13 @@ async function initializeReportFetcher(
   return reportFetcher;
 }
 
+/**
+ * accessibilityExpert is going away; until it is removed it still answers, with this note,
+ * which names what to use instead so an agent stops reaching for it.
+ */
+const ACCESSIBILITY_EXPERT_DEPRECATED =
+  "Note: accessibilityExpert is deprecated and will be removed in a future release. To list or filter a report's issues, for example those failing a WCAG criterion, use fetchAccessibilityIssues and answer from its result; to scan a page, use startAccessibilityScan. For advice on a report, such as how to raise its score or which issues to fix first, call askBrowserStackAI with product a11y and give the user its answer. For a general WCAG or ARIA question, call askBrowserStackAI with product a11y too. If askBrowserStackAI says it is not enabled for this account, answer from the report's issues.";
+
 async function executeAccessibilityRAG(
   args: { query: string },
   server: McpServer,
@@ -177,14 +184,18 @@ async function executeAccessibilityRAG(
     );
     const { query, shortened, kept } = fitExpertQuery(args.query);
     const answer = await queryAccessibilityRAG(query, config);
-    if (!shortened) return answer;
     return {
       ...answer,
       content: [
-        {
-          type: "text",
-          text: `The question was ${args.query.length} characters; the knowledge base takes at most ${EXPERT_QUERY_MAX_CHARS}, so ${query.length} were sent: its ${kept ?? "opening"}. If the answer misses the point, ask again more briefly.`,
-        },
+        { type: "text", text: ACCESSIBILITY_EXPERT_DEPRECATED },
+        ...(shortened
+          ? [
+              {
+                type: "text" as const,
+                text: `The question was ${args.query.length} characters; the knowledge base takes at most ${EXPERT_QUERY_MAX_CHARS}, so ${query.length} were sent: its ${kept ?? "opening"}. If the answer misses the point, ask again more briefly.`,
+              },
+            ]
+          : []),
         ...(answer.content ?? []),
       ],
     };
@@ -2027,7 +2038,7 @@ export default function addAccessibilityTools(
 
   tools.accessibilityExpert = server.tool(
     "accessibilityExpert",
-    "Answer accessibility, a11y, and WCAG questions using BrowserStack's accessibility knowledge base.",
+    "Deprecated, to be removed: answers accessibility, a11y, and WCAG questions from BrowserStack's accessibility knowledge base.",
     {
       query: z
         .string()
@@ -2036,7 +2047,7 @@ export default function addAccessibilityTools(
         ),
     },
     {
-      title: "Accessibility Expert",
+      title: "Accessibility Expert (deprecated)",
       readOnlyHint: true,
       openWorldHint: false,
       destructiveHint: false,

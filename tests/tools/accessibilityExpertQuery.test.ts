@@ -100,16 +100,22 @@ describe("accessibilityExpert with a long question", () => {
     const result = await ask(query);
 
     const sent: string = rag.query.mock.calls[0][0];
-    expect(result.content[0].text).toBe(
+    expect(result.content[0].text).toMatch(/^Note: accessibilityExpert is deprecated/);
+    expect(result.content[1].text).toBe(
       `The question was ${query.length} characters; the knowledge base takes at most ${EXPERT_QUERY_MAX_CHARS}, so ${sent.length} were sent: its ${kept}. If the answer misses the point, ask again more briefly.`,
     );
     expect(result.content.at(-1).text).toBe("Answer.");
   });
 
-  it("adds no note to a question within the limit", async () => {
+  it("adds only the deprecation note to a question within the limit", async () => {
     const result = await ask(QUESTION);
 
     expect(rag.query.mock.calls[0][0]).toBe(QUESTION);
-    expect(result.content).toEqual([{ type: "text", text: "Answer." }]);
+    expect(result.content).toHaveLength(2);
+    expect(result.content[0].text).toMatch(/^Note: accessibilityExpert is deprecated/);
+    expect(result.content[0].text).toContain(
+      "For a general WCAG or ARIA question, call askBrowserStackAI with product a11y too.",
+    );
+    expect(result.content[1]).toEqual({ type: "text", text: "Answer." });
   });
 });

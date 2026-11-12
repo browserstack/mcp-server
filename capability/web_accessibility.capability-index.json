@@ -829,6 +829,7 @@
         ],
         "intent": "Count a custom dashboard's issues by severity (critical, serious, moderate, minor) across all its scans, with the total - use this for 'how many issues' or 'how many critical issues' on a dashboard.",
         "guidance": [
+          "These totals already merge and de-duplicate across the dashboard's scans: report them as they stand, and never add up the underlying reports instead, which double-counts.",
           "issueCount is the sum of the four severities. duplicateIssueCount is how many issues were folded away as duplicates of another; it is already excluded from issueCount.",
           "A dashboard with no scans (get_custom_dashboard hasTests false) answers 500 with an empty body, not zeros: check hasTests first.",
           "Calling this also refreshes the cached summary.issueCount that list_custom_dashboards shows."
@@ -922,6 +923,7 @@
         ],
         "intent": "Count a custom dashboard's issues by category (colour, ARIA, forms, keyboard and so on), largest first - use this for 'what kind of issues does this dashboard have most of'.",
         "guidance": [
+          "These totals already merge and de-duplicate across the dashboard's scans: report them as they stand, and never add up the underlying reports instead, which double-counts.",
           "Every category is listed, including those at 0, sorted by count descending. category is the axe tag (e.g. cat.color); name is its display label.",
           "On an RGAA dashboard the buckets are the 13 RGAA themes (category rgaa_theme_1 to rgaa_theme_13) instead of axe categories.",
           "Counts include needs-review issues as well as confirmed ones, so they can exceed get_custom_dashboard_issue_summary on some dashboards.",
@@ -1007,6 +1009,7 @@
         ],
         "intent": "Read a custom dashboard's accessibility score (0-100) and the per-severity pass/fail breakdown behind it - use this for 'what is this dashboard's score' or why it is low.",
         "guidance": [
+          "These totals already merge and de-duplicate across the dashboard's scans: report them as they stand, and never add up the underlying reports instead, which double-counts.",
           "score is 0 to 100, higher is better.",
           "Under impact, the bare severity key (critical, serious, moderate, minor) is the PERCENTAGE that failed at that severity, not an issue count; <severity>Passed and <severity>Failed are the counts of passed and failed checks feeding it. For issue counts use get_custom_dashboard_issue_summary.",
           "A dashboard with no scans (get_custom_dashboard hasTests false) answers 500 with an empty body: check hasTests first.",

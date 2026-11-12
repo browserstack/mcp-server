@@ -349,3 +349,18 @@ describe("report lists say how to link a report", () => {
     expect(first).toContain(route);
   });
 });
+
+// A dashboard's totals are merged and de-duplicated across its scans by the product. An
+// agent that "double-checks" by adding up the underlying reports reports a higher, wrong
+// number, so each summary says so on the line that rides on every search row.
+describe("custom dashboard summaries are reported as merged", () => {
+  it.each([
+    "get_custom_dashboard_issue_summary",
+    "get_custom_dashboard_category_summary",
+    "get_custom_dashboard_score_summary",
+  ])("%s says not to add up the underlying reports", (name) => {
+    const first: string = byName(name).guidance[0];
+    expect(first).toContain("de-duplicate");
+    expect(first).toContain("never add up the underlying reports");
+  });
+});

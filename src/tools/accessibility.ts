@@ -45,6 +45,11 @@ import { elicitCredentialsIfSupported } from "../lib/elicit-credentials.js";
 import logger from "../logger.js";
 import { NEEDS_A11Y_CONFIG_ID, NEEDS_A11Y_SCAN_ID } from "./tool-handoff.js";
 import {
+  applyMemory,
+  memoryForReport,
+  type MemoryView,
+} from "./accessiblity-utils/fp-memory.js";
+import {
   createErrorResponse,
   createSuccessResponse,
   describeSource,
@@ -1141,8 +1146,19 @@ async function fetchAccessibilityIssues(
   const notScanned = (await unscanned).filter(
     (p) => p.status !== "redirect" && !errorPageUrls.has(samePage(p.pageUrl)),
   );
+  // The memory for this page's rules comes with the issues, so it is applied whether or
+  // not the agent thinks to ask for it.
+  const fp = applyMemory(
+    await memoryForReport(setupAuth(config), Object.keys(rules ?? {}), pageUrl),
+    records,
+    pageUrl,
+  );
+  const beforeRemoval = fp.marked
+    ? ", before removing saved false positives"
+    : "";
 
   return createSuccessResponse([
+    ...fp.lead,
     ...preface,
     ...processingNote(processing),
     // What the run did not check, said on the first page with the whole report's counts.
@@ -1161,14 +1177,16 @@ async function fetchAccessibilityIssues(
         ]),
     // A page that did not load has no issues of its own to count.
     ...(page && error_pages.length === 0 ? pageNote(page) : []),
-    `Retrieved ${page_length} accessibility issues (Total: ${total_issues})`,
+    `Retrieved ${page_length} accessibility issues (Total: ${total_issues}${beforeRemoval})`,
     // The whole report's score and counts, said on its first page.
     ...scoreNote(score),
     ...(cursor ? [] : webSummaryNote(summary, total_issues)),
     ...excludedIssuesNote(duplicate_issues, unlinked_duplicates, hidden_issues),
     fullReportLine(reportLink),
     WEB_ISSUES_NOTE,
-    `Issues: ${wrapUntrusted("accessibility scan results", JSON.stringify({ issues: records, rules }))}`,
+    ...fp.notes,
+    `Issues: ${wrapUntrusted("accessibility scan results", JSON.stringify({ issues: fp.records, rules }))}`,
+    ...fp.closing,
     ...(cursor ? [] : [askAiNote(source)]),
     closingMessage(
       next_page,
@@ -1692,16 +1710,24 @@ function createScanSuccessResponse(
   settings: ScanSettings = {},
   applied?: ScanSettings,
   score?: ReportScore,
+  fp: MemoryView<(typeof report.records)[number]> = applyMemory(
+    undefined,
+    report.records,
+  ),
 ): CallToolResult {
   const cursor = report.next_page;
+  const beforeRemoval = fp.marked
+    ? " (before removing saved false positives)"
+    : "";
   const messages = [
+    ...fp.lead,
     `Accessibility scan "${name}" completed. ${scanDashboardNote(dashboardLink, scanId)}`,
     `Scan ID: ${scanId} and Scan Run ID: ${scanRunId}`,
     // The parser leaves an error page's rows out of the count; this says why.
     ...errorPagesNote(report.error_pages ?? [], "scan again"),
     scanSettingsNote(settings, applied),
     fullReportLine(reportUrl),
-    `We found ${report.total_issues} issues. Below are the details of the ${report.page_length} most critical issues.`,
+    `We found ${report.total_issues} issues${beforeRemoval}. Below are the details of the ${report.page_length} most critical issues.`,
     ...scoreNote(score),
     ...webSummaryNote(report.summary, report.total_issues),
     ...excludedIssuesNote(
@@ -1710,7 +1736,9 @@ function createScanSuccessResponse(
       report.hidden_issues,
     ),
     WEB_ISSUES_NOTE,
-    `Scan results: ${wrapUntrusted("accessibility scan results", JSON.stringify({ issues: report.records, rules: report.rules }))}`,
+    ...fp.notes,
+    `Scan results: ${wrapUntrusted("accessibility scan results", JSON.stringify({ issues: fp.records, rules: report.rules }))}`,
+    ...fp.closing,
     askAiNote({ kind: "scan", scanId, scanRunId }),
   ];
 
@@ -1738,6 +1766,8 @@ async function scanOutcome(
     name: string;
     scanId: string;
     scanRunId: string;
+    /** The scanned page, whose site the false-positive memory is read for. */
+    pageURL: string;
     settings: ScanSettings;
     rerun?: boolean;
   },
@@ -1816,6 +1846,17 @@ async function scanOutcome(
     parseAccessibilityReportFromCSV(reportLink),
     reportFetcher.score({ kind: "scan", scanId, scanRunId }),
   ]);
+  // Saved false positives for this page's rules are removed before the issues are shown,
+  // for a new scan and a re-run alike.
+  const fp = applyMemory(
+    await memoryForReport(
+      setupAuth(config),
+      Object.keys(report.rules ?? {}),
+      scan.pageURL,
+    ),
+    report.records,
+    scan.pageURL,
+  );
   return [
     createScanSuccessResponse(
       scanName,
@@ -1827,6 +1868,7 @@ async function scanOutcome(
       settings,
       applied,
       score,
+      fp,
     ),
     "completed",
   ];
@@ -1864,6 +1906,7 @@ async function runAccessibilityScan(
     name: scanName,
     scanId,
     scanRunId,
+    pageURL,
     settings,
   });
   // The rename is said first, so the name asked for is not taken for the scan's.
@@ -1960,6 +2003,7 @@ async function rerunAccessibilityScan(
     name,
     scanId,
     scanRunId,
+    pageURL: saved.urlList[0],
     settings: saved.settings,
     rerun: true,
   });
@@ -2180,7 +2224,7 @@ export default function addAccessibilityTools(
 
   tools.fetchAccessibilityIssues = server.tool(
     "fetchAccessibilityIssues",
-    "Fetch accessibility issues from one source: scanId+scanRunId, buildId, workflowReportId, appReportId or reportUrl." +
+    "Fetch a web or app accessibility report's issues. Remove the saved false positives it marks before reporting any." +
       NEEDS_A11Y_SCAN_ID,
     {
       scanId: z

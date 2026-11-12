@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { AxiosError } from "axios";
 import { trackMCP, withToolCall } from "../../src/lib/instrumentation";
 import { apiClient } from "../../src/lib/apiClient";
-import { CallerError, HttpError } from "../../src/lib/error";
+import { CallerError, HttpError, RegionProbeError } from "../../src/lib/error";
 import {
   markCallerFault,
   recordUpstreamStatus,
@@ -64,24 +64,87 @@ describe("withToolCall failure attribution", () => {
   });
 
   it.each([
-    [400, "caller"],
-    [401, "caller"],
-    [404, "caller"],
-    [429, "caller"],
-    [408, "upstream"],
-    [500, "upstream"],
-    [503, "upstream"],
-    [0, "upstream"],
-  ])("attributes a recorded status %i to %s", async (status, expected) => {
+    [404, "caller", undefined],
+    [409, "caller", undefined],
+    [401, "caller", "blocked"],
+    [402, "caller", "blocked"],
+    [403, "caller", "blocked"],
+    [429, "caller", "blocked"],
+    [400, "mcp", "contract_drift"],
+    [422, "mcp", "contract_drift"],
+    [405, "mcp", "contract_drift"],
+    [410, "mcp", "contract_drift"],
+    [415, "mcp", "contract_drift"],
+    [408, "upstream", undefined],
+    [500, "upstream", undefined],
+    [503, "upstream", undefined],
+    [0, "upstream", undefined],
+  ])(
+    "attributes a recorded status %i to %s (%s)",
+    async (status, expected, reason) => {
+      const row = await rowOf(() => {
+        recordUpstreamStatus(status);
+        return failed;
+      });
+      expect(row).toMatchObject({
+        outcome: "error_result",
+        upstream_status: status,
+        failure_class: expected,
+      });
+      if (reason) expect(row).toMatchObject({ failure_reason: reason });
+      else expect(row).not.toHaveProperty("failure_reason");
+    },
+  );
+
+  it("attributes a completed capability invoke by the product's status", async () => {
+    // The registry returns a product 4xx/5xx as a normal result; the row still says
+    // whether the call failed, so the report reads one field on both paths.
     const row = await rowOf(() => {
-      recordUpstreamStatus(status);
-      return failed;
+      trackMCP("invokeCapability", clientInfo, undefined, config, {
+        upstream_ok: false,
+        upstream_status: 503,
+      });
+      return { content: [] };
     });
     expect(row).toMatchObject({
-      outcome: "error_result",
-      upstream_status: status,
-      failure_class: expected,
+      outcome: "ok",
+      upstream_status: 503,
+      failure_class: "upstream",
     });
+    vi.clearAllMocks();
+    const drift = await rowOf(() => {
+      trackMCP("invokeCapability", clientInfo, undefined, config, {
+        upstream_ok: false,
+        upstream_status: 422,
+      });
+      return { content: [] };
+    });
+    expect(drift).toMatchObject({
+      outcome: "ok",
+      failure_class: "mcp",
+      failure_reason: "contract_drift",
+    });
+  });
+
+  it("leaves a successful capability invoke unclassified", async () => {
+    const row = await rowOf(() => {
+      trackMCP("invokeCapability", clientInfo, undefined, config, {
+        upstream_ok: true,
+        upstream_status: 200,
+      });
+      return { content: [] };
+    });
+    expect(row).not.toHaveProperty("failure_class");
+  });
+
+  it("marks a returned failure with no text as an empty error result", async () => {
+    const row = await rowOf(() => ({ content: [], isError: true }));
+    expect(row).toMatchObject({
+      outcome: "error_result",
+      failure_class: "mcp",
+      failure_reason: "empty_error_result",
+    });
+    expect(row).not.toHaveProperty("error_message");
   });
 
   it("reads the status off an AxiosError the handler reported", async () => {
@@ -187,7 +250,6 @@ describe("withToolCall failure attribution", () => {
     ["capability_disabled", "caller"],
     ["unexpected_error", "mcp"],
     ["no_base_url", "mcp"],
-    ["token_mint_failed", "upstream"],
   ])("attributes the registry refusal %s to %s", async (reason, expected) => {
     const row = await rowOf(() => {
       trackMCP("someTool", clientInfo, new Error("refused"), config, {
@@ -196,6 +258,101 @@ describe("withToolCall failure attribution", () => {
       return failed;
     });
     expect(row).toMatchObject({ failure_class: expected });
+    expect(row).not.toHaveProperty("failure_reason");
+  });
+
+  it.each([
+    ["no_credentials", "caller", "blocked"],
+    ["refused_credentials", "caller", "blocked"],
+    ["refused_scope", "mcp", "auth_scope"],
+    ["unreachable", "upstream", "central_auth"],
+    ["server_error", "upstream", "central_auth"],
+    ["unusable", "upstream", "central_auth"],
+    [undefined, "upstream", "central_auth"],
+  ])(
+    "attributes a token mint that failed with %s to %s (%s)",
+    async (kind, expected, reason) => {
+      const row = await rowOf(() => {
+        trackMCP("someTool", clientInfo, new Error("refused"), config, {
+          refusal_reason: "token_mint_failed",
+          ...(kind ? { auth_failure_kind: kind } : {}),
+        });
+        return failed;
+      });
+      expect(row).toMatchObject({
+        failure_class: expected,
+        failure_reason: reason,
+      });
+    },
+  );
+
+  it.each([
+    [0, "mcp", "region_probe"],
+    [429, "mcp", "region_probe"],
+    [503, "mcp", "region_probe"],
+    [402, "caller", "blocked"],
+  ])(
+    "attributes a region probe whose US host answered %i to %s (%s)",
+    async (usStatus, expected, reason) => {
+      const row = await rowOf(() => {
+        trackMCP("invokeCapability", clientInfo, new Error("probe"), config, {
+          refusal_reason: "region_probe_failed",
+          probe_status: usStatus,
+        });
+        return failed;
+      });
+      expect(row).toMatchObject({
+        failure_class: expected,
+        failure_reason: reason,
+        probe_status: usStatus,
+      });
+    },
+  );
+
+  it("attributes a region probe on a direct tool by the US host, not the last host", async () => {
+    // The probe tries US, EU, IN; the other regions answer 401 to an account that is
+    // not theirs, and a tool that catches the error and returns text would otherwise be
+    // classified by that 401. The error records the US answer on the way out.
+    const row = await rowOf(() => {
+      try {
+        throw new RegionProbeError(
+          "Unable to connect to BrowserStack Test Management",
+          [
+            { host: "https://test-management.browserstack.com", status: 0 },
+            {
+              host: "https://test-management-eu.browserstack.com",
+              status: 401,
+            },
+            {
+              host: "https://test-management-in.browserstack.com",
+              status: 401,
+            },
+          ],
+        );
+      } catch (error) {
+        recordUpstreamStatus(401);
+        return {
+          content: [{ type: "text", text: (error as Error).message }],
+          isError: true,
+        };
+      }
+    });
+    expect(row).toMatchObject({
+      failure_class: "mcp",
+      failure_reason: "region_probe",
+    });
+    vi.clearAllMocks();
+    const blocked = await rowOf(() => {
+      throw new RegionProbeError("Unable to connect", [
+        { host: "https://test-management.browserstack.com", status: 402 },
+        { host: "https://test-management-eu.browserstack.com", status: 401 },
+      ]);
+    });
+    expect(blocked).toMatchObject({
+      outcome: "threw",
+      failure_class: "caller",
+      failure_reason: "blocked",
+    });
   });
 
   it("lets the handler's own failure_class and upstream_status win", async () => {
@@ -288,6 +445,18 @@ describe("withToolCall caller faults", () => {
       throw new CallerError("You must provide a desiredBrowser");
     });
     expect(row).toMatchObject({ outcome: "threw", failure_class: "caller" });
+  });
+
+  it("keeps the blocked reason on a caller fault with an entitlement status", async () => {
+    const row = await rowOf(() => {
+      recordUpstreamStatus(403);
+      markCallerFault();
+      return failed;
+    });
+    expect(row).toMatchObject({
+      failure_class: "caller",
+      failure_reason: "blocked",
+    });
   });
 
   it("lets an upstream outage outrank a caller fault", async () => {

@@ -74,8 +74,12 @@ export function validateUploadPath(
 
   if (!options.allowedBaseDir) {
     throw new Error(
-      "Upload rejected: MCP_UPLOAD_BASE_DIR is not set. Set it to the directory " +
-        "containing the files to upload, then restart the MCP server.",
+      "Upload rejected: MCP_UPLOAD_BASE_DIR is not set, so this server has no " +
+        "directory it is allowed to read uploads from. Set it to the directory " +
+        "holding the file and restart the server. Most MCP clients cannot edit an " +
+        "existing server entry, so this means removing and re-adding it: carry over " +
+        "every environment variable already set on it, BROWSERSTACK_USERNAME and " +
+        "BROWSERSTACK_ACCESS_KEY included, or they go with the old entry.",
     );
   }
 

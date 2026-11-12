@@ -3,6 +3,16 @@
   "version": "1.7",
   "build_id": "tra-v1.7-ai-failure-naming",
   "tra": {
+    "weak_terms": [
+      "session",
+      "search",
+      "tap",
+      "phone",
+      "device",
+      "version",
+      "type",
+      "build"
+    ],
     "routing_terms": [
       "flaky",
       "flakiness",

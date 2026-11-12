@@ -5,7 +5,13 @@
   "applive": {
     "title": "App Live",
     "summary": "App Live: a session a person opens on a real Android or iOS device in their browser, which an agent takes over and drives step by step while they watch. The account side lists the devices the account can use, says which private devices are free, uploads and lists the apps App Live installs, and lists the sessions launched with a reference — waiting for a just-launched one to come up. The session side is the same surface as mobile device control: find elements and read their text, position and attributes, tap, type, swipe, screenshot, press keys, rotate, switch between the native app and a web view. Apps are opened and closed by the user from the dashboard: the device's own Appium is older than App Automate's and lacks the app lifecycle commands. Sessions are started by the USER, not here: the launch tool opens the dashboard with a reference, get_session waits for the device and returns its Appium endpoint, and the session is driven until it is stopped. For a session no person needs to watch, mobile device control starts one on its own. App Live keeps its own app store, separate from App Automate's. Browsers are device control, not here.",
-    "routing_terms": [
+    "routing_family": {
+   "name": "device_session",
+   "role": "attended",
+   "rank": 2,
+   "note": "App Live is the session a person opens and watches in their browser; it is used when the user asks for App Live by name, when they are continuing a session they already have open, or when the account has no App Automate."
+  },
+  "routing_terms": [
       "app live",
       "applive",
       "manual app testing",
@@ -172,7 +178,7 @@
         "mode": "read",
         "entity": "app_live_session",
         "internal": true,
-        "intent": "Get the WebDriver endpoint that drives one running App Live session — get_session includes this; call it on its own only when you already hold a session_id.",
+        "intent": "The WebDriver endpoint that drives one running App Live session, as a STEP of get_session — it cannot be invoked on its own, and trying is refused as a chain step whether or not a session_id is in hand. Call get_session, which returns this with the session it waited for.",
         "guidance": [
           "Every session capability (find_element, take_screenshot, click_element, …) takes hostname, port and path from this answer alongside session_id; it builds https://{hostname}:{port}{path} from them and sends nothing else there. Pass them exactly as returned — path keeps its trailing slash. For another Appium client the base is that same URL and the Appium session id is the App Live session id.",
           "This answers at once. The device creates its Appium session when the endpoint's session list is first read, which can take from a second to a few minutes; the session capabilities do that read before the first command, so a direct caller using another Appium client should GET <base>sessions first and wait for it to list the session.",
@@ -423,7 +429,8 @@
           "The link must be https and reachable by BrowserStack without credentials; a link behind a login is refused as inaccessible on their side, not the caller's.",
           "Pass custom_id to give the app a stable name; later uploads under the same name add a new version rather than replacing the old one, and get_apps_by_custom_id lists them.",
           "The call does not return until BrowserStack has fetched the whole file, so a large app takes minutes.",
-          "upload_app_from_file takes an app that is on this machine instead, where the server runs beside the user. Before uploading at all, check list_apps: an earlier upload is still usable."
+          "upload_app_from_file takes an app that is on this machine instead, where the server runs beside the user. Before uploading at all, check list_apps: an earlier upload is still usable.",
+          "No package name or bundle id comes back here, and none is stored against the app: the App Live app API carries only app_name, app_version and the bs:// ids. The app lifecycle capabilities need that id, so read it off the running session rather than guessing it from the file name — get_active_app_info on iOS, get_current_app on Android — and expect a launch by a guessed id to fail as not found."
         ],
         "body": [
           {
@@ -481,7 +488,8 @@
             "App Live keeps its own app store. An app uploaded for App Automate (mobile device control) is not listed here and cannot be launched in App Live; upload it here as well.",
             "Only .apk, .aab and .ipa are accepted.",
             "A large app takes minutes, because the upload does not return until the whole file has been sent.",
-            "upload_app takes a public https link instead, and list_apps reuses an app already on the account."
+            "upload_app takes a public https link instead, and list_apps reuses an app already on the account.",
+            "No package name or bundle id comes back here, and none is stored against the app: the App Live app API carries only app_name, app_version and the bs:// ids. The app lifecycle capabilities need that id, so read it off the running session rather than guessing it from the file name — get_active_app_info on iOS, get_current_app on Android — and expect a launch by a guessed id to fail as not found."
           ],
           "local": [
             "The file must sit inside the directory MCP_UPLOAD_BASE_DIR names. When that is not set the upload is refused and nothing is sent: tell the user to set it to the folder holding their apps and restart the server.",
@@ -579,11 +587,11 @@
           "hosts": ["*.browserstack.com"],
           "from": "get_session"
         },
-        "intent": "Bring up and list the Appium session behind one App Live session — reading this is what makes the device create it; get_session does this for you.",
+        "intent": "The Appium session behind one App Live session, as a STEP of get_session — reading it is what makes the device create that Appium session. It cannot be invoked on its own; call get_session, which does this read and waits out the delay.",
         "guidance": [
           "The device creates its Appium session the first time this list is read, so the call waits: it is repeated every ten seconds for up to five minutes until the list is non-empty, and `polled` says how long that took.",
           "Until the device has caught up the proxy answers 404 \"Session not found.\" or holds the request; both are treated as not yet.",
-          "The one row's sessionId is the App Live session id. get_session returns it with everything else, so a direct call here is only for checking a session is still driveable."
+          "The one row's sessionId is the App Live session id, and get_session returns it with everything else. A direct invoke to re-check that a session is still driveable is refused as a chain step: use list_sessions, which is callable and says whether the session is still running."
         ],
         "query": [
           {
@@ -1513,7 +1521,7 @@
         "guidance": [
           "hide_keyboard already presses these keys on an iPhone when its plain call is refused — Done-type keys first, then Return — and reports each attempt. Call this directly to press exactly the key you choose: Return alone, or every key but Return when a submit must not happen.",
           "The key must EXIST on that keyboard or this returns the same 400: list the keyboard's keys with find_elements using class name XCUIElementTypeKey and read each with get_element_text, then pick from the keys that are really there. An iPad carries \"Hide keyboard\"; an iPhone keyboard of this kind usually offers only Return.",
-          "Several candidates may be listed in one call and it costs nothing, but it still fails when the keyboard carries none of them — measured with [\"Done\",\"done\",\"Hide keyboard\",\"Dismiss\"].",
+          "Several candidates may be listed in one call and it costs nothing, but it still fails when the keyboard carries none of them, so a set such as [\"Done\",\"done\",\"Hide keyboard\",\"Dismiss\"] is only as good as the keys that keyboard really has.",
           "PRESSING RETURN SUBMITS. An app that commits when the field stops being edited will commit however the keyboard is closed, so check the field afterwards rather than assuming only the keyboard moved.",
           "Confirm with is_keyboard_shown; on Android and on an iPad hide_keyboard closes it on its own."
         ],
@@ -1714,7 +1722,7 @@
         "intent": "Get the device screen size in pixels — use this to plan gesture coordinates, or as a cheap keep-alive so an idle session is not ended while deciding the next step.",
         "guidance": [
           "Call get_session once after the launch and pass its session_id, hostname, port and path to every session capability; they are where the session is driven, not query parameters. The first command on a session first brings its Appium session up — the device creates it when the endpoint's session list is read — and waits for that, up to five minutes, before sending the command once; a wait is reported under `readiness`. Nothing is sent twice. Later commands answer in a second or two.",
-          "On Android the height is the WHOLE screen including the status bar — 2340 on a Galaxy S24 whose usable area starts 91px down — so the top strip of that rectangle is not the app's. On iOS it is the app's window in points."
+          "On Android the height is the WHOLE screen including the status bar, so the top strip of that rectangle is not the app's — the usable area starts below it, by the status bar's height. On iOS it is the app's window in points."
         ],
         "path_params": [
           {
@@ -2898,17 +2906,16 @@
       {
         "name": "launch_app",
         "method": "POST",
-        "path": "/session/{session_id}/execute/sync",
+        "path": "/session/{session_id}/appium/device/activate_app",
         "mode": "write",
         "entity": "app_live_session",
-        "intent": "Bring an app to the foreground, starting it if it is not running — use this to open the app under test, return to it, or switch to another installed app.",
+        "intent": "Bring an app to the foreground, starting it if it is not running — use this to open the app under test, return to it after the home button, or switch to another installed app.",
         "guidance": [
-          "On an Android App Live session this is not available: the device's Appium answers \"unknown command\" with the list of mobile: commands it does know, and nothing happens. The user opens or closes the app from the dashboard instead.",
-          "The app is named INSIDE `args`, which is the one object there: args [{\"appId\": \"com.example.app\"}] on Android, args [{\"bundleId\": \"com.example.app\"}] on iOS. Sending appId or bundleId as a top-level body field is refused here before anything is sent — \"unknown body: bundleId. accepted: args, script\" — and sending the wrong one for the platform is refused by the product with a 400 \"invalid argument\" naming the parameter it wanted, with no action taken.",
+          "An App Live session runs Appium 1.x on both platforms — 1.22 with uiautomator2 on Android, 1.21 with XCUITest on iOS. Android's mobile: command list has no activateApp, terminateApp or queryAppState, so the mobile: form answers \"unknown command\" there and silently does nothing; iOS does have them. The classic /appium/device endpoint used here works on BOTH, so one wire shape serves the whole fleet.",
+          "A package that is not installed fails rather than installing it, and the error quotes the adb command with the id in it — check the id against get_current_app before assuming the call is wrong, since a guessed package is the likelier fault.",
           "Launching an app that is already in the foreground does nothing and still reports success.",
           "To restart an app from a clean state, call terminate_app first and then this.",
-          "Succeeding means the app was activated, not that it finished drawing, so give it a moment and confirm before acting. An app that cannot be brought forward at all answers 400 rather than reporting success, and get_app_state reads 4 once it really is in front — sampled too early it can still report the home screen mid-switch.",
-          "The app must be installed — a package that is not there fails rather than installing it."
+          "Succeeding means the app was activated, not that it finished drawing, so give it a moment and confirm before acting: get_app_state reads 4 once it really is in front."
         ],
         "path_params": [
           {
@@ -2921,39 +2928,16 @@
         ],
         "body": [
           {
-            "name": "script",
+            "name": "appId",
             "type": "string",
             "required": true,
-            "values": ["mobile: activateApp"],
-            "example": "mobile: activateApp"
-          },
-          {
-            "name": "args",
-            "type": "array",
-            "required": true,
-            "description": "Exactly one object naming the app. The key differs by platform.",
-            "fields": [
-              {
-                "name": "appId",
-                "type": "string",
-                "description": "ANDROID ONLY: the package name. iOS rejects this name.",
-                "example": "com.example.app"
-              },
-              {
-                "name": "bundleId",
-                "type": "string",
-                "description": "iOS ONLY: the bundle id. Android rejects this name.",
-                "example": "com.example.App"
-              }
-            ],
-            "example": [
-              {
-                "appId": "com.example.app"
-              }
-            ]
+            "description": "The package name on Android, the bundle id on iOS — appId is the field name on both (iOS takes bundleId as an alias as well, so appId is the one to send). Nothing in the upload or the app listings returns this id, so read it off the running session: get_current_app on Android, get_active_app_info on iOS.",
+            "example": "com.example.app"
           }
         ],
-        "returns": ["value"],
+        "returns": [
+          "value"
+        ],
         "responses": {
           "200": {
             "description": "Null on success.",
@@ -2967,7 +2951,9 @@
         },
         "origin": {
           "url": "https://{hostname}:{port}{path}",
-          "hosts": ["*.browserstack.com"],
+          "hosts": [
+            "*.browserstack.com"
+          ],
           "from": "get_session",
           "ready": {
             "timeout_seconds": 300,
@@ -3009,16 +2995,17 @@
       {
         "name": "terminate_app",
         "method": "POST",
-        "path": "/session/{session_id}/execute/sync",
+        "path": "/session/{session_id}/appium/device/terminate_app",
         "mode": "write",
         "entity": "app_live_session",
         "intent": "Close an app and stop it running — use this to end a session inside the app, or as the first half of a restart.",
         "guidance": [
-          "On an Android App Live session this is not available: the device's Appium answers \"unknown command\" with the list of mobile: commands it does know, and nothing happens. The user opens or closes the app from the dashboard instead.",
-          "The app is named INSIDE `args`, which is the one object there: args [{\"appId\": \"com.example.app\"}] on Android, args [{\"bundleId\": \"com.example.app\"}] on iOS. Sending appId or bundleId as a top-level body field is refused here before anything is sent — \"unknown body: bundleId. accepted: args, script\" — and sending the wrong one for the platform is refused by the product with a 400 \"invalid argument\" naming the parameter it wanted, with no action taken.",
+          "An App Live session runs Appium 1.x on both platforms — 1.22 with uiautomator2 on Android, 1.21 with XCUITest on iOS. Android's mobile: command list has no activateApp, terminateApp or queryAppState, so the mobile: form answers \"unknown command\" there and silently does nothing; iOS does have them. The classic /appium/device endpoint used here works on BOTH, so one wire shape serves the whole fleet.",
+          "A package that is not installed fails rather than installing it, and the error quotes the adb command with the id in it — check the id against get_current_app before assuming the call is wrong, since a guessed package is the likelier fault.",
           "Returns true when the app was running and false when it was not; false is not an error.",
           "The app stays installed and keeps its data; only the running process is stopped.",
-          "This does not clear state between runs — relaunching shows the app where it was unless the app itself resets."
+          "This does not clear state between runs — relaunching shows the app where it was unless the app itself resets.",
+          "get_app_state can read 3 rather than 1 straight after a successful terminate on Android, so treat anything below 4 as closed rather than waiting for a particular number."
         ],
         "path_params": [
           {
@@ -3031,39 +3018,16 @@
         ],
         "body": [
           {
-            "name": "script",
+            "name": "appId",
             "type": "string",
             "required": true,
-            "values": ["mobile: terminateApp"],
-            "example": "mobile: terminateApp"
-          },
-          {
-            "name": "args",
-            "type": "array",
-            "required": true,
-            "description": "Exactly one object naming the app. The key differs by platform.",
-            "fields": [
-              {
-                "name": "appId",
-                "type": "string",
-                "description": "ANDROID ONLY: the package name. iOS rejects this name.",
-                "example": "com.example.app"
-              },
-              {
-                "name": "bundleId",
-                "type": "string",
-                "description": "iOS ONLY: the bundle id. Android rejects this name.",
-                "example": "com.example.App"
-              }
-            ],
-            "example": [
-              {
-                "appId": "com.example.app"
-              }
-            ]
+            "description": "The package name on Android, the bundle id on iOS — appId is the field name on both (iOS takes bundleId as an alias as well, so appId is the one to send). Nothing in the upload or the app listings returns this id, so read it off the running session: get_current_app on Android, get_active_app_info on iOS.",
+            "example": "com.example.app"
           }
         ],
-        "returns": ["value"],
+        "returns": [
+          "value"
+        ],
         "responses": {
           "200": {
             "description": "True when a running app was stopped.",
@@ -3077,7 +3041,9 @@
         },
         "origin": {
           "url": "https://{hostname}:{port}{path}",
-          "hosts": ["*.browserstack.com"],
+          "hosts": [
+            "*.browserstack.com"
+          ],
           "from": "get_session",
           "ready": {
             "timeout_seconds": 300,
@@ -3119,16 +3085,16 @@
       {
         "name": "get_app_state",
         "method": "POST",
-        "path": "/session/{session_id}/execute/sync",
+        "path": "/session/{session_id}/appium/device/app_state",
         "mode": "read",
         "entity": "app_live_session",
         "intent": "Check whether an app is installed, running or in the foreground — use this to confirm a launch or a close actually took effect.",
         "guidance": [
-          "On an Android App Live session this is not available: the device's Appium answers \"unknown command\" with the list of mobile: commands it does know, and nothing happens. The user opens or closes the app from the dashboard instead.",
-          "The app is named INSIDE `args`, which is the one object there: args [{\"appId\": \"com.example.app\"}] on Android, args [{\"bundleId\": \"com.example.app\"}] on iOS. Sending appId or bundleId as a top-level body field is refused here before anything is sent — \"unknown body: bundleId. accepted: args, script\" — and sending the wrong one for the platform is refused by the product with a 400 \"invalid argument\" naming the parameter it wanted, with no action taken.",
+          "An App Live session runs Appium 1.x on both platforms — 1.22 with uiautomator2 on Android, 1.21 with XCUITest on iOS. Android's mobile: command list has no activateApp, terminateApp or queryAppState, so the mobile: form answers \"unknown command\" there and silently does nothing; iOS does have them. The classic /appium/device endpoint used here works on BOTH, so one wire shape serves the whole fleet.",
           "The value is a number: 0 not installed, 1 installed but not running, 2 running in the background and suspended, 3 running in the background, 4 running in the foreground.",
           "4 is the only state in which the app is on screen and can be driven.",
-          "The same scale applies on both platforms. Sending an app to the background leaves it at 3 or 2 — the system suspends it a moment after it stops being visible — so treat anything below 4 as not on screen rather than waiting for one number. Launching it again returns it to 4."
+          "0 against an app you know is installed means the id is wrong, not that the app is missing — the usual cause is a guessed package name.",
+          "The same scale applies on both platforms. Treat anything below 4 as not on screen rather than waiting for one number."
         ],
         "path_params": [
           {
@@ -3141,39 +3107,16 @@
         ],
         "body": [
           {
-            "name": "script",
+            "name": "appId",
             "type": "string",
             "required": true,
-            "values": ["mobile: queryAppState"],
-            "example": "mobile: queryAppState"
-          },
-          {
-            "name": "args",
-            "type": "array",
-            "required": true,
-            "description": "Exactly one object naming the app. The key differs by platform.",
-            "fields": [
-              {
-                "name": "appId",
-                "type": "string",
-                "description": "ANDROID ONLY: the package name. iOS rejects this name.",
-                "example": "com.example.app"
-              },
-              {
-                "name": "bundleId",
-                "type": "string",
-                "description": "iOS ONLY: the bundle id. Android rejects this name.",
-                "example": "com.example.App"
-              }
-            ],
-            "example": [
-              {
-                "appId": "com.example.app"
-              }
-            ]
+            "description": "The package name on Android, the bundle id on iOS — appId is the field name on both (iOS takes bundleId as an alias as well, so appId is the one to send). Nothing in the upload or the app listings returns this id, so read it off the running session: get_current_app on Android, get_active_app_info on iOS.",
+            "example": "com.example.app"
           }
         ],
-        "returns": ["value"],
+        "returns": [
+          "value"
+        ],
         "responses": {
           "200": {
             "description": "The app's state as a number from 0 to 4.",
@@ -3187,7 +3130,9 @@
         },
         "origin": {
           "url": "https://{hostname}:{port}{path}",
-          "hosts": ["*.browserstack.com"],
+          "hosts": [
+            "*.browserstack.com"
+          ],
           "from": "get_session",
           "ready": {
             "timeout_seconds": 300,
@@ -4462,7 +4407,7 @@
         "guidance": [
           "The attribute names are the platform's own: on Android text, content-desc, resource-id, class, package, bounds, checked, checkable, clickable, enabled, focused, selected, displayed, scrollable, long-clickable, password; on iOS name, label, value, type, enabled, visible, accessible, focused, index, rect.",
           "Booleans come back as the strings \"true\" and \"false\", not JSON booleans, so compare as text.",
-          "An attribute the element does not carry answers the STRING \"null\" on Android — not a JSON null and not an error — so compare as text; measured on an ImageView's resource-id.",
+          "An attribute the element does not carry answers the STRING \"null\" on Android — not a JSON null and not an error — so compare as text.",
           "For the element's text use get_element_text and for its position get_element_rect; this is for everything else."
         ],
         "path_params": [

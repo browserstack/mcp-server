@@ -47,6 +47,18 @@ describe("validateUploadPath", () => {
     ).toThrow(/MCP_UPLOAD_BASE_DIR is not set/);
   });
 
+  // A dogfooding tester re-added the server to set this and lost their credentials with
+  // the old entry, because nothing warned them the re-add starts from nothing.
+  it("warns that re-adding the server drops the variables already on it", () => {
+    const file = write("app.apk");
+    expect(() =>
+      validateUploadPath(file, {
+        allowedExtensions: APP_BINARY_EXTENSIONS,
+        maxSizeBytes: MAX_APP_UPLOAD_BYTES,
+      }),
+    ).toThrow(/BROWSERSTACK_ACCESS_KEY/);
+  });
+
   it("refuses when the configured base directory does not exist", () => {
     const file = write("app.apk");
     expect(() =>

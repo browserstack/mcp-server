@@ -9,7 +9,7 @@ Exposes BrowserStack's Test Platform as MCP tools: run and debug tests on real b
 ## Prerequisites
 
 - A BrowserStack account. Sign up at https://www.browserstack.com/users/sign_up. Open-source projects can request a free plan at https://www.browserstack.com/open-source.
-- For the local (stdio) install only: Node.js 20.9 or newer. Node 22 LTS is recommended. Check with `node --version`.
+- For the local (stdio) install only: Node.js 22.23.5 or newer (24.22.3 recommended). Check with `node --version`.
 
 ## Option A: hosted remote server (recommended, no install)
 
@@ -133,7 +133,7 @@ Optional environment variables for the local server:
 ## Troubleshooting
 
 - `401` or OAuth loop on the remote server: the user must complete the sign-in in the browser window the client opens. If the client does not support OAuth, use Option B.
-- Local server fails to start: check `node --version` is 20.9 or newer, and that both env vars are set with no surrounding quotes or whitespace.
+- Local server fails to start: check `node --version` is 22.23.5 or newer, and that both env vars are set with no surrounding quotes or whitespace.
 - Tools missing from the list: some clients cap the number of tools they load. The server exposes about 50 tools; if the client has a limit, disable other servers or use its tool filter.
 - Further help: https://github.com/browserstack/mcp-server/issues
 

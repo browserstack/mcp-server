@@ -6,7 +6,7 @@ This guide will help you set up your environment and contribute effectively to t
 
 Make sure you have the following installed:
 
-- 🟢 [Node.js](https://nodejs.org/) (Recommended: LTS v22.15.0)
+- 🟢 [Node.js](https://nodejs.org/) (Recommended: v24.22.3; minimum v22.23.5)
 - 🤖 GitHub Copilot (for VS Code or Cursor)
 - 🧠 Optionally, [Claude desktop app](https://www.anthropic.com/index/claude-desktop) for additional AI assistance
 

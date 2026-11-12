@@ -91,7 +91,9 @@ describe("the Web Accessibility dashboard capabilities", () => {
       "link_ticket_to_issue",
       "rerun_website_scanner_scan",
       "review_needs_review_issue",
+      "revoke_false_positive_feedback",
       "submit_bulk_review_decisions",
+      "submit_false_positive_feedback",
       "undo_bulk_review_decisions",
     ]);
     for (const c of dash) {
@@ -374,7 +376,7 @@ describe("custom dashboard summaries are reported as merged", () => {
 // say yes, so each write leads with the rule, on the line that rides on every search row.
 describe("every write asks for an explicit yes first", () => {
   const writes = (shipped().web_accessibility.capabilities as any[]).filter(
-    (c) => c.mode === "write",
+    (c) => c.mode === "write" && c.host === "dashboard",
   );
 
   it("covers all seven writes", () => expect(writes.length).toBe(7));

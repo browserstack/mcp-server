@@ -3,8 +3,11 @@
   "version": "1.1",
   "build_id": "web_accessibility-v1.1-dashboard",
   "web_accessibility": {
-    "summary": "BrowserStack Web Accessibility: WCAG accessibility results for websites and web apps. List the account's Workflow Analyzer reports, Website Scanner scans and their runs, Automated Tests projects and builds, and Assisted Test reports, each with the id the accessibility issue tool reads. Read what the dashboard shows: custom dashboards and their scores, a build or scan run's report (overview, test cases, issues by rule or WCAG guideline, affected components, page logs), comparisons of two runs, scan trends and settings, and the signed-in user. Writes, each needing approval: re-run a scan, hide or un-hide issues, settle needs-review issues, submit or undo a bulk review, link issues to a ticket. Dashboard capabilities sign in with a token scoped to agent use; the user's own role and plan still apply. Mobile apps are a separate product.",
+    "summary": "BrowserStack Web Accessibility: WCAG accessibility results for websites and web apps. List the account's Workflow Analyzer reports, Website Scanner scans and their runs, Automated Tests projects and builds, and Assisted Test reports, each with the id the accessibility issue tool reads. Read what the dashboard shows: custom dashboards and their scores, a build or scan run's report (overview, test cases, issues by rule or WCAG guideline, affected components, page logs), comparisons of two runs, scan trends and settings, and the signed-in user. Writes, each needing approval: re-run a scan, hide or un-hide issues, settle needs-review issues, submit or undo a bulk review, link issues to a ticket. Dashboard capabilities use an agent-scoped token; the user's own role and plan still apply. It also keeps the false-positive memory: issues users marked not real. Mobile apps are a separate product.",
     "routing_terms": [
+      "false positive",
+      "not an issue",
+      "false positive memory",
       "website",
       "web page",
       "web app",
@@ -7822,6 +7825,412 @@
             "$response": "DashboardUpstreamFailure"
           }
         }
+      },
+      {
+        "name": "submit_false_positive_feedback",
+        "method": "POST",
+        "path": "/api/fp-memory/v1/feedback",
+        "mode": "write",
+        "entity": "false_positive_feedback",
+        "body": [
+          {
+            "name": "ruleCode",
+            "type": "string",
+            "required": true,
+            "description": "The issue's issue_type from fetchAccessibilityIssues, e.g. role-required.",
+            "example": "role-required"
+          },
+          {
+            "name": "pageUrl",
+            "type": "string",
+            "required": true,
+            "description": "The issue's affected_page, an absolute URL; its host is the site the entry applies to."
+          },
+          {
+            "name": "component",
+            "type": "string",
+            "description": "The issue's component, as fetchAccessibilityIssues gave it."
+          },
+          {
+            "name": "htmlSnippet",
+            "type": "string",
+            "description": "The issue's HTML_snippet, as fetchAccessibilityIssues gave it."
+          },
+          {
+            "name": "verdict",
+            "type": "string",
+            "required": true,
+            "values": ["false_positive", "not_applicable", "accepted_risk"],
+            "description": "false_positive unless the user says the issue is real but does not apply, or is a risk they accept."
+          },
+          {
+            "name": "scope",
+            "type": "string",
+            "required": true,
+            "values": [
+              "element",
+              "component",
+              "component_family",
+              "site_predicate"
+            ],
+            "description": "The widest set of elements the user confirmed the root cause holds for. element alone recalls almost nothing on the next report."
+          },
+          {
+            "name": "rootCause",
+            "type": "string",
+            "required": true,
+            "minLength": 20,
+            "description": "Why the rule is wrong, in terms of how the element is built (e.g. its role is set inside its shadow root), not only that it works for the user."
+          },
+          {
+            "name": "pattern",
+            "type": "object",
+            "required": true,
+            "description": "What identifies the element and its kind. predicate is required; add what you observed.",
+            "fields": [
+              {
+                "name": "predicate",
+                "type": "string",
+                "required": true,
+                "minLength": 10
+              },
+              {
+                "name": "tag",
+                "type": "string"
+              },
+              {
+                "name": "tagPrefix",
+                "type": "string"
+              },
+              {
+                "name": "isCustomElement",
+                "type": "boolean"
+              },
+              {
+                "name": "hasShadowRoot",
+                "type": "boolean"
+              },
+              {
+                "name": "classes",
+                "type": "array"
+              },
+              {
+                "name": "designSystem",
+                "type": "string"
+              }
+            ]
+          },
+          {
+            "name": "evidence",
+            "type": "object",
+            "description": "What you checked, as {observations: [...]}: computed role, shadow DOM content, screen reader output."
+          },
+          {
+            "name": "counterExamples",
+            "type": "array",
+            "maxItems": 50,
+            "description": "Similar-looking elements the user says ARE real issues, as short strings; they are never removed."
+          },
+          {
+            "name": "userStatement",
+            "type": "string",
+            "required": true,
+            "description": "The user's own words, as they said them."
+          },
+          {
+            "name": "global",
+            "type": "boolean",
+            "default": false,
+            "description": "True only when the user says it holds on all the account's sites; otherwise it applies to pageUrl's site."
+          },
+          {
+            "name": "product",
+            "type": "string",
+            "values": [
+              "website-scanner",
+              "automated-tests",
+              "workflow-analyzer"
+            ],
+            "description": "The product of the report the issue came from."
+          },
+          {
+            "name": "reportReference",
+            "type": "string",
+            "description": "The report the issue came from: its scanRunId, buildId or workflowReportId."
+          }
+        ],
+        "intent": "Save an accessibility issue the user confirmed is a false positive, so later fetchAccessibilityIssues answers filter the same pattern without asking the user again.",
+        "guidance": [
+          "Before saving, inspect the element yourself (open the page if you can, else read the issue's HTML) and write rootCause and pattern.predicate from what you saw: a record that only says the element works for the user matches almost nothing on the next report.",
+          "Propose the widest scope the root cause supports (e.g. component_family for every custom element of one design system) and have the user confirm it; ask them for any similar element that is a real issue and send it in counterExamples.",
+          "Send the issue's fields as fetchAccessibilityIssues gave them; selectors are not taken, as they differ per page.",
+          "warnings in the reply ask you to re-check the scope with the user; resend at the wider scope if they agree.",
+          "A 409 reply means an active entry already covers this rule, site, scope and predicate: nothing was saved, and data.existingId names that entry; tell the user it is already saved."
+        ],
+        "returns": [
+          "data.id",
+          "data.ruleCode",
+          "data.docsUrl",
+          "data.site",
+          "data.global",
+          "data.activeEntriesForRule",
+          "data.warnings",
+          "data.existingId"
+        ],
+        "responses": {
+          "201": {
+            "description": "Saved.",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "success": {
+                  "type": "boolean"
+                },
+                "data": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "ruleCode": {
+                      "type": "string"
+                    },
+                    "docsUrl": {
+                      "type": "string"
+                    },
+                    "site": {
+                      "type": "string"
+                    },
+                    "global": {
+                      "type": "boolean"
+                    },
+                    "activeEntriesForRule": {
+                      "type": "integer"
+                    },
+                    "warnings": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$response": "Unauthorized"
+          },
+          "403": {
+            "$response": "FpMemoryDisabled"
+          },
+          "409": {
+            "$response": "FpFeedbackDuplicate"
+          },
+          "422": {
+            "$response": "FpFeedbackRejected"
+          },
+          "500": {
+            "$response": "InternalServerError"
+          }
+        }
+      },
+      {
+        "name": "get_false_positive_memory",
+        "method": "GET",
+        "path": "/api/fp-memory/v1/memory",
+        "mode": "read",
+        "entity": "false_positive_feedback",
+        "query": [
+          {
+            "name": "ruleCodes",
+            "type": "string",
+            "description": "Comma-separated rule codes (issue_type) to read, at most 200; omit for every rule.",
+            "example": "role-required,image-alt"
+          },
+          {
+            "name": "site",
+            "type": "string",
+            "description": "A host or page URL: only that site's entries, plus those saved for all sites."
+          },
+          {
+            "name": "limit",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200,
+            "default": 100,
+            "description": "Entries per page, newest first."
+          },
+          {
+            "name": "cursor",
+            "type": "string",
+            "description": "The previous page's data.nextCursor, to read the next page."
+          }
+        ],
+        "intent": "Read the account's saved false positives, grouped by rule with each rule's docs link, to filter accessibility issues with or to find an entry's id.",
+        "guidance": [
+          "fetchAccessibilityIssues already brings the memory for its issues' rules; read here only when it says some entries did not fit, or to find an entry to revoke.",
+          "Apply an entry only to issues of the same rule, on its site unless global, matching its pattern and rootCause, never the selector."
+        ],
+        "returns": [
+          "data.rules.ruleCode",
+          "data.rules.docsUrl",
+          "data.rules.entryCount",
+          "data.rules.entries",
+          "data.nextCursor"
+        ],
+        "responses": {
+          "200": {
+            "description": "The memory, grouped by rule; newest entries first, one page at a time.",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "success": {
+                  "type": "boolean"
+                },
+                "data": {
+                  "type": "object",
+                  "properties": {
+                    "nextCursor": {
+                      "type": ["string", "null"],
+                      "description": "Set when more entries follow: pass it as cursor."
+                    },
+                    "rules": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "ruleCode": {
+                            "type": "string"
+                          },
+                          "docsUrl": {
+                            "type": "string"
+                          },
+                          "entryCount": {
+                            "type": "integer"
+                          },
+                          "entries": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string"
+                                },
+                                "site": {
+                                  "type": "string"
+                                },
+                                "global": {
+                                  "type": "boolean"
+                                },
+                                "verdict": {
+                                  "type": "string"
+                                },
+                                "scope": {
+                                  "type": "string"
+                                },
+                                "rootCause": {
+                                  "type": "string"
+                                },
+                                "pattern": {
+                                  "type": "object"
+                                },
+                                "counterExamples": {
+                                  "type": "array"
+                                },
+                                "userStatement": {
+                                  "type": "string"
+                                },
+                                "pageUrl": {
+                                  "type": "string"
+                                },
+                                "component": {
+                                  "type": "string"
+                                },
+                                "htmlSnippet": {
+                                  "type": "string"
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$response": "Unauthorized"
+          },
+          "403": {
+            "$response": "FpMemoryDisabled"
+          },
+          "422": {
+            "description": "Invalid limit, or a cursor that is not an entry of the account."
+          },
+          "500": {
+            "$response": "InternalServerError"
+          }
+        }
+      },
+      {
+        "name": "revoke_false_positive_feedback",
+        "method": "POST",
+        "path": "/api/fp-memory/v1/feedback/{id}/revoke",
+        "mode": "write",
+        "entity": "false_positive_feedback",
+        "path_params": [
+          {
+            "name": "id",
+            "type": "string",
+            "required": true,
+            "description": "The entry's id (fp_…), from the memory or the save reply.",
+            "example": "fp_Ab12Cd34Ef56"
+          }
+        ],
+        "intent": "Remove a saved false positive the user no longer agrees with, so the issues it covered show again in later reports.",
+        "guidance": [
+          "Revoked entries are kept on the account's side but no longer returned or applied; there is no undo, so save a new entry instead if the user changes their mind."
+        ],
+        "returns": ["data.id", "data.status"],
+        "responses": {
+          "200": {
+            "description": "Revoked.",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "success": {
+                  "type": "boolean"
+                },
+                "data": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$response": "Unauthorized"
+          },
+          "403": {
+            "$response": "FpMemoryDisabled"
+          },
+          "404": {
+            "description": "No active entry with this id in the account."
+          },
+          "500": {
+            "$response": "InternalServerError"
+          }
+        }
       }
     ],
     "entities": {
@@ -8199,6 +8608,30 @@
           "rerun_website_scanner_scan"
         ],
         "key_facts": []
+      },
+      "false_positive_feedback": {
+        "entity": "false_positive_feedback",
+        "title": "False-positive feedback",
+        "description": "One issue pattern a user confirmed is not a real problem, saved per rule to filter it from later reports.",
+        "aliases": [
+          "false positive",
+          "false positive memory",
+          "not an issue",
+          "fp feedback",
+          "ignored issue pattern"
+        ],
+        "id_convention": "A string starting with fp_, returned when the feedback is saved and on each entry of the memory.",
+        "parents": [],
+        "relations": [],
+        "capabilities": [
+          "submit_false_positive_feedback",
+          "get_false_positive_memory",
+          "revoke_false_positive_feedback"
+        ],
+        "key_facts": [
+          "The memory belongs to the account: every user's agent reads it. An entry applies to the site it was saved on, or to all sites when global.",
+          "fetchAccessibilityIssues already brings the memory for the rules of the issues it answers with."
+        ]
       }
     },
     "schemas": {
@@ -8962,6 +9395,24 @@
         "description": "A service behind the dashboard did not answer; retry shortly.",
         "schema": {
           "$schema": "DashboardFailure"
+        }
+      },
+      "FpMemoryDisabled": {
+        "description": "The caller's role cannot act on issues, or false-positive memory is not enabled for this account (error says which).",
+        "schema": {
+          "$schema": "Failure"
+        }
+      },
+      "FpFeedbackRejected": {
+        "description": "The feedback was not saved: unknown rule, a root cause or predicate too thin to match later issues by, a pageUrl without a host, or the rule already holds 1000 entries. error says which.",
+        "schema": {
+          "$schema": "Failure"
+        }
+      },
+      "FpFeedbackDuplicate": {
+        "description": "Not saved: an active entry already covers the same rule, site (or all sites), scope and predicate. data.existingId names it.",
+        "schema": {
+          "$schema": "Failure"
         }
       }
     },

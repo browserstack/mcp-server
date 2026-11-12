@@ -6,6 +6,23 @@ import { apiClient } from "../../lib/apiClient.js";
 import globalConfig from "../../config.js";
 import { sessionApiHost } from "../../lib/regional-host.js";
 import { MAX_LOG_BYTES } from "../failurelogs-utils/utils.js";
+import JSZip from "jszip";
+import {
+  downloadTestCaseFile,
+  failedFirst,
+  findFrameworkBuild,
+  getFrameworkTestCases,
+  isBrowserStackUrl,
+} from "../appautomate-utils/framework-builds.js";
+import { resolveAppAutomateBuildId } from "../failurelogs-utils/resolve-app-build-id.js";
+
+/** The session is unknown to the generic logs endpoint (404). */
+export class SessionLogsNotFoundError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "SessionLogsNotFoundError";
+  }
+}
 
 export const MAX_SCREENSHOT_BYTES = globalConfig.REMOTE_MCP
   ? 10 * 1024 * 1024
@@ -38,6 +55,9 @@ async function extractScreenshotUrls(
     throw new Error(
       "The logs for this session are too large (over 5 MB) to find screenshots here. Open the session in the BrowserStack dashboard to view them.",
     );
+  }
+  if (response.status === 404) {
+    throw new SessionLogsNotFoundError("Invalid session ID for Session");
   }
   await assertOkResponse(response, "Session");
 
@@ -172,7 +192,21 @@ export async function fetchAutomationScreenshots(
   sessionType: SessionType = SessionType.Automate,
   config: BrowserStackConfig,
 ) {
-  const urls = await extractScreenshotUrls(sessionId, sessionType, config);
+  let urls: string[];
+  try {
+    urls = await extractScreenshotUrls(sessionId, sessionType, config);
+  } catch (error) {
+    // Only a 404 can mean a framework session; anything else keeps its own error.
+    if (
+      sessionType !== SessionType.AppAutomate ||
+      !(error instanceof SessionLogsNotFoundError)
+    ) {
+      throw error;
+    }
+    const framework = await frameworkScreenshots(sessionId, config);
+    if (!framework) throw error;
+    return framework;
+  }
   if (urls.length === 0) {
     return [];
   }
@@ -180,4 +214,134 @@ export async function fetchAutomationScreenshots(
   // Take only the last 5 URLs
   const lastFiveUrls = urls.slice(-5);
   return await convertUrlsToBase64(lastFiveUrls);
+}
+
+// Limits for Maestro screenshot archives, so one call cannot exhaust a pod's memory.
+export const MAX_ZIP_BYTES = 10 * 1024 * 1024;
+export const MAX_ZIP_ENTRIES = 500;
+export const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+export const MAX_TOTAL_IMAGE_BYTES = 25 * 1024 * 1024;
+const IMAGE_FILE = /\.(png|jpe?g)$/i;
+
+/**
+ * Inflate one archive entry, stopping as soon as it passes `maxBytes`. The size
+ * in the archive header is not trusted: a crafted entry can claim to be small.
+ */
+export function readEntryCapped(
+  entry: JSZip.JSZipObject,
+  maxBytes: number,
+): Promise<Buffer | null> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    let total = 0;
+    let settled = false;
+    const stream = entry.nodeStream("nodebuffer") as NodeJS.ReadableStream & {
+      destroy?: () => void;
+    };
+    stream.on("data", (chunk: Buffer) => {
+      if (settled) return;
+      total += chunk.length;
+      if (total > maxBytes) {
+        settled = true;
+        chunks.length = 0;
+        stream.pause();
+        stream.destroy?.();
+        resolve(null);
+        return;
+      }
+      chunks.push(chunk);
+    });
+    stream.on("error", (error: Error) => {
+      if (!settled) {
+        settled = true;
+        reject(error);
+      }
+    });
+    stream.on("end", () => {
+      if (!settled) {
+        settled = true;
+        resolve(Buffer.concat(chunks));
+      }
+    });
+  });
+}
+
+/**
+ * Screenshots of a framework session (Maestro packs them per test as a zip), or
+ * undefined when the session is not part of a framework build. Frameworks without
+ * screenshots throw a message saying where the evidence is instead.
+ */
+async function frameworkScreenshots(
+  sessionId: string,
+  config: BrowserStackConfig,
+): Promise<Screenshot[] | undefined> {
+  // A failed lookup here means "not a framework session": the caller keeps the
+  // original error instead of reporting this secondary failure.
+  let build;
+  let cases;
+  try {
+    const buildId = await resolveAppAutomateBuildId(sessionId, config);
+    if (!buildId) return undefined;
+    build = await findFrameworkBuild(buildId, config);
+    if (!build) return undefined;
+    cases = (await getFrameworkTestCases(build, sessionId, config)) ?? [];
+  } catch {
+    return undefined;
+  }
+  const withShots = failedFirst(cases).find((c) =>
+    isBrowserStackUrl(c.fields.screenshots),
+  );
+  if (!withShots) {
+    throw new Error(
+      `This ${build.framework.name} session has no screenshots. Use getFailureLogs ` +
+        "for its test logs, or the video log type for its recording.",
+    );
+  }
+
+  const file = await downloadTestCaseFile(
+    withShots.fields.screenshots as string,
+    config,
+    { binary: true, maxBytes: MAX_ZIP_BYTES },
+  );
+  if (file.tooLarge) {
+    throw new Error(
+      "The screenshots for this session are over 10 MB. Open the session in the BrowserStack dashboard to view them.",
+    );
+  }
+  const zip = await JSZip.loadAsync(Buffer.from(file.data));
+  const entries = Object.values(zip.files);
+  if (entries.length > MAX_ZIP_ENTRIES) {
+    throw new Error(
+      "This session's screenshot archive has too many files to read here. Open the session in the BrowserStack dashboard to view them.",
+    );
+  }
+  const images = entries
+    .filter((entry) => !entry.dir && IMAGE_FILE.test(entry.name))
+    .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }))
+    .slice(-5);
+
+  const screenshots: Screenshot[] = [];
+  let budget = MAX_TOTAL_IMAGE_BYTES;
+  // One image at a time, newest last, so at most one inflated image is held.
+  for (const entry of images) {
+    if (budget <= 0) break;
+    const buffer = await readEntryCapped(
+      entry,
+      Math.min(MAX_IMAGE_BYTES, budget),
+    );
+    if (!buffer) continue;
+    budget -= buffer.length;
+    const base64 = await maybeCompressBase64(buffer.toString("base64"));
+    screenshots.push({
+      url: `${withShots.fields.screenshots as string}#${entry.name}`,
+      base64,
+      mimeType: detectImageMimeType(Buffer.from(base64, "base64")),
+    });
+  }
+  if (images.length > 0 && screenshots.length === 0) {
+    throw new Error(
+      "The screenshots in this session are too large (over 10 MB each) to fetch here. Open the session in the BrowserStack dashboard to view them.",
+    );
+  }
+  return screenshots;
 }

@@ -239,7 +239,7 @@ describe("tm's upload_generic_attachments in the shipped index", () => {
     expect(file.max_bytes).toBe(50 * 1024 * 1024);
   });
 
-  it("accepts at least every extension the uploadFile tool accepts for tm", async () => {
+  it("accepts every generic Test Management attachment extension", async () => {
     const { readFileSync } = await import("node:fs");
     const { TEST_MANAGEMENT_ATTACHMENT_EXTENSIONS } = await import(
       "../../src/lib/upload-validator.js"

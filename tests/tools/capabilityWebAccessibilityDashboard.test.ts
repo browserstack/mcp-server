@@ -46,7 +46,11 @@ const byName = (name: string) =>
 describe("the Web Accessibility dashboard capabilities", () => {
   it("are part of Web Accessibility, not a product of their own", () => {
     expect(products.web_accessibility_dashboard).toBeUndefined();
-    expect(dash.length).toBe(44);
+    expect(dash.length).toBe(42);
+    // Pre-2026 link redirects (old report / scan-config ids) are the dashboard's job, not an
+    // agent's: kept out so they cannot be picked for a current scan id and answer 404.
+    expect(byName("get_legacy_scan_report_build_id")).toBeUndefined();
+    expect(byName("get_legacy_scan_config_project_name")).toBeUndefined();
     expect(web.hosts.dashboard).toBe("https://accessibility.browserstack.com");
   });
 

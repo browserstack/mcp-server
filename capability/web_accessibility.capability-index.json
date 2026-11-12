@@ -1380,6 +1380,7 @@
         "entity": "user",
         "intent": "Who am I: read the signed-in user's id, name, email, role, group (account) id, plan and plan features, RBAC permissions, and which accessibility products they have reports in - use this for 'my group id', 'what plan am I on', 'can I use X'.",
         "guidance": [
+          "Answer the user from plan_name, plan_features, permissions, rbac_role and product_status. Never mention internal flags to the user: in_ai_feature_fencing_exception_list, feature_flags, beta_access_requests, product_access_request, udac and eft_type are rollout and billing internals, not facts about their account.",
           "The fields sit at the top level, with no success or data wrapper.",
           "group_id is the account id; user_id is the numeric id that list_accessibility_reports takes as user_id and that createdBy.id shows in other lists.",
           "Casing is mixed: most keys are snake_case, but customDashboardsStatus, trialGrant and remediationTrialGrant are camelCase.",
@@ -4258,133 +4259,6 @@
                     "filter": {
                       "type": "object",
                       "description": "nested record"
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      },
-      {
-        "name": "get_legacy_scan_report_build_id",
-        "method": "GET",
-        "path": "/api/v2/website_scanner_reports/{id}/build_uuid",
-        "host": "dashboard",
-        "auth": {
-          "type": "oauth2"
-        },
-        "mode": "read",
-        "entity": "website_scan_activity",
-        "path_params": [
-          {
-            "name": "id",
-            "type": "integer",
-            "required": true,
-            "description": "A LEGACY Website Scanner report id: the ?id= of an old /site-scanner/scan-report link. Not a current scan id or scanRunId.",
-            "example": 12345
-          }
-        ],
-        "intent": "Turn an old Website Scanner report link's id into the run's thBuildId, so the current report capabilities can read it.",
-        "guidance": [
-          "Only for old report links. Current scans (ids from the Website Scanner scans list) and their scanRunIds are not in this table and always answer 404 \"Report Not Found\". For those, list runs with list_build_report_runs (central_scanner=true, project_id = scan id).",
-          "Only completed reports resolve; a running or failed one is 404 too.",
-          "data.testhub_build_uuid is snake_case. Pass it as th_build_id with central_scanner=true.",
-          "404 \"Testhub Build UUID not found\" means the old report was never moved to the current store."
-        ],
-        "returns": [
-          "data.testhub_build_uuid"
-        ],
-        "responses": {
-          "401": {
-            "$response": "DashboardUnauthorized"
-          },
-          "403": {
-            "$response": "DashboardForbidden"
-          },
-          "404": {
-            "$response": "DashboardNotFound"
-          },
-          "422": {
-            "$response": "DashboardUnprocessable"
-          },
-          "200": {
-            "description": "Derived from WebsiteScannerReportsController#build_uuid (never returned 200 live: no legacy report id on the test account).",
-            "schema": {
-              "type": "object",
-              "properties": {
-                "success": {
-                  "type": "boolean"
-                },
-                "data": {
-                  "type": "object",
-                  "properties": {
-                    "testhub_build_uuid": {
-                      "type": "string",
-                      "description": "the run's thBuildId; snake_case"
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      },
-      {
-        "name": "get_legacy_scan_config_project_name",
-        "method": "GET",
-        "path": "/api/scan_configs/{id}/project_name",
-        "host": "dashboard",
-        "auth": {
-          "type": "oauth2"
-        },
-        "mode": "read",
-        "entity": "website_scan_activity",
-        "path_params": [
-          {
-            "name": "id",
-            "type": "integer",
-            "required": true,
-            "description": "A LEGACY scan configuration id from an old scan-details link. Not a current scan id.",
-            "example": 12345
-          }
-        ],
-        "intent": "Turn an old Website Scanner scan link's id into the scan's current project name.",
-        "guidance": [
-          "Only for old links. Current scan ids answer 404 \"Scan Config Not Found\"; current scans already carry their name in the scans list.",
-          "404 \"Project Name not found\" means the old scan was never moved to the current store.",
-          "data.project_name is snake_case."
-        ],
-        "returns": [
-          "data.project_name"
-        ],
-        "responses": {
-          "401": {
-            "$response": "DashboardUnauthorized"
-          },
-          "403": {
-            "$response": "DashboardForbidden"
-          },
-          "404": {
-            "$response": "DashboardNotFound"
-          },
-          "422": {
-            "$response": "DashboardUnprocessable"
-          },
-          "200": {
-            "description": "Derived from ScanConfigsController#project_name (never returned 200 live: no legacy scan config id on the test account).",
-            "schema": {
-              "type": "object",
-              "properties": {
-                "success": {
-                  "type": "boolean"
-                },
-                "data": {
-                  "type": "object",
-                  "properties": {
-                    "project_name": {
-                      "type": "string",
-                      "description": "the scan's current project name; snake_case"
                     }
                   }
                 }
@@ -8507,13 +8381,11 @@
           "rerun scan",
           "re-run scan"
         ],
-        "id_convention": "scanId from list_website_scanner_scans (Web Accessibility); legacy routes take old report or config ids from pre-2026 links.",
+        "id_convention": "scanId from list_website_scanner_scans (Web Accessibility).",
         "parents": [],
         "relations": [],
         "capabilities": [
           "get_scan_run_page_logs",
-          "get_legacy_scan_report_build_id",
-          "get_legacy_scan_config_project_name",
           "get_website_scanner_scan_overview",
           "get_website_scanner_scan_trends",
           "rerun_website_scanner_scan"

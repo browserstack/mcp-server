@@ -111,6 +111,15 @@ export interface WireParam extends WireConstraints {
   max_bytes?: number;
   /** `file` parameters only: the multipart field name, when it differs from `name`. */
   form_name?: string;
+  /**
+   * The parameter takes an explicit JSON `null`, and null MEANS something to the API.
+   *
+   * A typed parameter otherwise refuses null: a boolean coerces through its text, and
+   * "null" is neither true nor false. web_accessibility's needs-review `confirmed` is the
+   * case that forced this — `confirmed: null` with `hidden: false` is how the server puts a
+   * confirmed issue back to pending, so refusing null left that undo with no route at all.
+   */
+  nullable?: true;
 }
 
 /**

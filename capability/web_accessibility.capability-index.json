@@ -6527,14 +6527,15 @@
             "type": "boolean",
             "required": true,
             "json_path": "/hidden",
-            "description": "false with confirmed true = Confirm; true with confirmed false = Not an issue. There is no pending reset through this capability: use undo_bulk_review_decisions.",
+            "description": "false with confirmed true = Confirm; true with confirmed false = Not an issue; false with confirmed null = back to pending (undo either decision).",
             "example": false
           },
           {
             "name": "confirmed",
             "type": "boolean",
             "json_path": "/confirmed",
-            "description": "true to confirm, false for Not an issue (with hidden true). Always send it: omitting it does not reset anything.",
+            "nullable": true,
+            "description": "true to confirm, false for Not an issue (with hidden true), null to put the issue back to pending (with hidden false). Always send it: omitting it does not reset anything.",
             "example": true
           },
           {
@@ -6561,7 +6562,7 @@
         ],
         "intent": "Confirm a needs-review issue as a real issue, mark it Not an issue, or put it back to pending - the single-issue review on the dashboard.",
         "guidance": [
-          "Confirm with the user before every call. This capability cannot put an issue back to pending: omitting confirmed leaves it unchanged, and null is refused. To undo, call undo_bulk_review_decisions with elements [{issue_id}] and category_id = the issue's reviewCategory.id (from get_build_issue). Never send hidden false without confirmed after Not an issue: that leaves the issue confirmed=false and visible, it disappears from the report and the counts drift until undo_bulk_review_decisions repairs it.",
+          "Confirm with the user before every call. To undo a decision made here, call this again with confirmed null and hidden false: the issue goes back to pending. This works whether or not the issue has a reviewCategory; undo_bulk_review_decisions only reverses decisions made through bulk review and answers 422 'not found for undo review' for the rest. Omitting confirmed leaves the issue unchanged. Never send hidden false with confirmed false: that leaves the issue confirmed=false and visible, it disappears from the report and the counts drift.",
           "Read before you ask: find the exact finding first and name it, its rule and its page in the preview. For a Workflow Analyzer report: get_workflow_analyzer_consolidated_report with view=issues, filter[rule]=<rule> and filter[status]=needsReview, and no nodeFields (or one that keeps issueId): the node's issueId is the id this takes. For a build or scan run: get_build_issue.",
           "Only issues whose result is needs-review take this: any other issue answers 422 'Invalid issue type'. A combination outside the three states above answers 422 'Issue that needs review can't be updated to the requested state.'",
           "Repeating the state the issue already has answers 200 but decrements the build's needsReviewCount again, so do not repeat a decision; read get_build_issue first.",
@@ -7918,7 +7919,7 @@
         "guidance": [
           "Confirm with the user before every call. It works per element on one page URL; there is no component-level undo, so undo a component decision by sending each of its elements (get_bulk_review_page with status reviewed lists them).",
           "It also deletes any carried-forward decision for the element, so later builds stop inheriting it.",
-          "An issue_id or testhub_issue_uuid not in this build and category answers 422.",
+          "An issue_id or testhub_issue_uuid not in this build and category answers 422. It only reverses decisions stored by bulk review: an issue settled with review_needs_review_issue (including one with no reviewCategory) answers 422 'not found for undo review' here, and goes back to pending through review_needs_review_issue with confirmed null and hidden false.",
           "403 causes are the same as submit_bulk_review_decisions: ACCURACY_BUCKETING_V0 blacklist, not the author while TEAM_REPORT_MANAGEMENT is off, an RBAC role without builds:update/manage_issues, or ACTION_NOT_ALLOWED_FOR_SCOPE."
         ],
         "returns": [

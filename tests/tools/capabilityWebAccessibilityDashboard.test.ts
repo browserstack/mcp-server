@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 
 import { ambiguousProducts } from "../../src/tools/capability-registry/search.js";
 import { authHeaders } from "../../src/tools/capability-registry/egress.js";
+import { bind } from "../../src/tools/capability-registry/bind.js";
 import type { TokenTransport } from "../../src/lib/central-oauth.js";
 
 // The Accessibility dashboard's own routes read only a browser session or a central-auth
@@ -266,12 +267,24 @@ describe("the dashboard follows the account's region", () => {
     );
   }
 
+  const PRODUCT_OVERRIDE = "CAPABILITY_REGISTRY_BASE_URL_WEB_ACCESSIBILITY";
   beforeEach(() => {
     vi.resetModules();
     delete process.env[OVERRIDE];
+    delete process.env[PRODUCT_OVERRIDE];
   });
   afterEach(() => {
     delete process.env[OVERRIDE];
+    delete process.env[PRODUCT_OVERRIDE];
+  });
+
+  // An override of the product's host alone used to leave the dashboard on production: a
+  // preprod session sent its dashboard calls to prod.
+  it("refuses the dashboard host when only the product host is overridden", async () => {
+    process.env[PRODUCT_OVERRIDE] = "https://accessibility-preprod.bsstag.com";
+    await expect(resolveIn("us", "dashboard")).rejects.toThrow(
+      /overrides product 'web_accessibility', but not its 'dashboard' host/,
+    );
   });
 
   it.each([
@@ -410,5 +423,52 @@ describe("rule views point to the WCAG guideline views", () => {
     ["list_build_rule_components", "list_build_guideline_components"],
   ])("%s names %s first", (name, target) => {
     expect(byName(name).guidance[0]).toContain(target);
+  });
+});
+
+// Review findings on #570 (validated before fixing).
+describe("review fixes", () => {
+  const review = () => byName("review_needs_review_issue");
+
+  it("refuses a needs-review call without confirmed, before it is sent", () => {
+    expect(() =>
+      bind(review(), { path_params: { id: 1 }, body: { test_type: "TestCase", hidden: false } }),
+    ).toThrow("missing required parameter(s): confirmed");
+    // null is still a value: it puts the issue back to pending.
+    expect(
+      bind(review(), { path_params: { id: 1 }, body: { test_type: "TestCase", hidden: false, confirmed: null } }).body,
+    ).toMatchObject({ confirmed: null });
+  });
+
+  it("declares nullable only on body parameters, the only place bind can send a null", () => {
+    for (const product of Object.values<any>(products)) {
+      for (const c of product.capabilities ?? []) {
+        for (const group of ["path_params", "query"]) {
+          for (const p of c[group] ?? []) expect(p.nullable, `${c.name}.${p.name}`).toBeUndefined();
+        }
+      }
+    }
+  });
+
+  it("filters 'Not an issue' with the backend's own value", () => {
+    for (const name of [
+      "list_build_issues_by_rule",
+      "list_build_issues_by_guideline",
+      "list_build_rule_components",
+      "list_build_guideline_components",
+    ]) {
+      const status = [...(byName(name).body ?? []), ...(byName(name).query ?? [])].find(
+        (p: any) => p.name === "issue_status",
+      );
+      expect(status.values, name).toContain("non-issue");
+      expect(status.values, name).not.toContain("not_an_issue");
+    }
+  });
+
+  it.each([
+    ["accessibility score of my mobile app", "app_accessibility"],
+    ["accessibility score of my website", "web_accessibility"],
+  ])("routes %j to %s", (query, product) => {
+    expect(ambiguousProducts(products, query).settled).toBe(product);
   });
 });

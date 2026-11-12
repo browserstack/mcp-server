@@ -19,6 +19,7 @@ const WIRE = [
   "send_empty_body",
   "local_only",
   "disabled",
+  "auth",
   "method",
   "path",
 ] as const;
@@ -42,6 +43,7 @@ const CAPABILITIES = [
     mode: "write",
     entity: "session",
     send_empty_body: true,
+    auth: { type: "oauth2" },
     intent: "Start a session.",
   },
   {

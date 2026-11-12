@@ -56,7 +56,11 @@ function hasNextPage(body: unknown): boolean {
   // Accessibility's lists page under data.pagination instead, camelCase on some and
   // snake_case on others.
   const pagination = record(record(envelope.data)?.pagination);
-  return pagination?.hasNext === true || pagination?.has_next === true;
+  if (pagination?.hasNext === true || pagination?.has_next === true)
+    return true;
+  // The bulk-review reads page under data.meta.nextPage: a page number, or null on the last.
+  const metaNext = record(record(envelope.data)?.meta)?.nextPage;
+  return metaNext !== null && metaNext !== undefined && metaNext !== false;
 }
 
 /**
@@ -145,13 +149,12 @@ export async function invoke(
     capability.encoding === "multipart"
       ? await multipartBody(capability, bound.body)
       : undefined;
+  // A capability may sign in differently from its product (see Capability.auth). Headers,
+  // the 401 replay and the token it discards must all use this one scheme: web_accessibility
+  // signs in with Basic while its dashboard capabilities mint an oauth2 token.
+  const effectiveAuth = capability.auth ?? auth;
   const send = async () => {
-    // A capability may sign in differently from its product (see Capability.auth).
-    const headers = await authHeaders(
-      credentials,
-      capability.auth ?? auth,
-      product,
-    );
+    const headers = await authHeaders(credentials, effectiveAuth, product);
     if (multipart) {
       // fetch writes its own Content-Type with the boundary. Leaving the JSON one on sends
       // a body the product cannot parse, under a header that says it should be able to.
@@ -183,10 +186,10 @@ export async function invoke(
    * fails identically, and a loop here would hammer the token endpoint on every wrong
    * password.
    */
-  if (response.status === 401 && auth?.type === "oauth2") {
+  if (response.status === 401 && effectiveAuth?.type === "oauth2") {
     invalidateToken(
-      resolveTokenUrl(product ?? "this product", auth),
-      resolveScope(auth),
+      resolveTokenUrl(product ?? "this product", effectiveAuth),
+      resolveScope(effectiveAuth),
       credentials,
     );
     response = await send();

@@ -182,6 +182,13 @@ const YES_VALUES = new Set(["yes", "true"]);
 const isYes = (value: string | undefined) =>
   YES_VALUES.has((value ?? "").trim().toLowerCase());
 
+/**
+ * A review status a person has confirmed: "confirmed" in most exports, "Confirmed Issue" in
+ * the Workflow Analyzer one. Such an issue is a confirmed failure, not one awaiting review.
+ */
+export const isConfirmedReview = (status: string | undefined) =>
+  /^confirmed\b/.test((status ?? "").trim().toLowerCase());
+
 function recordOfRow(
   row: any,
   hasSourceTest: boolean,
@@ -282,7 +289,7 @@ function summaryOf(
     by_page: [...byPage.values()].sort((a, b) => b.count - a.count),
     // A needs-review issue a person has confirmed is a confirmed failure.
     needs_review: issues.filter(
-      (issue) => issue.needs_review && issue.needs_review !== "confirmed",
+      (issue) => issue.needs_review && !isConfirmedReview(issue.needs_review),
     ).length,
     best_practice: issues.filter(
       (issue) => rules[issue.issue_type]?.best_practice,

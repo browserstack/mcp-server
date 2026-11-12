@@ -165,6 +165,8 @@ describe("parseAccessibilityReportFromCSV", () => {
       undefined,
       "confirmed issue",
     ]);
+    // "Confirmed Issue" is a person's confirmation: only row a still needs review.
+    expect(result.summary.needs_review).toBe(1);
     expect(result.records.filter((r) => r.severity === "critical")).toHaveLength(2);
   });
 

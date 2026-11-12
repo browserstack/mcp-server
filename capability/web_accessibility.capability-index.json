@@ -2903,7 +2903,7 @@
             "values": [
               "visible",
               "hidden",
-              "not_an_issue"
+              "non-issue"
             ],
             "default": "visible",
             "description": "Which issues to count. Any value other than visible drops the severity, needs_review, pages, components, categories and result_type filters."
@@ -3133,7 +3133,7 @@
             "values": [
               "visible",
               "hidden",
-              "not_an_issue"
+              "non-issue"
             ],
             "default": "visible",
             "description": "Which issues to count."
@@ -3358,7 +3358,7 @@
             "values": [
               "visible",
               "hidden",
-              "not_an_issue"
+              "non-issue"
             ],
             "default": "visible",
             "description": "Which issues to include."
@@ -3509,7 +3509,7 @@
             "values": [
               "visible",
               "hidden",
-              "not_an_issue"
+              "non-issue"
             ],
             "default": "visible",
             "description": "Which issues to include."
@@ -6224,9 +6224,10 @@
           {
             "name": "confirmed",
             "type": "boolean",
+            "required": true,
             "json_path": "/confirmed",
             "nullable": true,
-            "description": "true to confirm, false for Not an issue (with hidden true), null to put the issue back to pending (with hidden false). Always send it: omitting it does not reset anything.",
+            "description": "true to confirm, false for Not an issue (with hidden true), null to put the issue back to pending (with hidden false). Required: a call without it would change nothing yet answer success, so it is refused before it is sent.",
             "example": true
           },
           {
@@ -6254,7 +6255,7 @@
         "intent": "Confirm a needs-review issue as a real issue, mark it Not an issue, or put it back to pending - the single-issue review on the dashboard.",
         "guidance": [
           "APPROVAL FIRST: before calling, tell the user exactly what will change (what, where, how many) and wait for an explicit yes in their own words ('yes', 'go ahead', 'approved'). A request to make the change, however specific, is not that yes: ask first, and send user_permission granted only after it. Here 'confirm it as a real issue' names the decision the user wants; it is not approval to record it.",
-          "Confirm with the user before every call. To undo a decision made here, call this again with confirmed null and hidden false: the issue goes back to pending. This works whether or not the issue has a reviewCategory; undo_bulk_review_decisions only reverses decisions made through bulk review and answers 422 'not found for undo review' for the rest. Omitting confirmed leaves the issue unchanged. Never send hidden false with confirmed false: that leaves the issue confirmed=false and visible, it disappears from the report and the counts drift.",
+          "Confirm with the user before every call. To undo a decision made here, call this again with confirmed null and hidden false: the issue goes back to pending. This works whether or not the issue has a reviewCategory; undo_bulk_review_decisions only reverses decisions made through bulk review and answers 422 'not found for undo review' for the rest. Never send hidden false with confirmed false: that leaves the issue confirmed=false and visible, it disappears from the report and the counts drift.",
           "Read before you ask: find the exact finding first and name it, its rule and its page in the preview. For a Workflow Analyzer report: get_workflow_analyzer_consolidated_report with view=issues, filter[rule]=<rule> and filter[status]=needsReview, and no nodeFields (or one that keeps issueId): the node's issueId is the id this takes. For a build or scan run: get_build_issue.",
           "Only issues whose result is needs-review take this: any other issue answers 422 'Invalid issue type'. A combination outside the three states above answers 422 'Issue that needs review can't be updated to the requested state.'",
           "Repeating the state the issue already has answers 200 but decrements the build's needsReviewCount again, so do not repeat a decision; read get_build_issue first.",

@@ -181,6 +181,16 @@ function resolveNamedHost(
   const override = process.env[`CAPABILITY_REGISTRY_BASE_URL_${suffix}`];
   if (override) return trim(override);
 
+  // An override of the product's own host says "not production", but it does not say where
+  // this host lives. Falling through to the regional (production) host would send a preprod
+  // session's dashboard calls to production.
+  if (process.env[`CAPABILITY_REGISTRY_BASE_URL_${key}`]) {
+    throw new InvocationError(
+      `CAPABILITY_REGISTRY_BASE_URL_${key} overrides product '${product}', but not its ` +
+        `'${host}' host. Set CAPABILITY_REGISTRY_BASE_URL_${suffix} as well.`,
+    );
+  }
+
   if (environment) {
     throw new InvocationError(
       `environment '${environment}' has no '${host}' host for product '${product}'. Set ` +

@@ -360,7 +360,6 @@ searchCapability  →  describeCapability  →  invokeCapability
 | Capability | What it does |
 |---|---|
 | `bulk_hide_issue_components` | Hide (or unhide) the issues of many rule/component pairs in one report at once, with one reason - the dashboard's multi-select Hide. Returns how many issues changed. **(write, needs approval)** |
-| `check_build_list_updates` | Check whether any in-progress Automated Tests build has changed status, or a new build has appeared in a project, since a given time - use this to decide whether to re-list builds while waiting for one to finish. |
 | `get_build_issue` | Read one accessibility issue in a build or scan run - the failing element's HTML, selector, failure summary, the rule and its remediation, impact, page, review state and the test cases that hit it - stepping through a component's issues one at a time. |
 | `get_build_report_metadata` | Read a build's or scan run's report header - name, build number, creator, dates, status, WCAG version, engine version, settings, browser and OS, SDK and CI info, and severity counts. |
 | `get_build_report_overview` | Read a build's or scan run's overview - issue counts by severity, pages and components, test health, issue and score trends over earlier builds, the comparison with the previous build, and issue counts by URL, category and component. |
@@ -373,8 +372,6 @@ searchCapability  →  describeCapability  →  invokeCapability
 | `get_custom_dashboard_category_summary` | Count a custom dashboard's issues by category (colour, ARIA, forms, keyboard and so on), largest first - use this for 'what kind of issues does this dashboard have most of'. |
 | `get_custom_dashboard_issue_summary` | Count a custom dashboard's issues by severity (critical, serious, moderate, minor) across all its scans, with the total - use this for 'how many issues' or 'how many critical issues' on a dashboard. |
 | `get_custom_dashboard_score_summary` | Read a custom dashboard's accessibility score (0-100) and the per-severity pass/fail breakdown behind it - use this for 'what is this dashboard's score' or why it is low. |
-| `get_legacy_scan_config_project_name` | Turn an old Website Scanner scan link's id into the scan's current project name. |
-| `get_legacy_scan_report_build_id` | Turn an old Website Scanner report link's id into the run's thBuildId, so the current report capabilities can read it. |
 | `get_report_comparison_issue` | Read one new, retained or resolved issue from a comparison of two runs, with its page, element, HTML, failure message, fix help and rule - step through them one at a time. |
 | `get_report_comparison_meta` | Read which two runs a comparison covers - build names and numbers, dates, engine versions, WCAG version and scan settings - before reading what changed between them. |
 | `get_report_comparison_summary` | Compare two runs of the same build or scan: how many issues are new, retained and resolved, by severity, page, component and test - use this to answer 'what got better or worse since the last run'. |
@@ -385,7 +382,6 @@ searchCapability  →  describeCapability  →  invokeCapability
 | `hide_issues` | Hide (or unhide) accessibility issues in one report at issue, component, rule or guideline scope, with a reason - the dashboard's Hide issue action. Changes the report's issue counts and score. **(write, needs approval)** |
 | `link_ticket_to_issue` | Attach an existing tracker ticket (e.g. a Jira key) to an accessibility issue, report or test case so it shows as linked on the dashboard. It does not create the ticket. **(write, needs approval)** |
 | `list_accessibility_guidelines` | Look up the full catalogue of accessibility guidelines - every WCAG success criterion and RGAA criterion and theme - with its number, name, description, level, principle and the regulations it belongs to - use this to explain what a guideline tag such as wcag143 means. |
-| `list_accessibility_projects` | List every Automated Tests project in the account, newest first, with its id, name and URL-safe name - use this to find a project by name or the project id another capability takes. |
 | `list_accessibility_reports` | List the account's manual-testing reports - Workflow Analyzer, Assisted Tests or PDF Scanner - newest first, with each report's id, name, creator, status, issue counts and score, filterable by name, person, team and date - use this to find someone's latest manual reports or a report by name. |
 | `list_build_guideline_components` | List the page components that fail one WCAG (or RGAA) criterion in a build or scan run, each with issue count, page count, URL and the rules involved - use this to drill from a guideline into where it fails. |
 | `list_build_issues_by_guideline` | List the WCAG success criteria (or RGAA criteria on RGAA reports) a build or scan run failed, each with its level, principle, issue counts and the rules behind it - use this for a build's issue breakdown by guideline. |

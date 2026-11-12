@@ -73,16 +73,18 @@ describe("a capability served from a named host", () => {
     );
   });
 
-  it("is NOT overridden by the product-level variable, which addresses a different host", async () => {
+  it("is NOT overridden by the product-level variable, and refuses rather than reach production", async () => {
     // Pointing the product at a preprod API must not silently redirect hub traffic there:
     // the hub is a separate deployment and would answer 404 for every /wd/hub path.
+    // Nor may it fall through to the production hub: the override says "not production",
+    // so the named host must be configured too, and the error names the variable.
     process.env.CAPABILITY_REGISTRY_BASE_URL_MOBILEDEVICECONTROL =
       "https://api-preprod.example";
     const { resolveBaseUrl } =
       await import("../../src/tools/capability-registry/config.js");
-    expect(
-      await resolveBaseUrl("mobiledevicecontrol", CONFIG, SOURCE, undefined, "hub"),
-    ).toBe("https://hub-cloud.browserstack.com");
+    await expect(
+      resolveBaseUrl("mobiledevicecontrol", CONFIG, SOURCE, undefined, "hub"),
+    ).rejects.toThrow(/CAPABILITY_REGISTRY_BASE_URL_MOBILEDEVICECONTROL_HOST_HUB/);
   });
 
   it("refuses a host the index does not declare, and names the ones it does", async () => {

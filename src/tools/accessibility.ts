@@ -49,6 +49,7 @@ import { BrowserStackConfig } from "../lib/types.js";
 import { elicitCredentialsIfSupported } from "../lib/elicit-credentials.js";
 import logger from "../logger.js";
 import { NEEDS_A11Y_CONFIG_ID, NEEDS_A11Y_SCAN_ID } from "./tool-handoff.js";
+import { isEnabled as capabilityRegistryEnabled } from "./capability-registry/config.js";
 import {
   applyMemory,
   memoryForReport,
@@ -290,6 +291,8 @@ function excludedIssuesNote(
   duplicates: number | null,
   unlinked: number,
   hidden: number | null,
+  // Web exports also drop rows a reviewer marked "Not an issue"; app reports have no such rows.
+  includesNotAnIssue = false,
 ): string[] {
   const notes: string[] = [];
   if (duplicates) {
@@ -306,7 +309,7 @@ function excludedIssuesNote(
   }
   if (hidden) {
     notes.push(
-      `${hidden} issues hidden or marked "Not an issue" in the dashboard are not included, as the dashboard leaves them out of its count too.`,
+      `${hidden} issues ${includesNotAnIssue ? 'hidden or marked "Not an issue"' : "hidden"} in the dashboard are not included, as the dashboard leaves them out of its count too.`,
     );
   }
   return notes;
@@ -1203,10 +1206,16 @@ async function fetchAccessibilityIssues(
     // The whole report's score and counts, said on its first page.
     ...scoreNote(score),
     ...(cursor ? [] : webSummaryNote(summary, total_issues)),
-    ...excludedIssuesNote(duplicate_issues, unlinked_duplicates, hidden_issues),
+    ...excludedIssuesNote(
+      duplicate_issues,
+      unlinked_duplicates,
+      hidden_issues,
+      true,
+    ),
     fullReportLine(reportLink),
     WEB_ISSUES_NOTE,
-    WEB_MORE_VIEWS_NOTE,
+    // Said once, on the first page, and only when searchCapability is there to follow it to.
+    ...(cursor || !capabilityRegistryEnabled() ? [] : [WEB_MORE_VIEWS_NOTE]),
     ...fp.notes,
     `Issues: ${wrapUntrusted("accessibility scan results", JSON.stringify({ issues: fp.records, rules }))}`,
     ...fp.closing,
@@ -1757,9 +1766,10 @@ function createScanSuccessResponse(
       report.duplicate_issues,
       report.unlinked_duplicates,
       report.hidden_issues,
+      true,
     ),
     WEB_ISSUES_NOTE,
-    WEB_MORE_VIEWS_NOTE,
+    ...(capabilityRegistryEnabled() ? [WEB_MORE_VIEWS_NOTE] : []),
     ...fp.notes,
     `Scan results: ${wrapUntrusted("accessibility scan results", JSON.stringify({ issues: fp.records, rules: report.rules }))}`,
     ...fp.closing,

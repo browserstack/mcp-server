@@ -537,7 +537,7 @@ describe("fetchAccessibilityIssues and App Accessibility builds", () => {
       "Retrieved 1 accessibility issues (Total: 3) from the App Accessibility build below (2 screens scanned)",
     );
     expect(body).toContain(
-      '1 issues hidden or marked "Not an issue" in the dashboard are not included, as the dashboard leaves them out of its count too.',
+      "1 issues hidden in the dashboard are not included, as the dashboard leaves them out of its count too.",
     );
     expect(body).toContain(`"dashboard_link": "${LINK}"`);
     expect(body).not.toContain("CSV");

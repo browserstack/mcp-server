@@ -8,7 +8,30 @@ import "dotenv/config";
 import logger from "./logger.js";
 import { BrowserStackMcpServer } from "./server-factory.js";
 
+function handleCliMetadataFlags(args = process.argv.slice(2)): boolean {
+  if (args.includes("--version") || args.includes("-v")) {
+    console.log(packageJson.version);
+    return true;
+  }
+
+  if (args.includes("--help") || args.includes("-h")) {
+    console.log(`BrowserStack MCP Server
+
+Usage:
+  browserstack-mcp-server [--version] [--help]
+
+Environment:
+  BROWSERSTACK_USERNAME     BrowserStack account username
+  BROWSERSTACK_ACCESS_KEY   BrowserStack account access key`);
+    return true;
+  }
+
+  return false;
+}
+
 async function main() {
+  if (handleCliMetadataFlags()) return;
+
   logger.info(
     "Launching BrowserStack MCP server, version %s",
     packageJson.version,

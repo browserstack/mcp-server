@@ -303,3 +303,22 @@ describe("routing", () => {
     );
   });
 });
+
+// A user asked to pick a hide reason was offered invented ones ("Not an issue") because the
+// allowed values sit only in describeCapability, and the agent asked before reading it. The
+// first guidance line rides on every search row, so it must name the real list, and stay in
+// step with the enum.
+describe("hide reasons are offered before the contract is read", () => {
+  const web = () => shipped().web_accessibility.capabilities as any[];
+
+  it.each(["hide_issues", "bulk_hide_issue_components"])(
+    "%s lists every allowed reason in a guidance line",
+    (name) => {
+      const capability = web().find((c) => c.name === name);
+      const reasons: string[] = capability.body.find((p: any) => p.name === "reason").values;
+      const line = (capability.guidance as string[]).find((g) => g.includes("offering exactly these"));
+      expect(line).toBeDefined();
+      for (const reason of reasons) expect(line).toContain(reason);
+    },
+  );
+});

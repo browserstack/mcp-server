@@ -971,7 +971,7 @@ export function addCapabilityRegistryTools(
 
   tools.describeCapability = server.tool(
     "describeCapability",
-    "Full contract (parameters, returns, response shapes) for ONE capability from searchCapability. Call it before invokeCapability. Identify by `name`; use `method` + `path` only when no name was returned.",
+    "Full contract for ONE capability from searchCapability: parameters, their allowed `values`, returns. Call it before invokeCapability, and before asking the user to choose a value: offer only those.",
     {
       name: z
         .string()

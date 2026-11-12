@@ -6288,7 +6288,7 @@
         ],
         "intent": "Hide (or unhide) accessibility issues in one report at issue, component, rule or guideline scope, with a reason - the dashboard's Hide issue action. Changes the report's issue counts and score.",
         "guidance": [
-          "Confirm with the user before every call: it changes the report every viewer sees, and with persist true it carries into later builds.",
+          "Confirm with the user before every call: it changes the report every viewer sees, and with persist true it carries into later builds. When hiding, ask for the reason by offering exactly these six, the only ones the API takes: Duplicate, Not relevant, Not a priority, False positive, Technical challenges, Others. 'Not an issue' is not a hide reason: it is a needs-review decision (review_needs_review_issue).",
           "Read before you ask: get the exact findings this will change first (list_build_issues_by_guideline or list_build_issues_by_rule for a build or scan run, get_workflow_analyzer_consolidated_report for a Workflow Analyzer report), and put their count, rule or guideline and report in the preview. An approval asked for without the count is an approval of an unknown change.",
           "Undo is the same call with hidden false and the same scope, rule_id/guideline_tag, component_id and issue_id; reason is then not needed.",
           "The success reply is only {success: true}; it does not say how many issues changed. A 404 'Issue Not Found' also means nothing was in the opposite state (already hidden, or already visible).",
@@ -6442,7 +6442,7 @@
         ],
         "intent": "Hide (or unhide) the issues of many rule/component pairs in one report at once, with one reason - the dashboard's multi-select Hide. Returns how many issues changed.",
         "guidance": [
-          "Confirm with the user before every call, naming the report and how many pairs. Undo is the same components with hidden false.",
+          "Confirm with the user before every call, naming the report and how many pairs. When hiding, ask for the reason by offering exactly these six, the only ones the API takes: Duplicate, Not relevant, Not a priority, False positive, Technical challenges, Others. Undo is the same components with hidden false.",
           "Read before you ask: get the exact findings this will change first (list_build_issues_by_guideline or list_build_issues_by_rule for a build or scan run, get_workflow_analyzer_consolidated_report for a Workflow Analyzer report), and put their count, rule or guideline and report in the preview. An approval asked for without the count is an approval of an unknown change.",
           "hidden_count in the reply is how many issues changed state; pairs that matched nothing are skipped silently, not refused.",
           "component_id must be a string even when it looks numeric (a number answers 422 'component_id must be a string'). When nothing matches, the reply is still 200 with hidden_count 0 and message 'No issues found for the given components' (hide_issues answers 404 instead).",

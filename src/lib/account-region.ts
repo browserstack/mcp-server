@@ -119,6 +119,7 @@ async function probe(
       `${config["browserstack-username"]}:${config["browserstack-access-key"]}`,
     ).toString("base64");
   let rejected = 0;
+  const answers: string[] = [];
   for (const [region, host] of PROBE_HOSTS) {
     try {
       const res = await apiClient.get({
@@ -129,10 +130,13 @@ async function probe(
       });
       if (res.ok) return region;
       if (res.status === 401) rejected++;
+      answers.push(`${region} ${res.status}`);
     } catch (error) {
       logger.debug(`Region probe failed for ${host}: ${error}`);
+      answers.push(`${region} unreachable`);
     }
   }
+  logger.warn(`No region probe accepted the account: ${answers.join(", ")}`);
   return rejected === PROBE_HOSTS.length ? "rejected" : null;
 }
 

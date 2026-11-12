@@ -93,13 +93,13 @@ describe("the account's region", () => {
   });
 
   it.each([
-    ["eu", true],
-    ["unknown", true],
-    ["us", false],
-    ["in", true],
+    ["eu", false, false],
+    ["unknown", true, false],
+    ["us", true, true],
+    ["in", false, false],
   ])(
-    "limits telemetry outside a tool call for a %s account: %s",
-    async (region, limited) => {
+    "limits telemetry outside a tool call for a %s account",
+    async (region, errorText, freeText) => {
       regions.set("user", region);
       trackMCP("started", clientInfo, new Error("boom"), configFor("user"), {
         search_query: "checkout runs",
@@ -107,8 +107,8 @@ describe("the account's region", () => {
       await settle();
       const row = rows().at(-1);
       expect(row.tool_name).toBe("started");
-      expect("error_message" in row).toBe(!limited);
-      expect("search_query" in row).toBe(!limited);
+      expect("error_message" in row).toBe(errorText);
+      expect("search_query" in row).toBe(freeText);
     },
   );
 

@@ -4,6 +4,7 @@ import { getBrowserStackAuth } from "./get-auth.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { trackMCP } from "../index.js";
+import { HttpError } from "./error.js";
 
 export function sanitizeUrlParam(param: string): string {
   // Remove any characters that could be used for command injection
@@ -33,15 +34,13 @@ export async function fetchFromBrowserStackAPI(
   const authString = getBrowserStackAuth(config);
   const auth = Buffer.from(authString).toString("base64");
 
-  const res = await fetch(url, {
-    headers: {
-      Authorization: `Basic ${auth}`,
-    },
-  });
+  const init = { headers: { Authorization: `Basic ${auth}` } };
+  const res = await fetch(url, init).catch(() => fetch(url, init));
 
   if (!res.ok) {
-    throw new Error(
+    throw new HttpError(
       `Failed to fetch from ${url}: ${res.status} ${res.statusText}`,
+      res.status,
     );
   }
 

@@ -113,6 +113,9 @@ describe("accessibilityExpert with a long question", () => {
     expect(rag.query.mock.calls[0][0]).toBe(QUESTION);
     expect(result.content).toHaveLength(2);
     expect(result.content[0].text).toMatch(/^Note: accessibilityExpert is deprecated/);
+    expect(result.content[0].text).toContain(
+      "For a general WCAG or ARIA question, call askBrowserStackAI with product a11y too.",
+    );
     expect(result.content[1]).toEqual({ type: "text", text: "Answer." });
   });
 });

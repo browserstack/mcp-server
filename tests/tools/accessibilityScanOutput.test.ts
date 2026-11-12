@@ -1075,6 +1075,16 @@ describe("what a web report's answer says about its issues", () => {
     }
   });
 
+  // In isolated agent sessions this tool answered test-case, by-guideline and component
+  // questions on its own and once told a user test cases "aren't available".
+  it("points to the dashboard views the issue list does not cover", async () => {
+    const body = text(
+      await handlers.fetchAccessibilityIssues({ scanId: "scan-42", scanRunId: "run-7" }, CONTEXT),
+    );
+    expect(body).toContain("call searchCapability with product web_accessibility");
+    expect(body).toContain("never tell the user they are unavailable");
+  });
+
   it("links the scan's own dashboard page, from the scans list, not a link made from its name", async () => {
     const LINK =
       "https://accessibility.browserstack.com/site-scanner/projects/Home%20page/builds?thBuildId=abc&recurring=false";

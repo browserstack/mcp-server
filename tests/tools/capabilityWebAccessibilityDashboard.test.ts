@@ -46,7 +46,11 @@ const byName = (name: string) =>
 describe("the Web Accessibility dashboard capabilities", () => {
   it("are part of Web Accessibility, not a product of their own", () => {
     expect(products.web_accessibility_dashboard).toBeUndefined();
-    expect(dash.length).toBe(42);
+    expect(dash.length).toBe(40);
+    // A twin of list_automated_tests_projects that agents picked instead of it, and a UI
+    // polling check no natural request reached in isolated agent sessions.
+    expect(byName("list_accessibility_projects")).toBeUndefined();
+    expect(byName("check_build_list_updates")).toBeUndefined();
     // Pre-2026 link redirects (old report / scan-config ids) are the dashboard's job, not an
     // agent's: kept out so they cannot be picked for a current scan id and answer 404.
     expect(byName("get_legacy_scan_report_build_id")).toBeUndefined();
@@ -362,5 +366,47 @@ describe("custom dashboard summaries are reported as merged", () => {
     const first: string = byName(name).guidance[0];
     expect(first).toContain("de-duplicate");
     expect(first).toContain("never add up the underlying reports");
+  });
+});
+
+// Isolated agent sessions wrote on a plain request ("Please confirm it as a real issue",
+// "Re-run my scan") in 3 of 6 cases with no approval given. The server cannot see a human
+// say yes, so each write leads with the rule, on the line that rides on every search row.
+describe("every write asks for an explicit yes first", () => {
+  const writes = (shipped().web_accessibility.capabilities as any[]).filter(
+    (c) => c.mode === "write",
+  );
+
+  it("covers all seven writes", () => expect(writes.length).toBe(7));
+
+  it.each(writes.map((c) => [c.name, c]))("%s leads with the approval rule", (_name, c: any) => {
+    expect(c.guidance[0]).toMatch(/^APPROVAL FIRST/);
+    expect(c.guidance[0]).toContain("is not that yes");
+  });
+});
+
+// "the Workflow Analyzer browser extension, web pages" was routed to Device Control, because
+// only that product claimed 'web page' and 'website'.
+describe("web words no longer route a Web Accessibility user to Device Control", () => {
+  it.each([
+    ["the Workflow Analyzer browser extension, web pages"],
+    ["the accessibility issues on my website"],
+  ])("%j does not settle on devicecontrol", (query) => {
+    expect(ambiguousProducts(products, query).settled).not.toBe("devicecontrol");
+  });
+
+  it("anchors 'browser extension' to Web Accessibility", () => {
+    expect(ambiguousProducts(products, "issues from the browser extension").settled).toBe(
+      "web_accessibility",
+    );
+  });
+});
+
+describe("rule views point to the WCAG guideline views", () => {
+  it.each([
+    ["list_build_issues_by_rule", "list_build_issues_by_guideline"],
+    ["list_build_rule_components", "list_build_guideline_components"],
+  ])("%s names %s first", (name, target) => {
+    expect(byName(name).guidance[0]).toContain(target);
   });
 });

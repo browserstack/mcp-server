@@ -620,6 +620,12 @@ function webSummaryNote(
 const WEB_ISSUES_NOTE =
   "Each issue names its rule (issue_type): the rule's name, description, WCAG criteria and usual fix are under rules, and an issue has its own how_to_fix only when it differs. An issue with needs_review is one the engine could not decide, so a person confirms it: the value is its review status, and until it is confirmed it is not a confirmed failure. An issue with no needs_review, whose rule is not a best practice (best_practice under rules), is a confirmed WCAG failure.";
 
+// In isolated agent sessions this tool answered questions it only half covers (a build's test
+// cases, issues by WCAG guideline, the elements behind a rule, one issue's detail, merging
+// reports) and once told the user test cases "aren't available". Point at the dashboard views.
+const WEB_MORE_VIEWS_NOTE =
+  "This answer is the issue list only. For a build's or scan run's test cases, its issues grouped by rule or by WCAG guideline, the elements behind a rule or guideline, one issue's full detail, or several Workflow Analyzer reports merged into one, call searchCapability with product web_accessibility: those are separate dashboard views, so never tell the user they are unavailable.";
+
 /** The CSV link, with what it is for: an answer gives a page of issues at a time. */
 function fullReportLine(reportLink: string): string {
   return `The full list of issues is a CSV, valid for about 12 hours: download it when every issue is needed at once (this answer gives them a page at a time), from the following link: ${reportLink}`;
@@ -1130,6 +1136,7 @@ async function fetchAccessibilityIssues(
     ...excludedIssuesNote(duplicate_issues, unlinked_duplicates, hidden_issues),
     fullReportLine(reportLink),
     WEB_ISSUES_NOTE,
+    WEB_MORE_VIEWS_NOTE,
     `Issues: ${wrapUntrusted("accessibility scan results", JSON.stringify({ issues: records, rules }))}`,
     closingMessage(next_page, remaining, source, stillProcessing, pageArg),
   ]);
@@ -1563,6 +1570,7 @@ function createScanSuccessResponse(
       report.hidden_issues,
     ),
     WEB_ISSUES_NOTE,
+    WEB_MORE_VIEWS_NOTE,
     `Scan results: ${wrapUntrusted("accessibility scan results", JSON.stringify({ issues: report.records, rules: report.rules }))}`,
   ];
 

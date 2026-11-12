@@ -5,6 +5,10 @@
   "web_accessibility": {
     "summary": "BrowserStack Web Accessibility: WCAG accessibility results for websites and web apps. List the account's Workflow Analyzer reports, Website Scanner scans and their runs, Automated Tests projects and builds, and Assisted Test reports, each with the id the accessibility issue tool reads. Read what the dashboard shows: custom dashboards and their scores, a build or scan run's report (overview, test cases, issues by rule or WCAG guideline, affected components, page logs), comparisons of two runs, scan trends and settings, and the signed-in user. Writes, each needing approval: re-run a scan, hide or un-hide issues, settle needs-review issues, submit or undo a bulk review, link issues to a ticket. Dashboard capabilities sign in with a token scoped to agent use; the user's own role and plan still apply. Mobile apps are a separate product.",
     "routing_terms": [
+      "website",
+      "web page",
+      "web app",
+      "browser extension",
       "web accessibility",
       "website accessibility",
       "web a11y",
@@ -1101,117 +1105,6 @@
                       }
                     }
                   }
-                }
-              }
-            }
-          }
-        }
-      },
-      {
-        "name": "list_accessibility_projects",
-        "method": "GET",
-        "path": "/api/projects",
-        "host": "dashboard",
-        "auth": {
-          "type": "oauth2"
-        },
-        "mode": "read",
-        "entity": "automated_tests_project",
-        "query": [
-          {
-            "name": "source",
-            "type": "string",
-            "values": [
-              "lcnc"
-            ],
-            "description": "Send lcnc to list only low-code (LCNC) automation projects. Omit for the regular Automated Tests projects.",
-            "example": "lcnc"
-          }
-        ],
-        "intent": "List every Automated Tests project in the account, newest first, with its id, name and URL-safe name - use this to find a project by name or the project id another capability takes.",
-        "guidance": [
-          "All projects come back in one response: the server walks every page itself, so there is no paging to do. info describes only the last page it read; read info.count for the total.",
-          "There is no name search: the backend ignores any query, so filter the rows by name yourself.",
-          "normalisedName is the name URL-encoded (spaces become +), the form a project path segment needs; id is the numeric project id that list_custom_dashboard_scans reports as projectId.",
-          "Website Scanner projects are excluded. team_id is snake_case and is null when the project has no team."
-        ],
-        "returns": [
-          "projects.id",
-          "projects.name",
-          "projects.normalisedName",
-          "projects.createdAt",
-          "projects.team_id",
-          "info.count"
-        ],
-        "paginated": false,
-        "responses": {
-          "401": {
-            "$response": "DashboardUnauthorized"
-          },
-          "403": {
-            "$response": "DashboardForbidden"
-          },
-          "422": {
-            "$response": "DashboardUnprocessable"
-          },
-          "500": {
-            "$response": "DashboardUpstreamFailure"
-          },
-          "200": {
-            "description": "Every Automated Tests project; the server walks all pages, info is the last page.",
-            "schema": {
-              "type": "object",
-              "properties": {
-                "success": {
-                  "type": "boolean"
-                },
-                "projects": {
-                  "type": "array",
-                  "items": {
-                    "type": "object",
-                    "properties": {
-                      "id": {
-                        "type": "integer"
-                      },
-                      "name": {
-                        "type": "string"
-                      },
-                      "normalisedName": {
-                        "type": "string"
-                      },
-                      "createdAt": {
-                        "type": "string"
-                      },
-                      "team_id": {
-                        "type": "integer",
-                        "description": "null when the project has no team."
-                      }
-                    }
-                  }
-                },
-                "info": {
-                  "type": "object",
-                  "properties": {
-                    "page": {
-                      "type": "integer"
-                    },
-                    "page_size": {
-                      "type": "integer"
-                    },
-                    "count": {
-                      "type": "integer",
-                      "description": "Total matching rows across all pages."
-                    },
-                    "prev": {
-                      "type": "integer",
-                      "description": "null on the first page."
-                    },
-                    "next": {
-                      "type": "integer",
-                      "description": "Next page number; null on the last page."
-                    }
-                  },
-                  "description": "Paging info of the LAST page read; count is the total."
                 }
               }
             }
@@ -2972,101 +2865,6 @@
         }
       },
       {
-        "name": "check_build_list_updates",
-        "method": "POST",
-        "path": "/api/v2/test_runs/updates",
-        "host": "dashboard",
-        "auth": {
-          "type": "oauth2"
-        },
-        "mode": "read",
-        "entity": "test_run",
-        "body": [
-          {
-            "name": "project_name",
-            "type": "string",
-            "required": true,
-            "description": "Exact project name to check for new builds.",
-            "example": "example-project"
-          },
-          {
-            "name": "last_checked",
-            "type": "integer",
-            "required": true,
-            "description": "Epoch milliseconds of the last look; a build created after it counts as new.",
-            "example": 1700000000000
-          },
-          {
-            "name": "builds",
-            "type": "array",
-            "required": true,
-            "description": "Builds still in progress: [{uuid: thBuildId, status}]. status must be running, queued, processing, finalizing or timeout; completed or failed answers 422. [] is accepted and checks only for new builds.",
-            "fields": [
-              {
-                "name": "uuid",
-                "type": "string",
-                "required": true
-              },
-              {
-                "name": "status",
-                "type": "string",
-                "required": true,
-                "values": [
-                  "running",
-                  "queued",
-                  "processing",
-                  "finalizing",
-                  "timeout"
-                ]
-              }
-            ],
-            "example": [
-              {
-                "uuid": "abc123examplebuilduuid",
-                "status": "running"
-              }
-            ]
-          }
-        ],
-        "intent": "Check whether any in-progress Automated Tests build has changed status, or a new build has appeared in a project, since a given time - use this to decide whether to re-list builds while waiting for one to finish.",
-        "guidance": [
-          "hasUpdates true means at least one listed build's status is now different from the one sent, or a newer build exists. It does not say which: re-read list_build_report_runs.",
-          "Send each build's status as last seen; sending a status it no longer has returns hasUpdates true at once.",
-          "A 500 \"Something Went Wrong\" with hasUpdates false means TestHub did not answer, not that nothing changed."
-        ],
-        "returns": [
-          "hasUpdates"
-        ],
-        "responses": {
-          "401": {
-            "$response": "DashboardUnauthorized"
-          },
-          "403": {
-            "$response": "DashboardForbidden"
-          },
-          "422": {
-            "$response": "DashboardUnprocessable"
-          },
-          "500": {
-            "$response": "DashboardUpstreamFailure"
-          },
-          "200": {
-            "description": "success plus hasUpdates. From a live call.",
-            "schema": {
-              "type": "object",
-              "properties": {
-                "success": {
-                  "type": "boolean"
-                },
-                "hasUpdates": {
-                  "type": "boolean"
-                }
-              }
-            }
-          }
-        }
-      },
-      {
         "name": "list_build_issues_by_rule",
         "method": "POST",
         "path": "/api/v3/test_runs/rules",
@@ -3161,6 +2959,7 @@
         ],
         "intent": "List the accessibility rules a build or scan run violated, each with issue counts, impact and the review category, plus the report's confirmed, needs-review, hidden and dismissed totals - use this for a build's issue breakdown by rule and for the rule id the component drill-down takes.",
         "guidance": [
+          "For a breakdown by WCAG success criterion ('which WCAG criteria fail', '1.4.3'), use list_build_issues_by_guideline instead of mapping rules to criteria yourself.",
           "data.rules[].id is the rule id list_build_rule_components and get_build_issue take as rule_id. On grouped builds (isGrouped) pass rules[].code instead.",
           "Filter keys may be camelCase or snake_case.",
           "Each rule carries issueCount, violationCount, needsReviewCount and impact. data.confirmedIssueCount and data.needsReviewIssueCount are report totals: severity, pages, components, categories, needs_review and ai_issues do not change them, but issue_status and tests do.",
@@ -3580,6 +3379,7 @@
         ],
         "intent": "List the page components (elements) that break one rule in a build or scan run, each with its issue count, page count and URL - use this to drill from a rule into where it fails and get the component id that get_build_issue takes.",
         "guidance": [
+          "For the elements failing one WCAG success criterion ('which elements fail 1.4.3'), use list_build_guideline_components instead of drilling down by rule.",
           "data[].id is the component id (e.g. button#submit) that get_build_issue takes as component_id.",
           "On a build that is not grouped, a rule CODE (e.g. color-contrast) in the path matches nothing and returns 200 with data []. Use the numeric rules[].id.",
           "data[].behaviours splits the count by behaviour; preferred marks the one the team chose."
@@ -6018,6 +5818,7 @@
         ],
         "intent": "Run an existing Website Scanner scan again now, with its saved URLs and settings, and get the new run's id - use this when a user asks to re-scan or refresh a scan.",
         "guidance": [
+          "APPROVAL FIRST: before calling, tell the user exactly what will change (what, where, how many) and wait for an explicit yes in their own words ('yes', 'go ahead', 'approved'). A request to make the change, however specific, is not that yes: ask first, and send user_permission granted only after it. A re-run cannot be undone.",
           "Takes no body: the run reuses the scan's saved URLs, login and settings. To scan new URLs or settings, use startAccessibilityScan instead.",
           "data.scanRunId is the new run's id. The run starts in the background; get_website_scanner_scan_overview shows isProcessing true while it runs, and list_website_scanner_scan_runs lists it.",
           "Each call starts another run and uses scan minutes; it cannot be undone. Confirm with the user before calling, and check isProcessing first.",
@@ -6173,6 +5974,7 @@
         ],
         "intent": "Hide (or unhide) accessibility issues in one report at issue, component, rule or guideline scope, with a reason - the dashboard's Hide issue action. Changes the report's issue counts and score.",
         "guidance": [
+          "APPROVAL FIRST: before calling, tell the user exactly what will change (what, where, how many) and wait for an explicit yes in their own words ('yes', 'go ahead', 'approved'). A request to make the change, however specific, is not that yes: ask first, and send user_permission granted only after it.",
           "Confirm with the user before every call: it changes the report every viewer sees, and with persist true it carries into later builds. When hiding, ask for the reason by offering exactly these six, the only ones the API takes: Duplicate, Not relevant, Not a priority, False positive, Technical challenges, Others. 'Not an issue' is not a hide reason: it is a needs-review decision (review_needs_review_issue).",
           "Read before you ask: get the exact findings this will change first (list_build_issues_by_guideline or list_build_issues_by_rule for a build or scan run, get_workflow_analyzer_consolidated_report for a Workflow Analyzer report), and put their count, rule or guideline and report in the preview. An approval asked for without the count is an approval of an unknown change.",
           "Undo is the same call with hidden false and the same scope, rule_id/guideline_tag, component_id and issue_id; reason is then not needed.",
@@ -6327,6 +6129,7 @@
         ],
         "intent": "Hide (or unhide) the issues of many rule/component pairs in one report at once, with one reason - the dashboard's multi-select Hide. Returns how many issues changed.",
         "guidance": [
+          "APPROVAL FIRST: before calling, tell the user exactly what will change (what, where, how many) and wait for an explicit yes in their own words ('yes', 'go ahead', 'approved'). A request to make the change, however specific, is not that yes: ask first, and send user_permission granted only after it.",
           "Confirm with the user before every call, naming the report and how many pairs. When hiding, ask for the reason by offering exactly these six, the only ones the API takes: Duplicate, Not relevant, Not a priority, False positive, Technical challenges, Others. Undo is the same components with hidden false.",
           "Read before you ask: get the exact findings this will change first (list_build_issues_by_guideline or list_build_issues_by_rule for a build or scan run, get_workflow_analyzer_consolidated_report for a Workflow Analyzer report), and put their count, rule or guideline and report in the preview. An approval asked for without the count is an approval of an unknown change.",
           "hidden_count in the reply is how many issues changed state; pairs that matched nothing are skipped silently, not refused.",
@@ -6447,6 +6250,7 @@
         ],
         "intent": "Confirm a needs-review issue as a real issue, mark it Not an issue, or put it back to pending - the single-issue review on the dashboard.",
         "guidance": [
+          "APPROVAL FIRST: before calling, tell the user exactly what will change (what, where, how many) and wait for an explicit yes in their own words ('yes', 'go ahead', 'approved'). A request to make the change, however specific, is not that yes: ask first, and send user_permission granted only after it. Here 'confirm it as a real issue' names the decision the user wants; it is not approval to record it.",
           "Confirm with the user before every call. To undo a decision made here, call this again with confirmed null and hidden false: the issue goes back to pending. This works whether or not the issue has a reviewCategory; undo_bulk_review_decisions only reverses decisions made through bulk review and answers 422 'not found for undo review' for the rest. Omitting confirmed leaves the issue unchanged. Never send hidden false with confirmed false: that leaves the issue confirmed=false and visible, it disappears from the report and the counts drift.",
           "Read before you ask: find the exact finding first and name it, its rule and its page in the preview. For a Workflow Analyzer report: get_workflow_analyzer_consolidated_report with view=issues, filter[rule]=<rule> and filter[status]=needsReview, and no nodeFields (or one that keeps issueId): the node's issueId is the id this takes. For a build or scan run: get_build_issue.",
           "Only issues whose result is needs-review take this: any other issue answers 422 'Invalid issue type'. A combination outside the three states above answers 422 'Issue that needs review can't be updated to the requested state.'",
@@ -7635,6 +7439,7 @@
         ],
         "intent": "Record bulk-review answers for a category of a report - a whole component at once, or single elements - which confirms or dismisses (hides) the matching needs-review issues and returns the category's new counts.",
         "guidance": [
+          "APPROVAL FIRST: before calling, tell the user exactly what will change (what, where, how many) and wait for an explicit yes in their own words ('yes', 'go ahead', 'approved'). A request to make the change, however specific, is not that yes: ask first, and send user_permission granted only after it.",
           "Confirm with the user before every call, saying which category, component or elements and which answer. Element decisions can be undone with undo_bulk_review_decisions; a component decision is undone element by element.",
           "option_id must be one of the category's questionnaire.options[].id from list_bulk_review_categories; its outcome (confirm or dismiss) is what is applied - dismiss also hides the issues.",
           "A component decision on a category whose supportsGroupReview is false answers 422 'does not support group review'. An unknown option_id or category answers 422 with the valid options.",
@@ -7802,6 +7607,7 @@
         ],
         "intent": "Undo bulk-review decisions on single elements of a report: their issues go back to pending (not confirmed, not hidden) and the stored decisions are deleted. Returns the category's new counts.",
         "guidance": [
+          "APPROVAL FIRST: before calling, tell the user exactly what will change (what, where, how many) and wait for an explicit yes in their own words ('yes', 'go ahead', 'approved'). A request to make the change, however specific, is not that yes: ask first, and send user_permission granted only after it.",
           "Confirm with the user before every call. It works per element on one page URL; there is no component-level undo, so undo a component decision by sending each of its elements (get_bulk_review_page with status reviewed lists them).",
           "It also deletes any carried-forward decision for the element, so later builds stop inheriting it.",
           "An issue_id or testhub_issue_uuid not in this build and category answers 422. It only reverses decisions stored by bulk review: an issue settled with review_needs_review_issue (including one with no reviewCategory) answers 422 'not found for undo review' here, and goes back to pending through review_needs_review_issue with confirmed null and hidden false.",
@@ -7953,6 +7759,7 @@
         ],
         "intent": "Attach an existing tracker ticket (e.g. a Jira key) to an accessibility issue, report or test case so it shows as linked on the dashboard. It does not create the ticket.",
         "guidance": [
+          "APPROVAL FIRST: before calling, tell the user exactly what will change (what, where, how many) and wait for an explicit yes in their own words ('yes', 'go ahead', 'approved'). A request to make the change, however specific, is not that yes: ask first, and send user_permission granted only after it.",
           "Confirm with the user before every call, naming the ticket and the issue. There is no unlink capability here: removing the link needs the dashboard.",
           "The ticket must already exist; this only records the link and never checks the tracker.",
           "Keys are snake_case only: this controller does not underscore camelCase keys, so entityType or ticketId are ignored and answer 400.",
@@ -8119,8 +7926,7 @@
           }
         ],
         "capabilities": [
-          "list_automated_tests_projects",
-          "list_accessibility_projects"
+          "list_automated_tests_projects"
         ],
         "key_facts": [
           "A project is created by the first test run reported under its name; there is nothing to create or delete here."
@@ -8351,7 +8157,6 @@
           "search_build_report_runs",
           "get_build_report_metadata",
           "get_build_report_overview",
-          "check_build_list_updates",
           "list_build_issues_by_rule"
         ],
         "key_facts": []

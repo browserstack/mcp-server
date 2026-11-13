@@ -1484,6 +1484,9 @@ function scanSettingsNote(
       settings.experimentalRules !== undefined
         ? `experimental rules ${onOff(settings.experimentalRules)}`
         : "",
+      settings.screenReader !== undefined
+        ? `screen reader ${settings.screenReader === "VO" ? "VoiceOver" : settings.screenReader}`
+        : "",
     ]
       .filter(Boolean)
       .join(", ");
@@ -1555,6 +1558,7 @@ function startNewScan(
       needsReview: args.needsReview,
       advancedRules: args.advancedRules,
       experimentalRules: args.experimentalRules,
+      screenReader: args.screenReader,
     },
     args.localIdentifier,
   );
@@ -2134,6 +2138,12 @@ export default function addAccessibilityTools(
         .optional()
         .describe(
           "Run experimental rules (default true; off if the plan lacks them).",
+        ),
+      screenReader: z
+        .enum(["NVDA", "VO"])
+        .optional()
+        .describe(
+          'Also run a screen reader: "NVDA" or "VO" (VoiceOver). Needs Screen Reader on the plan.',
         ),
     },
     {

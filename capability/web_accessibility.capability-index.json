@@ -12530,6 +12530,359 @@
             "description": "From code (screen_reader_automation_reports#scan_logs): the website-scanner scan-logs envelope with one row per page plus pageIndex and elementCount."
           }
         }
+      },
+      {
+        "name": "list_screen_reader_agent_runs",
+        "method": "GET",
+        "path": "/api/screen_reader_agent/reports",
+        "host": "dashboard",
+        "auth": {
+          "type": "oauth2"
+        },
+        "mode": "read",
+        "entity": "report",
+        "paginated": true,
+        "max_page_size": 100,
+        "query": [
+          {
+            "name": "limit",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100,
+            "description": "Runs per page, up to 100 (default 50).",
+            "example": 50
+          },
+          {
+            "name": "offset",
+            "type": "integer",
+            "minimum": 0,
+            "description": "How many runs to skip, for the next page (default 0).",
+            "example": 0
+          }
+        ],
+        "intent": "List the account's Screen Reader Agent runs (an AI agent that walks a workflow on a site with a real screen reader and reports what blocks a screen reader user), newest first, with status - use this to find a run to open.",
+        "guidance": [
+          "Each run has id (pass it to get_screen_reader_agent_run), name, url, status (queued, processing = In Progress, completed, failed), createdAt and triggeredBy.",
+          "These are Screen Reader Agent runs, not Screen Reader automation runs from tests (list_screen_reader_automation_reports).",
+          "403 SR_AGENT_ACCESS_DENIED 'Screen reader agent is not enabled for your account': the group lacks the Screen Reader Agent (Experience Agent) beta or its AI-service feature. Say so; there is nothing to retry."
+        ],
+        "returns": [
+          "id",
+          "name",
+          "url",
+          "status"
+        ],
+        "responses": {
+          "401": {
+            "$response": "DashboardUnauthorized"
+          },
+          "403": {
+            "$response": "DashboardForbidden"
+          },
+          "404": {
+            "$response": "DashboardNotFound"
+          },
+          "422": {
+            "$response": "DashboardUnprocessable"
+          },
+          "500": {
+            "$response": "DashboardUpstreamFailure"
+          },
+          "200": {
+            "description": "From code (screen_reader_agent#index → SrAgent::ReportFetchService.list): {success, data: the runs}."
+          }
+        }
+      },
+      {
+        "name": "get_screen_reader_agent_run",
+        "method": "GET",
+        "path": "/api/screen_reader_agent/reports/{id}",
+        "host": "dashboard",
+        "auth": {
+          "type": "oauth2"
+        },
+        "mode": "read",
+        "entity": "report",
+        "path_params": [
+          {
+            "name": "id",
+            "type": "string",
+            "required": true,
+            "description": "The run id from list_screen_reader_agent_runs (or the id start_screen_reader_agent_run returned).",
+            "example": "abc123examplebuilduuid"
+          }
+        ],
+        "query": [
+          {
+            "name": "show_hidden",
+            "type": "boolean",
+            "description": "true also returns violations someone hid.",
+            "example": false
+          }
+        ],
+        "intent": "Read one Screen Reader Agent run: the workflow it followed step by step, its overall result and summary, every violation (what failed for a screen reader user, how severe, on which step), the checks, and a link to the session recording.",
+        "guidance": [
+          "data.status is queued, processing, completed or failed (statusReason says why); a queued or processing run has no result yet: say so and offer to check again.",
+          "data.violations hold the findings, each with id, violationType (e.g. FOCUS_TRAP, SKIP_LINK, MISSING_LABEL, DUPLICATE_LABELS), severity (Critical, Serious, Major - shown as Moderate on the dashboard - or Minor), the step it happened on (stepId), the element (html) and how to fix it; data.steps is the workflow as the agent walked it; data.summary and overallResult give the verdict.",
+          "Violation types include page title, initial focus, skip link, missing or duplicate labels, broken focus order, unreachable elements, focus traps, controls that ignore the keyboard, focus after an action, dialog focus and unannounced form errors.",
+          "videoUrl is a recording of the session: a link to give the user, never store or reuse it.",
+          "Hidden violations are left out unless show_hidden is true. To hide one use hide_screen_reader_agent_violation.",
+          "404 REPORT_NOT_FOUND when the run is not in the caller's account. 403 SR_AGENT_ACCESS_DENIED 'Screen reader agent is not enabled for your account': the group lacks the Screen Reader Agent (Experience Agent) beta or its AI-service feature. Say so; there is nothing to retry."
+        ],
+        "returns": [
+          "status",
+          "summary",
+          "violations",
+          "steps"
+        ],
+        "responses": {
+          "401": {
+            "$response": "DashboardUnauthorized"
+          },
+          "403": {
+            "$response": "DashboardForbidden"
+          },
+          "404": {
+            "$response": "DashboardNotFound"
+          },
+          "422": {
+            "$response": "DashboardUnprocessable"
+          },
+          "500": {
+            "$response": "DashboardUpstreamFailure"
+          },
+          "200": {
+            "description": "From code (screen_reader_agent#show → SrAgent::ReportFetchService.show): {success, data: {id, name, url, workflowDescription, workflowSummary, status, statusReason, progress, startedAt, endedAt, overallResult, summary, steps, violations, checks, traversalLog, videoUrl, publicUrl, platform, triggeredBy}}."
+          }
+        }
+      },
+      {
+        "name": "start_screen_reader_agent_run",
+        "method": "POST",
+        "path": "/api/screen_reader_agent/reports",
+        "host": "dashboard",
+        "auth": {
+          "type": "oauth2"
+        },
+        "mode": "write",
+        "entity": "report",
+        "body": [
+          {
+            "name": "url",
+            "type": "string",
+            "required": true,
+            "json_path": "/url",
+            "description": "URL to Test: the public http(s) page the workflow starts on, e.g. https://www.example.com. Private, loopback and unresolvable hosts are refused.",
+            "example": "https://www.example.com"
+          },
+          {
+            "name": "workflow_description",
+            "type": "string",
+            "required": true,
+            "json_path": "/workflow_description",
+            "description": "Workflow Description: the user journey to test as numbered steps in plain words, 10 to 500 characters as the dashboard asks (the API allows up to 2000). Describe the user workflow to test, e.g.: 1. Navigate to the homepage 2. Use the search bar to search for \"wireless headphones\" 3. Select the first product from the search results 4. Add the product to the shopping cart 5. Proceed to checkout and verify the order summary is accessible",
+            "example": "1. Navigate to the homepage 2. Search for \"wireless headphones\" 3. Open the first result 4. Add it to the cart"
+          },
+          {
+            "name": "name",
+            "type": "string",
+            "json_path": "/name",
+            "description": "Report Name, up to 120 characters. Omit it and a name is filled in from the URL's domain.",
+            "example": "Checkout flow - example.com"
+          }
+        ],
+        "intent": "Start a Screen Reader Agent run: an AI agent opens the URL and follows the workflow you describe with a real screen reader (NVDA on Windows), then reports what blocks a screen reader user - the dashboard's New Test.",
+        "guidance": [
+          "APPROVAL FIRST: before calling, tell the user exactly what will change (what, where, how many) and wait for an explicit yes in their own words ('yes', 'go ahead', 'approved'). A request to make the change, however specific, is not that yes: ask first, and send user_permission granted only after it.",
+          "This starts a paid AI run against a live site. In the preview name the URL, the workflow steps as you will send them, and the report name (or that it will be named from the URL).",
+          "Write the workflow as short numbered steps a person could follow, like the dashboard's example: navigate, search, select, add to cart, check out. Ask the user for the steps rather than inventing a journey.",
+          "Screen reader: NVDA on Windows is the only one available; VoiceOver macOS, VoiceOver iOS and TalkBack are shown as coming soon, so do not offer them.",
+          "The run comes back queued or processing (the account has a limit on runs at once); results take minutes. Give the user the run id and read it with get_screen_reader_agent_run.",
+          "422 INVALID_URL or BLOCKED_URL for a non-http(s) or private address; 502 SR_AGENT_CREATE_FAILED when it could not start (retrying later is fine). 403 also when a team role lacks permission to create builds. 403 SR_AGENT_ACCESS_DENIED 'Screen reader agent is not enabled for your account': the group lacks the Screen Reader Agent (Experience Agent) beta or its AI-service feature. Say so; there is nothing to retry."
+        ],
+        "returns": [
+          "id",
+          "name",
+          "status"
+        ],
+        "responses": {
+          "401": {
+            "$response": "DashboardUnauthorized"
+          },
+          "403": {
+            "$response": "DashboardForbidden"
+          },
+          "404": {
+            "$response": "DashboardNotFound"
+          },
+          "422": {
+            "$response": "DashboardUnprocessable"
+          },
+          "500": {
+            "$response": "DashboardUpstreamFailure"
+          },
+          "200": {
+            "description": "From code (screen_reader_agent#create, create_envelope): 201 {success, data: {id, name, url, workflowDescription, status: queued or processing, overallResult: null, ...}}."
+          }
+        }
+      },
+      {
+        "name": "hide_screen_reader_agent_violation",
+        "method": "PATCH",
+        "path": "/api/screen_reader_agent/reports/{id}/violations/{violation_uuid}/hide",
+        "host": "dashboard",
+        "auth": {
+          "type": "oauth2"
+        },
+        "mode": "write",
+        "entity": "issue",
+        "path_params": [
+          {
+            "name": "id",
+            "type": "string",
+            "required": true,
+            "description": "The run id.",
+            "example": "abc123examplebuilduuid"
+          },
+          {
+            "name": "violation_uuid",
+            "type": "string",
+            "required": true,
+            "description": "The violation's id (data.violations[].id from get_screen_reader_agent_run).",
+            "example": "v-123"
+          }
+        ],
+        "body": [
+          {
+            "name": "reason",
+            "type": "string",
+            "required": true,
+            "values": [
+              "Duplicate",
+              "Not relevant",
+              "Not a priority",
+              "False positive",
+              "Technical challenges",
+              "Others"
+            ],
+            "json_path": "/reason",
+            "description": "Why it is hidden, one of the dashboard's reasons, spelled exactly.",
+            "example": "False positive"
+          },
+          {
+            "name": "scope",
+            "type": "string",
+            "values": [
+              "issue",
+              "rule",
+              "guideline"
+            ],
+            "json_path": "/scope",
+            "description": "issue = this issue only (default); rule = every issue of the same type in this run; guideline = every issue sharing a WCAG criterion with it.",
+            "example": "issue"
+          }
+        ],
+        "intent": "Hide a Screen Reader Agent violation from its run, for a reason, for this issue only or every issue of its type - the dashboard's hide action.",
+        "guidance": [
+          "APPROVAL FIRST: before calling, tell the user exactly what will change (what, where, how many) and wait for an explicit yes in their own words ('yes', 'go ahead', 'approved'). A request to make the change, however specific, is not that yes: ask first, and send user_permission granted only after it.",
+          "Read the run first and name the violation, its step and severity, the reason and the scope in the preview; with scope rule or guideline say that more issues will be hidden.",
+          "Undo with unhide_screen_reader_agent_violation on the same violation.",
+          "404 SR_ISSUE_NOT_FOUND; 422 SR_INVALID_HIDE_REASON for a reason outside the list; 403 REPORT_FORBIDDEN when the run is not the caller's, or AGENT_REPORT_ACTIONS_DISABLED while the account's agent switch is on. 403 SR_AGENT_ACCESS_DENIED 'Screen reader agent is not enabled for your account': the group lacks the Screen Reader Agent (Experience Agent) beta or its AI-service feature. Say so; there is nothing to retry."
+        ],
+        "returns": [
+          "hidden"
+        ],
+        "responses": {
+          "401": {
+            "$response": "DashboardUnauthorized"
+          },
+          "403": {
+            "$response": "DashboardForbidden"
+          },
+          "404": {
+            "$response": "DashboardNotFound"
+          },
+          "422": {
+            "$response": "DashboardUnprocessable"
+          },
+          "500": {
+            "$response": "DashboardUpstreamFailure"
+          },
+          "200": {
+            "description": "From code (screen_reader_agent#hide_violation): {success, data: {hidden: true}}."
+          }
+        }
+      },
+      {
+        "name": "unhide_screen_reader_agent_violation",
+        "method": "PATCH",
+        "path": "/api/screen_reader_agent/reports/{id}/violations/{violation_uuid}/unhide",
+        "host": "dashboard",
+        "auth": {
+          "type": "oauth2"
+        },
+        "mode": "write",
+        "entity": "issue",
+        "path_params": [
+          {
+            "name": "id",
+            "type": "string",
+            "required": true,
+            "description": "The run id.",
+            "example": "abc123examplebuilduuid"
+          },
+          {
+            "name": "violation_uuid",
+            "type": "string",
+            "required": true,
+            "description": "The hidden violation's id (data.violations[].id; read the run with show_hidden true to see it).",
+            "example": "v-123"
+          }
+        ],
+        "body": [
+          {
+            "name": "scope",
+            "type": "string",
+            "values": [
+              "issue",
+              "rule",
+              "guideline"
+            ],
+            "json_path": "/scope",
+            "description": "Match the scope it was hidden with: issue (default), rule or guideline.",
+            "example": "issue"
+          }
+        ],
+        "intent": "Show a hidden Screen Reader Agent violation again - the undo of hide_screen_reader_agent_violation.",
+        "guidance": [
+          "APPROVAL FIRST: before calling, tell the user exactly what will change (what, where, how many) and wait for an explicit yes in their own words ('yes', 'go ahead', 'approved'). A request to make the change, however specific, is not that yes: ask first, and send user_permission granted only after it.",
+          "Read the run with show_hidden true first and name the violation and scope in the preview.",
+          "404 SR_ISSUE_NOT_FOUND; 403 REPORT_FORBIDDEN or AGENT_REPORT_ACTIONS_DISABLED. 403 SR_AGENT_ACCESS_DENIED 'Screen reader agent is not enabled for your account': the group lacks the Screen Reader Agent (Experience Agent) beta or its AI-service feature. Say so; there is nothing to retry."
+        ],
+        "returns": [
+          "hidden"
+        ],
+        "send_empty_body": true,
+        "responses": {
+          "401": {
+            "$response": "DashboardUnauthorized"
+          },
+          "403": {
+            "$response": "DashboardForbidden"
+          },
+          "404": {
+            "$response": "DashboardNotFound"
+          },
+          "422": {
+            "$response": "DashboardUnprocessable"
+          },
+          "500": {
+            "$response": "DashboardUpstreamFailure"
+          },
+          "200": {
+            "description": "From code (screen_reader_agent#unhide_violation): {success, data: {hidden: false}}."
+          }
+        }
       }
     ],
     "entities": {
@@ -12831,7 +13184,9 @@
           "list_suppressed_issue_components",
           "get_suppressed_issue",
           "list_suppressed_issue_duplicates",
-          "mark_preferred_behavior"
+          "mark_preferred_behavior",
+          "hide_screen_reader_agent_violation",
+          "unhide_screen_reader_agent_violation"
         ],
         "key_facts": []
       },
@@ -12852,7 +13207,10 @@
           "get_workflow_analyzer_consolidated_report",
           "list_screen_reader_automation_reports",
           "get_screen_reader_automation_report",
-          "get_screen_reader_automation_scan_logs"
+          "get_screen_reader_automation_scan_logs",
+          "list_screen_reader_agent_runs",
+          "get_screen_reader_agent_run",
+          "start_screen_reader_agent_run"
         ],
         "key_facts": []
       },

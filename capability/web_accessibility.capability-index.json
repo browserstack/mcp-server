@@ -401,7 +401,7 @@
         "intent": "List the account's Assisted Test reports newest first, with each report's id, name, creator, status, test type and issue counts - use this to find a guided keyboard, forms or other assisted check someone ran.",
         "guidance": [
           "Link a report as https://accessibility.browserstack.com/assisted-test/report?ar_ids={id}, with the bare id (never assistiveTest:<id>). The same address works in every region.",
-          "fetchAccessibilityIssues does not read Assisted Test reports: the counts here are what an agent can get, and the report itself is read on the Accessibility dashboard.",
+          "fetchAccessibilityIssues does not read Assisted Test reports: read one with get_assisted_test_report (its tests, issues by rule and the affected elements).",
           "scanSettings.assistedTestType is a number: 0 keyboard, 1 interactive elements, 2 modals, 3 forms, 4 images, 5 layout, 6 tables, 7 responsiveness.",
           "There is no filter by person, name or date: the list holds every report in the account, newest first; read pages in order, with limit 99 to need fewer, and keep the rows whose createdBy.name or createdBy.id is theirs.",
           "Paging is data.pagination.hasNext and data.pagination.nextPage; send nextPage back as next_page with the same limit."
@@ -12266,6 +12266,66 @@
             "description": "{success: true, message}: marked preferred, cleared, or already in that state."
           }
         }
+      },
+      {
+        "name": "get_assisted_test_report",
+        "method": "GET",
+        "path": "/api/assistive_reports/{id}",
+        "host": "dashboard",
+        "auth": {
+          "type": "oauth2"
+        },
+        "mode": "read",
+        "entity": "assisted_test_report",
+        "path_params": [
+          {
+            "name": "id",
+            "type": "integer",
+            "required": true,
+            "description": "The Assisted Test report's numeric id (the id on its report row).",
+            "example": 12345
+          }
+        ],
+        "query": [
+          {
+            "name": "include_tickets",
+            "type": "boolean",
+            "description": "true adds tickets already linked to each issue, when ticket linking is on for the account.",
+            "example": false
+          }
+        ],
+        "intent": "Read one Assisted Test report in full: who ran it and when, each assisted test with its page, WCAG version and issue counts, and every issue grouped by rule with the affected elements - use this to answer questions about an Assisted Test report's findings.",
+        "guidance": [
+          "Find the id with list_assisted_test_reports first. Assisted Test reports are their own product, not Workflow Analyzer reports, so their ids are not interchangeable.",
+          "data.meta is the report; data.assistiveTests lists each assisted test (atType names the kind of assisted test, scope says whole page or a component, pageCount the pages it covered); the issues sit under data[<customId of that test>] as rules, each with nodes (the elements).",
+          "Hidden issues stay in the payload with impact null; leave them out of counts the way the dashboard does.",
+          "To hide an issue from this report use hide_issues or bulk_hide_issue_components with test_type AssistiveTest. Assisted Test issues have no needs-review step.",
+            "404 'Report Not Found': no such report in the caller's account. 403: the role lacks builds view."
+        ],
+        "returns": [
+          "meta",
+          "assistiveTests"
+        ],
+        "responses": {
+          "401": {
+            "$response": "DashboardUnauthorized"
+          },
+          "403": {
+            "$response": "DashboardForbidden"
+          },
+          "404": {
+            "$response": "DashboardNotFound"
+          },
+          "422": {
+            "$response": "DashboardUnprocessable"
+          },
+          "500": {
+            "$response": "DashboardUpstreamFailure"
+          },
+          "200": {
+            "description": "From code (assistive_reports#show): {success, data: {meta, assistiveTests, <customId>: [rule records with nodes]}}."
+          }
+        }
       }
     ],
     "entities": {
@@ -12419,7 +12479,8 @@
         "parents": [],
         "relations": [],
         "capabilities": [
-          "list_assisted_test_reports"
+          "list_assisted_test_reports",
+          "get_assisted_test_report"
         ],
         "key_facts": [
           "Its individual issues are read on the Accessibility dashboard; the list gives its counts."

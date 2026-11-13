@@ -47,7 +47,7 @@ const byName = (name: string) =>
 describe("the Web Accessibility dashboard capabilities", () => {
   it("are part of Web Accessibility, not a product of their own", () => {
     expect(products.web_accessibility_dashboard).toBeUndefined();
-    expect(dash.length).toBe(67);
+    expect(dash.length).toBe(68);
     // A twin of list_automated_tests_projects that agents picked instead of it, and a UI
     // polling check no natural request reached in isolated agent sessions.
     expect(byName("list_accessibility_projects")).toBeUndefined();

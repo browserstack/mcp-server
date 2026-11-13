@@ -237,6 +237,8 @@ function pathSegment(value: unknown, name: string): string {
  * string ids that carry no type constraint worth the name.
  */
 export function coerce(value: unknown, param: WireParam): unknown {
+  // Only where the contract says null is a value: elsewhere it stays refused by its type.
+  if (value === null && param.nullable) return null;
   const coerced = coerceType(value, param);
   checkConstraints(coerced, param);
   checkFields(coerced, param);

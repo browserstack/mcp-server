@@ -61,6 +61,10 @@ export function probePath(source: HostSource): string | undefined {
     (capability) =>
       capability.mode === "read" &&
       capability.paginated &&
+      // The probe runs on the product's own host with its own sign-in; a capability served
+      // elsewhere, or signing in differently, would answer for the wrong thing.
+      !capability.host &&
+      !capability.auth &&
       !capability.path.includes("{") &&
       !capability.path.includes("/admin") &&
       !(capability.query || []).some((param) => param.required),

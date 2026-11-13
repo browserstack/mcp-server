@@ -35,16 +35,20 @@ const products = shipped();
 const web = products.web_accessibility;
 const capability = (name: string) =>
   web.capabilities.find((c: any) => c.name === name);
+// The report lists on the public API, i.e. on the product's own (Basic-auth) host. Derived
+// from the index rather than named here, so adding or dropping one fails the test below.
+// The dashboard's own capabilities (capabilityWebAccessibilityDashboard.test.ts) have a host.
+const lists = () =>
+  web.capabilities.filter((c: any) => !c.host && c.name.startsWith("list_"));
 const queryNames = (name: string) =>
   (capability(name).query ?? []).map((q: any) => q.name);
 
 describe("the Web Accessibility capability index", () => {
   it("ships the six lists, as paged reads, each on an entity that names it", () => {
-    // The false-positive memory capabilities are tested in fpMemory.test.ts.
-    const lists = web.capabilities.filter((c: any) =>
-      c.name.startsWith("list_"),
-    );
-    expect(lists.map((c: any) => c.name).sort()).toEqual([
+    const names = lists()
+      .map((c: any) => c.name)
+      .sort();
+    expect(names).toEqual([
       "list_assisted_test_reports",
       "list_automated_tests_builds",
       "list_automated_tests_projects",
@@ -52,7 +56,7 @@ describe("the Web Accessibility capability index", () => {
       "list_website_scanner_scans",
       "list_workflow_analyzer_reports",
     ]);
-    for (const c of lists) {
+    for (const c of lists()) {
       expect(c.mode).toBe("read");
       expect(c.paginated).toBe(true);
       expect(c.max_page_size).toBeGreaterThan(0);
@@ -73,9 +77,9 @@ describe("the Web Accessibility capability index", () => {
     // Above 25 the page holds 25 scans and the next one starts past the ones in between.
     expect(limit("list_website_scanner_scans").maximum).toBe(25);
     for (const c of web.capabilities.filter((c: any) => c.paginated)) {
-      expect(c.max_page_size).toBe(
-        c.query.find((q: any) => q.name === "limit").maximum,
-      );
+      expect(c.max_page_size, c.name).toBeGreaterThan(0);
+      const limitParam = (c.query ?? []).find((q: any) => q.name === "limit");
+      if (limitParam) expect(c.max_page_size, c.name).toBe(limitParam.maximum);
     }
   });
 

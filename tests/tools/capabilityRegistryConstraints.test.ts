@@ -421,3 +421,31 @@ describe("a numeric parameter is not coerced into a different value", () => {
     });
   });
 });
+
+describe("nullable parameters", () => {
+  it("sends an explicit null where the contract marks the field nullable", () => {
+    const confirmed: WireParam = { name: "confirmed", type: "boolean", nullable: true };
+    expect(call(withBody(confirmed), { confirmed: null }).body).toEqual({ confirmed: null });
+    expect(call(withBody(confirmed), { confirmed: true }).body).toEqual({ confirmed: true });
+  });
+
+  it("still refuses null for a field that is not nullable", () => {
+    const hidden: WireParam = { name: "hidden", type: "boolean" };
+    expect(() => call(withBody(hidden), { hidden: null })).toThrow("'hidden' must be true or false");
+  });
+
+  it("lets the needs-review capability put an issue back to pending", async () => {
+    const { readFileSync } = await import("node:fs");
+    const index = JSON.parse(
+      readFileSync(new URL("../../capability/web_accessibility.capability-index.json", import.meta.url), "utf8"),
+    );
+    const review = (index.web_accessibility.capabilities as Capability[]).find(
+      (c) => c.name === "review_needs_review_issue",
+    )!;
+    const bound = bind(review, {
+      path_params: { id: 1 },
+      body: { test_type: "TestCase", hidden: false, confirmed: null },
+    });
+    expect(bound.body).toMatchObject({ hidden: false, confirmed: null });
+  });
+});

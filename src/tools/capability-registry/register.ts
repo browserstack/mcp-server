@@ -971,7 +971,7 @@ export function addCapabilityRegistryTools(
 
   tools.describeCapability = server.tool(
     "describeCapability",
-    "Full contract (parameters, returns, response shapes) for ONE capability from searchCapability. Call it before invokeCapability. Identify by `name`; use `method` + `path` only when no name was returned.",
+    "Full contract for ONE capability from searchCapability: parameters, their allowed `values`, returns. Call it before invokeCapability, and before asking the user to choose a value: offer only those.",
     {
       name: z
         .string()
@@ -1071,6 +1071,8 @@ export function addCapabilityRegistryTools(
           send_empty_body,
           local_only,
           disabled,
+          // How the server signs in for this capability: plumbing, like host.
+          auth: signIn,
           ...contract
         } = capability;
         void unresolved;
@@ -1079,6 +1081,7 @@ export function addCapabilityRegistryTools(
         void send_empty_body;
         void local_only;
         void disabled;
+        void signIn;
         return ok({
           // No build_id here either, same reason. `product` stays: describeCapability
           // resolves by NAME and its product argument is optional, so the answer has to

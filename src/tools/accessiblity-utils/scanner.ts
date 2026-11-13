@@ -240,6 +240,8 @@ export interface ScanSettings {
   advancedRules?: boolean;
   /** Run the experimental rules (API default true). */
   experimentalRules?: boolean;
+  /** Also run a screen reader on the scanned pages: NVDA (Windows) or VO (VoiceOver). Off by default. */
+  screenReader?: "NVDA" | "VO";
 }
 
 export class AccessibilityScanner {

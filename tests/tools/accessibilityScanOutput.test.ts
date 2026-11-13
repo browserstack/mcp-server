@@ -200,7 +200,7 @@ describe("accessibility issue counts", () => {
     const body = text(result);
     expect(body).toContain("We found 79 issues.");
     expect(body).toContain(
-      "122 issues hidden in the dashboard are not included, as the dashboard leaves them out of its count too.",
+      '122 issues hidden or marked "Not an issue" in the dashboard are not included, as the dashboard leaves them out of its count too.',
     );
   });
 
@@ -1070,6 +1070,16 @@ describe("what a web report's answer says about its issues", () => {
       expect(body).toMatch(/full list of issues is a CSV.*every issue is needed at once/s);
       expect(body.match(/following link: (\S+)/)?.[1]).toBe("https://csv");
     }
+  });
+
+  // In isolated agent sessions this tool answered test-case, by-guideline and component
+  // questions on its own and once told a user test cases "aren't available".
+  it("points to the dashboard views the issue list does not cover", async () => {
+    const body = text(
+      await handlers.fetchAccessibilityIssues({ scanId: "scan-42", scanRunId: "run-7" }, CONTEXT),
+    );
+    expect(body).toContain("call searchCapability with product web_accessibility");
+    expect(body).toContain("never tell the user they are unavailable");
   });
 
   it("links the scan's own dashboard page, from the scans list, not a link made from its name", async () => {

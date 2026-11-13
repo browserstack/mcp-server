@@ -37,8 +37,8 @@ Understand each issue and decide what matters most.
 
 1. **Keep only issues in scope:** the right page (\`affected_page\`, or \`screen\` in app reports), the right component or section, and the right severities.
 2. **Sort each issue into one of three groups:**
-   - **Needs review:** the issue has \`needs_review\` set. The engine could not decide it, and a person has not confirmed it. Don't fix it unless you confirm it in the code or the user asks. List these separately.
-   - **Confirmed WCAG failure:** no \`needs_review\`, and the rule is not a best practice (\`best_practice\` under \`rules\`).
+   - **Needs review:** \`needs_review\` is set to a status that does not start with "confirmed" (e.g. "pending review"). The engine could not decide it, and a person has not confirmed it. Don't fix it unless you confirm it in the code or the user asks. List these separately.
+   - **Confirmed WCAG failure:** no \`needs_review\`, or a \`needs_review\` status starting with "confirmed" (a person confirmed it), and the rule is not a best practice (\`best_practice\` under \`rules\`).
    - **Best practice:** the rule is marked \`best_practice\`. Fix these after confirmed failures, and say they are not WCAG failures.
 3. **Confirm each issue in the source.** Find the element from its \`component\` (selector) and \`HTML_snippet\` (in app reports, \`screen\` and \`element\`). If the code shows the issue is not real (for example, a skip link whose target does exist), mark it **possible false positive** with a one-line reason and leave the code alone.
 4. **Group by root cause.** One rule on one source component is one fix, however many times it shows up. A shared \`<IconButton>\` without a label can produce 40 occurrences.

@@ -49,6 +49,7 @@ import { BrowserStackConfig } from "../lib/types.js";
 import { elicitCredentialsIfSupported } from "../lib/elicit-credentials.js";
 import logger from "../logger.js";
 import { NEEDS_A11Y_CONFIG_ID, NEEDS_A11Y_SCAN_ID } from "./tool-handoff.js";
+import { isEnabled as capabilityRegistryEnabled } from "./capability-registry/config.js";
 import {
   applyMemory,
   memoryForReport,
@@ -290,6 +291,8 @@ function excludedIssuesNote(
   duplicates: number | null,
   unlinked: number,
   hidden: number | null,
+  // Web exports also drop rows a reviewer marked "Not an issue"; app reports have no such rows.
+  includesNotAnIssue = false,
 ): string[] {
   const notes: string[] = [];
   if (duplicates) {
@@ -306,7 +309,7 @@ function excludedIssuesNote(
   }
   if (hidden) {
     notes.push(
-      `${hidden} issues hidden in the dashboard are not included, as the dashboard leaves them out of its count too.`,
+      `${hidden} issues ${includesNotAnIssue ? 'hidden or marked "Not an issue"' : "hidden"} in the dashboard are not included, as the dashboard leaves them out of its count too.`,
     );
   }
   return notes;
@@ -575,6 +578,12 @@ function askAiNote(source: IssueSource): string {
 
 const WEB_ISSUES_NOTE =
   "Each issue names its rule (issue_type): the rule's name, description, WCAG criteria and usual fix are under rules, and an issue has its own how_to_fix only when it differs. An issue with needs_review is one the engine could not decide, so a person confirms it: the value is its review status, and until it is confirmed it is not a confirmed failure. An issue with no needs_review, whose rule is not a best practice (best_practice under rules), is a confirmed WCAG failure.";
+
+// In isolated agent sessions this tool answered questions it only half covers (a build's test
+// cases, issues by WCAG guideline, the elements behind a rule, one issue's detail, merging
+// reports) and once told the user test cases "aren't available". Point at the dashboard views.
+const WEB_MORE_VIEWS_NOTE =
+  "This answer is the issue list only. For a build's or scan run's test cases, its issues grouped by rule or by WCAG guideline, the elements behind a rule or guideline, one issue's full detail, or several Workflow Analyzer reports merged into one, call searchCapability with product web_accessibility: those are separate dashboard views, so never tell the user they are unavailable.";
 
 /** The CSV link, with what it is for: an answer gives a page of issues at a time. */
 function fullReportLine(reportLink: string): string {
@@ -1197,9 +1206,16 @@ async function fetchAccessibilityIssues(
     // The whole report's score and counts, said on its first page.
     ...scoreNote(score),
     ...(cursor ? [] : webSummaryNote(summary, total_issues)),
-    ...excludedIssuesNote(duplicate_issues, unlinked_duplicates, hidden_issues),
+    ...excludedIssuesNote(
+      duplicate_issues,
+      unlinked_duplicates,
+      hidden_issues,
+      true,
+    ),
     fullReportLine(reportLink),
     WEB_ISSUES_NOTE,
+    // Said once, on the first page, and only when searchCapability is there to follow it to.
+    ...(cursor || !capabilityRegistryEnabled() ? [] : [WEB_MORE_VIEWS_NOTE]),
     ...fp.notes,
     `Issues: ${wrapUntrusted("accessibility scan results", JSON.stringify({ issues: fp.records, rules }))}`,
     ...fp.closing,
@@ -1468,6 +1484,9 @@ function scanSettingsNote(
       settings.experimentalRules !== undefined
         ? `experimental rules ${onOff(settings.experimentalRules)}`
         : "",
+      settings.screenReader !== undefined
+        ? `screen reader ${settings.screenReader === "VO" ? "VoiceOver" : settings.screenReader}`
+        : "",
     ]
       .filter(Boolean)
       .join(", ");
@@ -1539,6 +1558,7 @@ function startNewScan(
       needsReview: args.needsReview,
       advancedRules: args.advancedRules,
       experimentalRules: args.experimentalRules,
+      screenReader: args.screenReader,
     },
     args.localIdentifier,
   );
@@ -1750,8 +1770,10 @@ function createScanSuccessResponse(
       report.duplicate_issues,
       report.unlinked_duplicates,
       report.hidden_issues,
+      true,
     ),
     WEB_ISSUES_NOTE,
+    ...(capabilityRegistryEnabled() ? [WEB_MORE_VIEWS_NOTE] : []),
     ...fp.notes,
     `Scan results: ${wrapUntrusted("accessibility scan results", JSON.stringify({ issues: fp.records, rules: report.rules }))}`,
     ...fp.closing,
@@ -2116,6 +2138,12 @@ export default function addAccessibilityTools(
         .optional()
         .describe(
           "Run experimental rules (default true; off if the plan lacks them).",
+        ),
+      screenReader: z
+        .enum(["NVDA", "VO"])
+        .optional()
+        .describe(
+          'Also run a screen reader: "NVDA" or "VO" (VoiceOver). Needs Screen Reader on the plan.',
         ),
     },
     {

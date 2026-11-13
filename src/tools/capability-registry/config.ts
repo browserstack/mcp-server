@@ -80,7 +80,12 @@ const REGIONAL_HOSTS: Record<
   tm: { base: "testManagement" },
   tra: { base: "observabilityApi" },
   app_accessibility: { base: "appAccessibilityApi" },
-  web_accessibility: { base: "accessibilityApi" },
+  // `dashboard`: the dashboard's own routes, which never read Basic auth; those capabilities
+  // declare oauth2 themselves and the backend admits only what its ai_agent scope allows.
+  web_accessibility: {
+    base: "accessibilityApi",
+    hosts: { dashboard: "accessibilityDashboard" },
+  },
   devicecontrol: { base: "automateHubUrl", hosts: { api: "automateApi" } },
   mobiledevicecontrol: {
     base: "appAutomateHubUrl",
@@ -175,6 +180,16 @@ function resolveNamedHost(
   const suffix = `${key}_HOST_${host.toUpperCase().replace(/[^A-Z0-9]+/g, "_")}`;
   const override = process.env[`CAPABILITY_REGISTRY_BASE_URL_${suffix}`];
   if (override) return trim(override);
+
+  // An override of the product's own host says "not production", but it does not say where
+  // this host lives. Falling through to the regional (production) host would send a preprod
+  // session's dashboard calls to production.
+  if (process.env[`CAPABILITY_REGISTRY_BASE_URL_${key}`]) {
+    throw new InvocationError(
+      `CAPABILITY_REGISTRY_BASE_URL_${key} overrides product '${product}', but not its ` +
+        `'${host}' host. Set CAPABILITY_REGISTRY_BASE_URL_${suffix} as well.`,
+    );
+  }
 
   if (environment) {
     throw new InvocationError(

@@ -19,6 +19,7 @@ import { BrowserStackConfig } from "../lib/types.js";
 import { NEEDS_SESSION_ID } from "./tool-handoff.js";
 import { isHashedBuildId } from "./automate-utils/resolve-hashed-build-id.js";
 import { mapHashedToTra } from "./automate-utils/resolve-tra-build-id.js";
+import { wrapUntrusted } from "../lib/untrusted-content.js";
 
 // Local helper: returns the server-configured BrowserStack credentials, or
 // null when either is missing. Lives here because the self-heal tools need
@@ -275,7 +276,7 @@ export async function fetchSelfHealSelectorTool(
             text:
               banner +
               "Self-heal selectors fetched successfully (sessionId log-parse mode):\n" +
-              JSON.stringify(selectors, null, 2) +
+              wrapUntrusted("self-heal selectors", JSON.stringify(selectors, null, 2)) +
               (testCodeContext
                 ? "\n\nThe following test code was found for this session. " +
                   "Use it to understand the test intent and make more accurate " +
@@ -326,7 +327,7 @@ export async function fetchSelfHealSelectorTool(
             "pass `healed_selectors[]` to `prepareSelfHealingPlan` so the " +
             "caller can apply the edits with its own file-editing " +
             "tools (this server never writes files).\n" +
-            JSON.stringify(report, null, 2) +
+            wrapUntrusted("self-healing report", JSON.stringify(report, null, 2)) +
             (testCodeContext
               ? "\n\nThe following test code was found for sessions in this build. " +
                 "Use it to understand the test intent, locate the exact files " +
@@ -493,7 +494,7 @@ export async function prepareSelfHealingPlanTool(
             "No applicable locator pairs found in the provided sessions. " +
             "Every entry was missing values or had identical original/healed " +
             "locators.\n" +
-            JSON.stringify({ skipped }, null, 2),
+            wrapUntrusted("skipped locator pairs", JSON.stringify({ skipped }, null, 2)),
         },
       ],
     };
@@ -554,7 +555,7 @@ export async function prepareSelfHealingPlanTool(
 
   const skippedNote =
     skipped.length > 0
-      ? `\n\n## Skipped locator pairs\n\n${JSON.stringify(skipped, null, 2)}`
+      ? `\n\n## Skipped locator pairs\n\n${wrapUntrusted("skipped locator pairs", JSON.stringify(skipped, null, 2))}`
       : "";
 
   return {
@@ -563,7 +564,7 @@ export async function prepareSelfHealingPlanTool(
         type: "text",
         text:
           warningBanner +
-          `${PLAN_INSTRUCTIONS}\n\n## Plan\n\n${JSON.stringify(plannedSessions, null, 2)}` +
+          `${PLAN_INSTRUCTIONS}\n\n## Plan\n\n${wrapUntrusted("self-healing plan", JSON.stringify(plannedSessions, null, 2))}` +
           skippedNote,
       },
     ],

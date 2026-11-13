@@ -1611,10 +1611,9 @@ async function executeCreateAuthConfig(
 
     return createSuccessResponse([
       `✅ Auth config "${args.name}" created successfully with ID: ${result.data?.id}`,
-      `Auth config details: ${JSON.stringify(
-        safeAuthConfigData(result),
-        null,
-        2,
+      `Auth config details: ${wrapUntrusted(
+        "auth config",
+        JSON.stringify(safeAuthConfigData(result), null, 2),
       )}`,
     ]);
   } catch (error) {
@@ -1654,10 +1653,9 @@ async function executeGetAuthConfig(
 
     return createSuccessResponse([
       `✅ Auth config retrieved successfully`,
-      `Auth config details: ${JSON.stringify(
-        safeAuthConfigData(result),
-        null,
-        2,
+      `Auth config details: ${wrapUntrusted(
+        "auth config",
+        JSON.stringify(safeAuthConfigData(result), null, 2),
       )}`,
     ]);
   } catch (error) {

@@ -6,6 +6,7 @@ import {
   userView,
 } from "../../src/tools/ask-browserstack/result-audience.js";
 import type { AskResult } from "../../src/tools/ask-browserstack/types.js";
+import { unwrapUntrusted } from "../fixtures/unwrap";
 
 const CONV = "run-" + "a".repeat(32);
 const PERM = "wf-" + "b".repeat(32);
@@ -55,7 +56,7 @@ describe("the user-facing block", () => {
       },
     });
     const view = userView(r);
-    expect(view.answer).toBe("16 gaps found.");
+    expect(unwrapUntrusted(view.answer as string)).toBe("16 gaps found.");
     expect(view.run).toEqual({
       title: "Test case maintenance",
       stage: "review",

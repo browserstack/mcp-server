@@ -22,6 +22,7 @@ import {
 import { trackMCP } from "../lib/instrumentation.js";
 import logger from "../logger.js";
 import { BrowserStackConfig } from "../lib/types.js";
+import { wrapUntrusted } from "../lib/untrusted-content.js";
 
 // Tool function that fetches and processes screenshots from BrowserStack Automate session
 export async function fetchAutomationScreenshotsTool(
@@ -189,7 +190,7 @@ export async function listSessionIdsTool(
         text:
           sessions.length === 0
             ? "No sessions found for this hashed build ID."
-            : JSON.stringify(sessions, null, 2),
+            : wrapUntrusted("session list", JSON.stringify(sessions, null, 2)),
       },
     ];
     for (const note of notes) {

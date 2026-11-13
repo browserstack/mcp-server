@@ -10,6 +10,7 @@
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 
 import { AskResult } from "./types.js";
+import { wrapUntrusted } from "../../lib/untrusted-content.js";
 
 /** Handles the client keeps; never shown in the user-facing block. */
 const INTERNAL_ID =
@@ -78,7 +79,15 @@ export function userView(payload: AskResult): Json {
   if (p.uploads?.length) {
     view.uploads = p.uploads.map((u) => ({ name: u.name }));
   }
-  return scrub(view);
+  const scrubbed = scrub(view);
+  // Wrap the free-text answer after scrubbing (scrub collapses whitespace and
+  // would otherwise flatten the wrapper's markers). The envelope keeps its shape
+  // — only the string value of `answer` carries the markers — so clients still
+  // parse the result unchanged.
+  if (typeof scrubbed.answer === "string" && scrubbed.answer) {
+    scrubbed.answer = wrapUntrusted("BrowserStack AI answer", scrubbed.answer);
+  }
+  return scrubbed;
 }
 
 /** What only the client needs to carry on: handles, the next call, and the raw reply. */

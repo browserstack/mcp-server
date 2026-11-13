@@ -1,3 +1,4 @@
+import { unwrapUntrusted } from "../fixtures/unwrap";
 import { describe, it, expect, vi, beforeEach, Mock } from "vitest";
 import addTfaRcaCollaborationTools, {
   getTfaTurnResultTool,
@@ -108,7 +109,7 @@ describe("tfaRcaTurnTool", () => {
     );
 
     expect(result.isError).toBeFalsy();
-    const payload = JSON.parse(result.content[0].text as string);
+    const payload = JSON.parse(unwrapUntrusted(result.content[0].text as string));
     expect(payload.status).toBe("RESOLVED");
     expect(payload.confidence).toBe("high");
     expect(payload.threadId).toBe("t-1");
@@ -145,7 +146,7 @@ describe("tfaRcaTurnTool", () => {
   //       mockConfig as any,
   //     ),
   //   );
-  //   const payload = JSON.parse(result.content[0].text as string);
+  //   const payload = JSON.parse(unwrapUntrusted(result.content[0].text as string));
   //   expect(payload.glimpse.root_cause.length).toBeLessThanOrEqual(220);
   //   expect(payload.glimpse.root_cause.endsWith("…")).toBe(true);
   //   expect(payload.glimpse.root_cause.startsWith("xxx")).toBe(true);
@@ -184,7 +185,7 @@ describe("tfaRcaTurnTool", () => {
         mockConfig as any,
       ),
     );
-    const payload = JSON.parse(result.content[0].text as string);
+    const payload = JSON.parse(unwrapUntrusted(result.content[0].text as string));
     expect(payload.status).toBe("NEEDS_INFO");
     expect(payload.confidence).toBe("medium");
     expect(payload.threadId).toBe("t-2");
@@ -228,7 +229,7 @@ describe("tfaRcaTurnTool", () => {
         mockConfig as any,
       ),
     );
-    const payload = JSON.parse(result.content[0].text as string);
+    const payload = JSON.parse(unwrapUntrusted(result.content[0].text as string));
     expect(payload.status).toBe("BLOCKED");
     expect(payload.confidence).toBe("low");
     expect(payload.reason).toBe("No access to the k8s cluster.");
@@ -258,7 +259,7 @@ describe("tfaRcaTurnTool", () => {
         mockConfig as any,
       ),
     );
-    const payload = JSON.parse(result.content[0].text as string);
+    const payload = JSON.parse(unwrapUntrusted(result.content[0].text as string));
     expect(payload.status).toBe("NEEDS_INFO");
     // The marker/markdown is never echoed back to the client.
     expect(result.content[0].text).not.toContain("Final RCA");
@@ -397,7 +398,7 @@ describe("tfaRcaTurnTool", () => {
 
     expect(post).not.toHaveBeenCalled();
     expect(get.mock.calls[0][0].url).toContain("/rcaChat/u-9");
-    const payload = JSON.parse(result.content[0].text as string);
+    const payload = JSON.parse(unwrapUntrusted(result.content[0].text as string));
     expect(payload.status).toBe("RESOLVED");
   });
 
@@ -472,7 +473,7 @@ describe("tfaRcaTurnTool", () => {
       ),
     );
 
-    const payload = JSON.parse(result.content[0].text as string);
+    const payload = JSON.parse(unwrapUntrusted(result.content[0].text as string));
     expect(payload.status).toBe("PENDING");
     expect(payload.turnId).toBe("u-8");
     expect(payload.threadId).toBe("t-8");
@@ -571,7 +572,7 @@ describe("getTfaTurnResultTool", () => {
     expect(get.mock.calls[0][0].url).toBe(
       `${DEFAULT_O11Y_BASE_URL}/ext/v1/testRuns/tr-1/rcaChat/u-1`,
     );
-    expect(JSON.parse(result.content[0].text as string).status).toBe("RESOLVED");
+    expect(JSON.parse(unwrapUntrusted(result.content[0].text as string)).status).toBe("RESOLVED");
   });
 
   it("RESOLVED → same trimmed glimpse contract as tfaRcaTurn", async () => {
@@ -597,7 +598,7 @@ describe("getTfaTurnResultTool", () => {
       mockConfig as any,
     );
 
-    const payload = JSON.parse(result.content[0].text as string);
+    const payload = JSON.parse(unwrapUntrusted(result.content[0].text as string));
     expect(payload.glimpse.root_cause).toBe("Config map deleted on deploy.");
     expect(payload.glimpse.failure_type).toBe("infra");
     expect(payload.glimpse.related_prs).toEqual([42]);
@@ -635,12 +636,14 @@ describe("getTfaTurnResultTool", () => {
     );
 
     const payload = JSON.parse(
-      (
-        await getTfaTurnResultTool(
-          { testRunId: "tr-3", turnId: "u-3" },
-          mockConfig as any,
-        )
-      ).content[0].text as string,
+      unwrapUntrusted(
+        (
+          await getTfaTurnResultTool(
+            { testRunId: "tr-3", turnId: "u-3" },
+            mockConfig as any,
+          )
+        ).content[0].text as string,
+      ),
     );
     expect(payload.status).toBe("NEEDS_INFO");
     expect(payload.threadId).toBe("t-ni");
@@ -667,12 +670,14 @@ describe("getTfaTurnResultTool", () => {
     );
 
     const payload = JSON.parse(
-      (
-        await getTfaTurnResultTool(
-          { testRunId: "tr-4", turnId: "u-4" },
-          mockConfig as any,
-        )
-      ).content[0].text as string,
+      unwrapUntrusted(
+        (
+          await getTfaTurnResultTool(
+            { testRunId: "tr-4", turnId: "u-4" },
+            mockConfig as any,
+          )
+        ).content[0].text as string,
+      ),
     );
     expect(payload.status).toBe("BLOCKED");
     expect(payload.reason).toBe("No access to the k8s cluster.");
@@ -683,12 +688,14 @@ describe("getTfaTurnResultTool", () => {
     get.mockResolvedValue(ok({ status: "working", threadId: "t-w" }));
 
     const payload = JSON.parse(
-      (
-        await getTfaTurnResultTool(
-          { testRunId: "tr-5", turnId: "u-5" },
-          mockConfig as any,
-        )
-      ).content[0].text as string,
+      unwrapUntrusted(
+        (
+          await getTfaTurnResultTool(
+            { testRunId: "tr-5", turnId: "u-5" },
+            mockConfig as any,
+          )
+        ).content[0].text as string,
+      ),
     );
     expect(payload.status).toBe("PENDING");
     expect(payload.turnId).toBe("u-5");

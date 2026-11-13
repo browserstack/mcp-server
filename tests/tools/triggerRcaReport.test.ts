@@ -1,3 +1,4 @@
+import { unwrapUntrusted } from "../fixtures/unwrap";
 import { describe, it, expect, vi, beforeEach, Mock } from "vitest";
 import addTfaRcaCollaborationTools, {
   triggerRcaReportTool,
@@ -79,7 +80,7 @@ describe("triggerRcaReportTool", () => {
     );
 
     expect(result.isError).toBeFalsy();
-    const payload = JSON.parse(result.content[0].text as string);
+    const payload = JSON.parse(unwrapUntrusted(result.content[0].text as string));
     expect(payload.state).toBe("completed");
     expect(payload.verdict).toBe("NOT_READY");
     expect(payload.verdictProvisional).toBe(false);
@@ -137,7 +138,7 @@ describe("triggerRcaReportTool", () => {
       { buildUuid: "b-2" },
       mockConfig as any,
     );
-    const payload = JSON.parse(result.content[0].text as string);
+    const payload = JSON.parse(unwrapUntrusted(result.content[0].text as string));
     expect(payload.state).toBe("running");
     expect(payload.verdict).toBeUndefined();
     expect(payload.viewReport).toBe(`${UI_BASE}/builds/b-2?tab=ai_report&subTab=aitfa`);

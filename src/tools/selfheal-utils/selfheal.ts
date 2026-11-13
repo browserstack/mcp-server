@@ -46,6 +46,7 @@ import { BrowserStackConfig } from "../../lib/types.js";
 import { apiClient } from "../../lib/apiClient.js";
 import { getRegionalHost, sessionApiHost } from "../../lib/regional-host.js";
 import { CallerError } from "../../lib/error.js";
+import { encodePathSegment } from "../../lib/path-segment.js";
 
 type SessionType = "automate" | "app-automate";
 
@@ -135,7 +136,7 @@ export async function getSelfHealSelectors(
   const productPath =
     sessionType === "app-automate" ? "app-automate" : "automate";
   const host = sessionApiHost(sessionType);
-  const url = `${host}/${productPath}/sessions/${sessionId}/logs`;
+  const url = `${host}/${productPath}/sessions/${encodePathSegment(sessionId, "sessionId")}/logs`;
 
   const response = await apiClient.get({
     url,

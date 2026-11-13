@@ -16,6 +16,7 @@ import {
 } from "../appautomate-utils/framework-builds.js";
 import { resolveAppAutomateBuildId } from "../failurelogs-utils/resolve-app-build-id.js";
 import { CallerError } from "../../lib/error.js";
+import { encodePathSegment } from "../../lib/path-segment.js";
 
 /** The session is unknown to the generic logs endpoint (404). */
 export class SessionLogsNotFoundError extends Error {
@@ -41,7 +42,7 @@ async function extractScreenshotUrls(
   const host = sessionApiHost(sessionType);
   const baseUrl = `${host}/${isAutomate ? "automate" : "app-automate"}`;
 
-  const url = `${baseUrl}/sessions/${sessionId}/logs`;
+  const url = `${baseUrl}/sessions/${encodePathSegment(sessionId, "sessionId")}/logs`;
   const response = await apiClient.get({
     url,
     headers: {

@@ -7769,7 +7769,7 @@
           "Keys are snake_case only: this controller does not underscore camelCase keys, so entityType or ticketId are ignored and answer 400.",
           "201 returns integration {ticketId, toolType, url}.",
           "409 'A work item is already linked' means the entity already has a link of that tool_type.",
-          "403 'feature_not_enabled' means the group does not have integration_ticket_linking released; there is no RBAC check, so that flag is the only bound. 403 ACTION_NOT_ALLOWED_FOR_SCOPE if the route leaves the allowlist.",
+          "403 'feature_not_enabled' means the group does not have integration_ticket_linking released; there is no RBAC check, so that flag is the only bound. 403 AGENT_REPORT_ACTIONS_DISABLED while the account's agent switch is on: say so and offer the dashboard; retrying will be refused. 403 ACTION_NOT_ALLOWED_FOR_SCOPE if the route leaves the allowlist.",
           "400 'missing entity uuid for level' means the uuid for the chosen entity_type was not sent; 502 'Something went wrong' is a TestHub failure."
         ],
         "returns": [
@@ -12728,7 +12728,7 @@
           "Write the workflow as short numbered steps a person could follow, like the dashboard's example: navigate, search, select, add to cart, check out. Ask the user for the steps rather than inventing a journey.",
           "Screen reader: NVDA on Windows is the only one available; VoiceOver macOS, VoiceOver iOS and TalkBack are shown as coming soon, so do not offer them.",
           "The run comes back queued or processing (the account has a limit on runs at once); results take minutes. Give the user the run id and read it with get_screen_reader_agent_run.",
-          "422 INVALID_URL or BLOCKED_URL for a non-http(s) or private address; 502 SR_AGENT_CREATE_FAILED when it could not start (retrying later is fine). 403 SR_AGENT_ACCESS_DENIED 'Screen reader agent is not enabled for your account': the group lacks the Screen Reader Agent (Experience Agent) beta or its AI-service feature. Say so; there is nothing to retry."
+          "422 INVALID_URL or BLOCKED_URL for a non-http(s) or private address; 502 SR_AGENT_CREATE_FAILED when it could not start (retrying later is fine). 403 AGENT_REPORT_ACTIONS_DISABLED while the account's agent switch is on: say so and offer the dashboard. 403 SR_AGENT_ACCESS_DENIED 'Screen reader agent is not enabled for your account': the group lacks the Screen Reader Agent (Experience Agent) beta or its AI-service feature. Say so; there is nothing to retry."
         ],
         "returns": [
           "id",

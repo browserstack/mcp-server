@@ -12326,6 +12326,210 @@
             "description": "From code (assistive_reports#show): {success, data: {meta, assistiveTests, <customId>: [rule records with nodes]}}."
           }
         }
+      },
+      {
+        "name": "list_screen_reader_automation_reports",
+        "method": "GET",
+        "path": "/api/screen_reader_automation/reports",
+        "host": "dashboard",
+        "auth": {
+          "type": "oauth2"
+        },
+        "mode": "read",
+        "entity": "report",
+        "paginated": true,
+        "max_page_size": 99,
+        "query": [
+          {
+            "name": "page",
+            "type": "integer",
+            "minimum": 1,
+            "description": "1-based page number.",
+            "example": 1
+          },
+          {
+            "name": "page_size",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 99,
+            "description": "Rows per page, up to 99 (default 30).",
+            "example": 30
+          },
+          {
+            "name": "query",
+            "type": "string",
+            "description": "Search text matched against run names.",
+            "example": "checkout"
+          },
+          {
+            "name": "user_id",
+            "type": "integer",
+            "description": "Only runs started by this user id.",
+            "example": 12345
+          },
+          {
+            "name": "team_id",
+            "type": "string",
+            "description": "Only runs of these team ids, comma-separated.",
+            "example": "101,102"
+          },
+          {
+            "name": "created_after",
+            "type": "string",
+            "description": "Only runs started at or after this time, as an ISO-8601 timestamp.",
+            "example": "2026-10-01T00:00:00Z"
+          }
+        ],
+        "intent": "List the account's Screen Reader automation runs (screen reader checks run from an automated test with the SDK), newest first - use this to find the run to open with get_screen_reader_automation_report.",
+        "guidance": [
+          "These are automated screen reader runs from tests, not Workflow Analyzer or Automated Tests reports; their ids (build uuids) are only for the screen reader reads.",
+          "Each row of data.reports has thBuildId (pass it to get_screen_reader_automation_report), name, status, screenReader, createdAt, completedAt, user, elementCount and issueCount. data.total with page and pageSize says whether there are more pages.",
+          "Only runs that stored a screen reader result are listed.",
+          "403 'Screen Reader Automation access required.' when the account's plan does not include it; 502 when the run list could not be fetched."
+        ],
+        "returns": [
+          "reports",
+          "total"
+        ],
+        "responses": {
+          "401": {
+            "$response": "DashboardUnauthorized"
+          },
+          "403": {
+            "$response": "DashboardForbidden"
+          },
+          "422": {
+            "$response": "DashboardUnprocessable"
+          },
+          "500": {
+            "$response": "DashboardUpstreamFailure"
+          },
+          "200": {
+            "description": "From code (screen_reader_automation_reports#index → SrScan.build_listing_response): {success, data: {reports, total, page, pageSize}}."
+          }
+        }
+      },
+      {
+        "name": "get_screen_reader_automation_report",
+        "method": "GET",
+        "path": "/api/screen_reader_automation/reports/{th_build_uuid}",
+        "host": "dashboard",
+        "auth": {
+          "type": "oauth2"
+        },
+        "mode": "read",
+        "entity": "report",
+        "path_params": [
+          {
+            "name": "th_build_uuid",
+            "type": "string",
+            "required": true,
+            "description": "The run's thBuildId, from list_screen_reader_automation_reports.",
+            "example": "abc123examplebuilduuid"
+          }
+        ],
+        "query": [
+          {
+            "name": "page",
+            "type": "integer",
+            "minimum": 1,
+            "description": "Which scanned page of the run to read (1-based). Each call returns one page.",
+            "example": 1
+          },
+          {
+            "name": "view",
+            "type": "string",
+            "values": [
+              "tests"
+            ],
+            "description": "tests reads an SDK run per test case instead of per page.",
+            "example": "tests"
+          },
+          {
+            "name": "test_case_id",
+            "type": "string",
+            "description": "With view tests: which test case to read; default is the first.",
+            "example": "325409"
+          }
+        ],
+        "intent": "Read one Screen Reader automation run: each element in the order the screen reader reached it, with its tag, role, what the screen reader announced, and any violations - use this for 'what did the screen reader say' or 'which elements failed'.",
+        "guidance": [
+          "One page per call: data.pageCount says how many pages the run covered; read the others with page. data.failedPages lists pages that could not be scanned (not empty pages).",
+          "data.elements are in focus order (serialNumber). spokenOutput is what the screen reader announced; status is violated or passed, with the violations on the element.",
+          "data.summary counts the page's issues by severity.",
+          "screenshotUrl is a signed link to the page screenshot, valid for hours: fine to give the user, never store or reuse it.",
+          "404 'Report Not Found' when the uuid is not a run in the caller's account; 403 when the plan lacks Screen Reader Automation."
+        ],
+        "returns": [
+          "name",
+          "status",
+          "pageCount",
+          "elements",
+          "summary"
+        ],
+        "responses": {
+          "401": {
+            "$response": "DashboardUnauthorized"
+          },
+          "403": {
+            "$response": "DashboardForbidden"
+          },
+          "404": {
+            "$response": "DashboardNotFound"
+          },
+          "500": {
+            "$response": "DashboardUpstreamFailure"
+          },
+          "200": {
+            "description": "From code (screen_reader_automation_reports#show): {data: {name, status, screenReader, createdAt, pageLabel, pageIndex, pageCount, pageStatus, failedPageCount, failedPages, screenshotUrl, summary, elements}}; with view tests, the per-test shape."
+          }
+        }
+      },
+      {
+        "name": "get_screen_reader_automation_scan_logs",
+        "method": "GET",
+        "path": "/api/screen_reader_automation/reports/{th_build_uuid}/scan_logs",
+        "host": "dashboard",
+        "auth": {
+          "type": "oauth2"
+        },
+        "mode": "read",
+        "entity": "report",
+        "path_params": [
+          {
+            "name": "th_build_uuid",
+            "type": "string",
+            "required": true,
+            "description": "The run's thBuildId, from list_screen_reader_automation_reports.",
+            "example": "abc123examplebuilduuid"
+          }
+        ],
+        "intent": "List every page a Screen Reader automation run visited, whether it was scanned or failed, with its element and issue counts - use this for 'which pages failed' or 'how many issues per page'.",
+        "guidance": [
+          "One row per page in page order: pageIndex, pageUrl, cumulativeStatus (success or failure), elementCount and a description with the issue count.",
+          "time is the run's start time on every row; per-page times are not recorded. score is always null for screen reader runs.",
+          "404 'Report Not Found'; 403 when the plan lacks Screen Reader Automation."
+        ],
+        "returns": [
+          "logs"
+        ],
+        "responses": {
+          "401": {
+            "$response": "DashboardUnauthorized"
+          },
+          "403": {
+            "$response": "DashboardForbidden"
+          },
+          "404": {
+            "$response": "DashboardNotFound"
+          },
+          "500": {
+            "$response": "DashboardUpstreamFailure"
+          },
+          "200": {
+            "description": "From code (screen_reader_automation_reports#scan_logs): the website-scanner scan-logs envelope with one row per page plus pageIndex and elementCount."
+          }
+        }
       }
     ],
     "entities": {
@@ -12645,7 +12849,10 @@
         "relations": [],
         "capabilities": [
           "list_accessibility_reports",
-          "get_workflow_analyzer_consolidated_report"
+          "get_workflow_analyzer_consolidated_report",
+          "list_screen_reader_automation_reports",
+          "get_screen_reader_automation_report",
+          "get_screen_reader_automation_scan_logs"
         ],
         "key_facts": []
       },

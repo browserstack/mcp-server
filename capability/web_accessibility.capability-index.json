@@ -12622,6 +12622,7 @@
         ],
         "intent": "Read one Screen Reader Agent run: the workflow it followed step by step, its overall result and summary, every violation (what failed for a screen reader user, how severe, on which step), the checks, and a link to the session recording.",
         "guidance": [
+          "ALWAYS pass select {fields: [...]}: the whole run is about 50,000 characters and too large to read. Start with [\"status\", \"overallResult\", \"summary\", \"violations\"]; add steps only when asked about a step.",
           "data.status is queued, processing, completed or failed (statusReason says why); a queued or processing run has no result yet: say so and offer to check again.",
           "data.violations hold the findings, each with id, violationType (e.g. FOCUS_TRAP, SKIP_LINK, MISSING_LABEL, DUPLICATE_LABELS), severity (Critical, Serious, Major - shown as Moderate on the dashboard - or Minor), the step it happened on (stepId), the element (html) and how to fix it; data.steps is the workflow as the agent walked it; data.summary and overallResult give the verdict.",
           "Violation types include page title, initial focus, skip link, missing or duplicate labels, broken focus order, unreachable elements, focus traps, controls that ignore the keyboard, focus after an action, dialog focus and unannounced form errors.",
@@ -12635,6 +12636,35 @@
           "violations",
           "steps"
         ],
+        "narrowable": {
+          "path": "data",
+          "record": true,
+          "fields": [
+            "id",
+            "name",
+            "url",
+            "workflowDescription",
+            "workflowSummary",
+            "status",
+            "statusReason",
+            "progress",
+            "startedAt",
+            "endedAt",
+            "createdAt",
+            "overallResult",
+            "summary",
+            "violations",
+            "steps",
+            "checks",
+            "traversalLog",
+            "videoUrl",
+            "publicUrl",
+            "platform",
+            "triggeredBy",
+            "triggeredById"
+          ],
+          "note": "The full run is about 50,000 characters (steps and per-violation screenshots), too large to read in one answer; the product has no parameter to trim it."
+        },
         "responses": {
           "401": {
             "$response": "DashboardUnauthorized"
@@ -12785,7 +12815,7 @@
         "intent": "Hide a Screen Reader Agent violation from its run, for a reason, for this issue only or every issue of its type - the dashboard's hide action.",
         "guidance": [
           "APPROVAL FIRST: before calling, tell the user exactly what will change (what, where, how many) and wait for an explicit yes in their own words ('yes', 'go ahead', 'approved'). A request to make the change, however specific, is not that yes: ask first, and send user_permission granted only after it.",
-          "Read the run first and name the violation, its step and severity, the reason and the scope in the preview; with scope rule or guideline say that more issues will be hidden.",
+          "Read the run first with get_screen_reader_agent_run and select fields [\"violations\"] to find the violation's id, and name the violation, its step and severity, the reason and the scope in the preview; with scope rule or guideline say that more issues will be hidden.",
           "Undo with unhide_screen_reader_agent_violation on the same violation.",
           "404 SR_ISSUE_NOT_FOUND; 422 SR_INVALID_HIDE_REASON for a reason outside the list; 403 REPORT_FORBIDDEN when the run is not the caller's, or AGENT_REPORT_ACTIONS_DISABLED while the account's agent switch is on. 403 SR_AGENT_ACCESS_DENIED 'Screen reader agent is not enabled for your account': the group lacks the Screen Reader Agent (Experience Agent) beta or its AI-service feature. Say so; there is nothing to retry."
         ],
@@ -12856,7 +12886,7 @@
         "intent": "Show a hidden Screen Reader Agent violation again - the undo of hide_screen_reader_agent_violation.",
         "guidance": [
           "APPROVAL FIRST: before calling, tell the user exactly what will change (what, where, how many) and wait for an explicit yes in their own words ('yes', 'go ahead', 'approved'). A request to make the change, however specific, is not that yes: ask first, and send user_permission granted only after it.",
-          "Read the run with show_hidden true first and name the violation and scope in the preview.",
+          "Read the run first with get_screen_reader_agent_run, show_hidden true and select fields [\"violations\"] to find the hidden violation's id, and name the violation and scope in the preview.",
           "404 SR_ISSUE_NOT_FOUND; 403 REPORT_FORBIDDEN or AGENT_REPORT_ACTIONS_DISABLED. 403 SR_AGENT_ACCESS_DENIED 'Screen reader agent is not enabled for your account': the group lacks the Screen Reader Agent (Experience Agent) beta or its AI-service feature. Say so; there is nothing to retry."
         ],
         "returns": [

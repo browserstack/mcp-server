@@ -8232,6 +8232,4040 @@
             "$response": "InternalServerError"
           }
         }
+      },
+      {
+        "name": "get_custom_dashboard_conformance_summary",
+        "method": "GET",
+        "path": "/api/custom_dashboards/{id}/conformance_summary",
+        "host": "dashboard",
+        "auth": {
+          "type": "oauth2"
+        },
+        "mode": "read",
+        "entity": "custom_dashboard",
+        "path_params": [
+          {
+            "name": "id",
+            "type": "integer",
+            "required": true,
+            "description": "The dashboard id from list_custom_dashboards.",
+            "example": 12345
+          }
+        ],
+        "query": [
+          {
+            "name": "url",
+            "type": "string",
+            "maxLength": 4096,
+            "description": "Limit the view to one page: a url exactly as list_custom_dashboard_pages returns it. Omit it for the whole dashboard.",
+            "example": "https://example.com/checkout"
+          }
+        ],
+        "intent": "Show a custom dashboard's WCAG conformance picture - which success criteria fail, which pass the automated checks, which automated testing cannot cover (manual or Assisted Test needed) and which are outside the dashboard's WCAG level - plus the RGAA criterion view - use this for 'which WCAG criteria does this dashboard fail' or 'are we WCAG 2.1 AA conformant'.",
+        "guidance": [
+          "Criteria come back as numbers such as 1.4.3, not tags. urls.allPages.violations are the failing criteria; urls.allPages.passes are criteria no automated rule flagged - that is an automated pass, not a conformance claim, so never call the site conformant from it alone.",
+          "notCoveredManualCheckTags have no automated rule and no Assisted Test: they need a manual check. notCoveredAtTags have no automated rule but can be checked with an Assisted Test. notTestedTags are outside the dashboard's WCAG version and level (and, for custom rule configurations, criteria only excluded rules cover). notTestedRerun is always empty here.",
+          "rgaaSummary (criteria, themes, notTested) is present on every dashboard, WCAG ones included; its theme titles are in French. On an RGAA 4.1 dashboard the WCAG lists are computed on a WCAG 2.1 AA basis.",
+          "It holds no issue counts and no per-criterion page lists: for issue counts per criterion use list_custom_dashboard_issues_by_guideline.",
+          "A dashboard with no scans (get_custom_dashboard hasTests false) should be checked first: this route uses the same TestHub call as get_custom_dashboard_category_summary, which answers 500 with an empty body there.",
+          "A url longer than 4096 characters answers 422."
+        ],
+        "returns": [
+          "data.urls.allPages.violations",
+          "data.urls.allPages.passes",
+          "data.notCoveredManualCheckTags",
+          "data.notCoveredAtTags",
+          "data.notTestedTags",
+          "data.notTestedRerun",
+          "data.rgaaSummary.criteria",
+          "data.rgaaSummary.themes",
+          "data.rgaaSummary.notTested"
+        ],
+        "paginated": false,
+        "responses": {
+          "401": {
+            "$response": "DashboardUnauthorized"
+          },
+          "403": {
+            "$response": "DashboardForbidden"
+          },
+          "404": {
+            "$response": "DashboardNotFound"
+          },
+          "422": {
+            "$response": "DashboardUnprocessable"
+          },
+          "500": {
+            "$response": "DashboardUpstreamFailure"
+          },
+          "200": {
+            "description": "WCAG criteria split into failing, automated-pass, not-covered and not-tested lists, plus the RGAA summary.",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "success": {
+                  "type": "boolean"
+                },
+                "data": {
+                  "type": "object",
+                  "properties": {
+                    "urls": {
+                      "type": "object",
+                      "properties": {
+                        "allPages": {
+                          "type": "object",
+                          "properties": {
+                            "violations": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              },
+                              "description": "Failing criteria, e.g. 1.4.3."
+                            },
+                            "passes": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              },
+                              "description": "Criteria no automated rule flagged."
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "notCoveredManualCheckTags": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "notCoveredAtTags": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "notTestedTags": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "notTestedRerun": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "description": "Always empty."
+                    },
+                    "rgaaSummary": {
+                      "type": "object",
+                      "properties": {
+                        "criteria": {
+                          "type": "array",
+                          "items": {
+                            "type": "object"
+                          }
+                        },
+                        "themes": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "integer"
+                              },
+                              "title": {
+                                "type": "string"
+                              }
+                            }
+                          }
+                        },
+                        "notTested": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "name": "get_custom_dashboard_score_trends",
+        "method": "GET",
+        "path": "/api/custom_dashboards/{id}/score_trends",
+        "host": "dashboard",
+        "auth": {
+          "type": "oauth2"
+        },
+        "mode": "read",
+        "entity": "custom_dashboard",
+        "path_params": [
+          {
+            "name": "id",
+            "type": "integer",
+            "required": true,
+            "description": "The dashboard id from list_custom_dashboards.",
+            "example": 12345
+          }
+        ],
+        "query": [
+          {
+            "name": "view",
+            "type": "string",
+            "required": true,
+            "values": [
+              "weekly",
+              "monthly"
+            ],
+            "description": "weekly for week-by-week points, monthly for month-by-month points.",
+            "example": "monthly"
+          }
+        ],
+        "intent": "Show how a custom dashboard's accessibility score (0-100) and number of pages tested changed over time, week by week or month by month - use this for 'is our score improving' or 'score trend for this dashboard'.",
+        "guidance": [
+          "data.scoreTrendData holds at most 12 points, oldest first. id is the point's time in epoch MILLISECONDS, not a record id: convert it to a date before showing it.",
+          "Past points are snapshots a scheduled job saved; when no snapshot exists for today, the last point is computed live for today, so it can differ from earlier points by more than real change.",
+          "settingsDrift true means at least one scan in that point ran with different scan settings (advanced rules or needs-review) than in the previous point, so a jump there may come from the settings, not the site. null means unknown.",
+          "Only score and pageCount: no severity breakdown. For issue counts over time use get_custom_dashboard_issue_trends; for today's per-severity breakdown use get_custom_dashboard_score_summary.",
+          "A new dashboard can have only the live point for today.",
+          "Missing view, or any value other than weekly or monthly, answers 422."
+        ],
+        "returns": [
+          "data.scoreTrendData.id",
+          "data.scoreTrendData.score",
+          "data.scoreTrendData.pageCount",
+          "data.scoreTrendData.settingsDrift"
+        ],
+        "paginated": false,
+        "responses": {
+          "401": {
+            "$response": "DashboardUnauthorized"
+          },
+          "403": {
+            "$response": "DashboardForbidden"
+          },
+          "404": {
+            "$response": "DashboardNotFound"
+          },
+          "422": {
+            "$response": "DashboardUnprocessable"
+          },
+          "500": {
+            "$response": "DashboardUpstreamFailure"
+          },
+          "200": {
+            "description": "Up to 12 score points, oldest first.",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "success": {
+                  "type": "boolean"
+                },
+                "data": {
+                  "type": "object",
+                  "properties": {
+                    "scoreTrendData": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "integer",
+                            "description": "Point time in epoch milliseconds."
+                          },
+                          "score": {
+                            "type": "integer"
+                          },
+                          "pageCount": {
+                            "type": "integer"
+                          },
+                          "settingsDrift": {
+                            "type": "boolean",
+                            "description": "true, false, or null when unknown."
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "name": "get_custom_dashboard_issue_trends",
+        "method": "GET",
+        "path": "/api/custom_dashboards/{id}/issue_trends",
+        "host": "dashboard",
+        "auth": {
+          "type": "oauth2"
+        },
+        "mode": "read",
+        "entity": "custom_dashboard",
+        "path_params": [
+          {
+            "name": "id",
+            "type": "integer",
+            "required": true,
+            "description": "The dashboard id from list_custom_dashboards.",
+            "example": 12345
+          }
+        ],
+        "query": [
+          {
+            "name": "view",
+            "type": "string",
+            "required": true,
+            "values": [
+              "weekly",
+              "monthly"
+            ],
+            "description": "weekly for week-by-week points, monthly for month-by-month points.",
+            "example": "weekly"
+          }
+        ],
+        "intent": "Show how a custom dashboard's issue counts by severity (critical, serious, moderate, minor, total) and pages tested changed over time, week by week or month by month - use this for 'are our critical issues going down' or 'issue trend for this dashboard'.",
+        "guidance": [
+          "data.issueTrendData holds at most 12 points, oldest first. id is the point's time in epoch MILLISECONDS, not a record id: convert it to a date before showing it.",
+          "issueSummary has critical, serious, moderate, minor and issueCount (their sum). Only the live point for today also carries duplicateIssueCount; saved points do not.",
+          "Past points are snapshots a scheduled job saved; when no snapshot exists for today, the last point is computed live for today.",
+          "settingsDrift true means at least one scan ran with different scan settings than in the previous point, so a jump there may come from the settings, not the site. null means unknown.",
+          "No score and no per-rule or per-page detail. For the score over time use get_custom_dashboard_score_trends; for today's totals use get_custom_dashboard_issue_summary.",
+          "Missing view, or any value other than weekly or monthly, answers 422."
+        ],
+        "returns": [
+          "data.issueTrendData.id",
+          "data.issueTrendData.pageCount",
+          "data.issueTrendData.issueSummary",
+          "data.issueTrendData.settingsDrift"
+        ],
+        "paginated": false,
+        "responses": {
+          "401": {
+            "$response": "DashboardUnauthorized"
+          },
+          "403": {
+            "$response": "DashboardForbidden"
+          },
+          "404": {
+            "$response": "DashboardNotFound"
+          },
+          "422": {
+            "$response": "DashboardUnprocessable"
+          },
+          "500": {
+            "$response": "DashboardUpstreamFailure"
+          },
+          "200": {
+            "description": "Up to 12 issue-count points, oldest first.",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "success": {
+                  "type": "boolean"
+                },
+                "data": {
+                  "type": "object",
+                  "properties": {
+                    "issueTrendData": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "integer",
+                            "description": "Point time in epoch milliseconds."
+                          },
+                          "pageCount": {
+                            "type": "integer"
+                          },
+                          "issueSummary": {
+                            "type": "object",
+                            "properties": {
+                              "critical": {
+                                "type": "integer"
+                              },
+                              "serious": {
+                                "type": "integer"
+                              },
+                              "moderate": {
+                                "type": "integer"
+                              },
+                              "minor": {
+                                "type": "integer"
+                              },
+                              "issueCount": {
+                                "type": "integer",
+                                "description": "Sum of the four severities."
+                              },
+                              "duplicateIssueCount": {
+                                "type": "integer",
+                                "description": "Live point only."
+                              }
+                            }
+                          },
+                          "settingsDrift": {
+                            "type": "boolean",
+                            "description": "true, false, or null when unknown."
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "name": "list_custom_dashboard_pages",
+        "method": "GET",
+        "path": "/api/custom_dashboards/{id}/pages",
+        "host": "dashboard",
+        "auth": {
+          "type": "oauth2"
+        },
+        "mode": "read",
+        "entity": "custom_dashboard",
+        "path_params": [
+          {
+            "name": "id",
+            "type": "integer",
+            "required": true,
+            "description": "The dashboard id from list_custom_dashboards.",
+            "example": 12345
+          }
+        ],
+        "query": [
+          {
+            "name": "page",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000,
+            "default": 1,
+            "description": "Result page number, from 1.",
+            "example": 2
+          },
+          {
+            "name": "page_size",
+            "type": "integer",
+            "maximum": 100,
+            "default": 30,
+            "description": "Pages (URLs) per result page, up to 100.",
+            "example": 50
+          },
+          {
+            "name": "sort_by",
+            "type": "string",
+            "values": [
+              "computed_score-asc",
+              "computed_score-desc",
+              "issue_count-desc",
+              "issue_count-asc"
+            ],
+            "default": "computed_score-asc",
+            "description": "computed_score-asc lists the lowest-scoring pages first; issue_count-desc lists the pages with the most issues first.",
+            "example": "issue_count-desc"
+          },
+          {
+            "name": "query",
+            "type": "string",
+            "maxLength": 255,
+            "description": "Text to look for in the page URL, e.g. checkout. Omit it to list every page.",
+            "example": "checkout"
+          }
+        ],
+        "intent": "List the web pages (URLs) a custom dashboard covers, each with its accessibility score and issue count, worst first - use this for 'which pages are worst' or 'which pages have the most issues' on a dashboard, and for the page url the other custom dashboard capabilities filter by.",
+        "guidance": [
+          "data.totalPages is the number of web pages tested on the dashboard and data.totalPagesWithIssues how many of them have issues; neither is the number of result pages. Use data.info to page.",
+          "Each row is url plus summary.score (0 to 100) and summary.totalIssues. A row's url is the value the url filter of list_custom_dashboard_issues_by_rule, list_custom_dashboard_issues_by_guideline and get_custom_dashboard_conformance_summary takes.",
+          "No per-page severity split or rule list: for one page's issues by rule, call list_custom_dashboard_issues_by_rule with that url.",
+          "Calling this also refreshes the cached summary.pageCount that list_custom_dashboards shows.",
+          "page above 1000, page_size above 100, a sort_by outside the listed values or a query over 255 characters answers 422."
+        ],
+        "returns": [
+          "data.pages.url",
+          "data.pages.summary.score",
+          "data.pages.summary.totalIssues",
+          "data.totalPages",
+          "data.totalPagesWithIssues",
+          "data.info"
+        ],
+        "paginated": true,
+        "max_page_size": 100,
+        "responses": {
+          "401": {
+            "$response": "DashboardUnauthorized"
+          },
+          "403": {
+            "$response": "DashboardForbidden"
+          },
+          "404": {
+            "$response": "DashboardNotFound"
+          },
+          "422": {
+            "$response": "DashboardUnprocessable"
+          },
+          "500": {
+            "$response": "DashboardUpstreamFailure"
+          },
+          "200": {
+            "description": "One result page of URLs with score and issue count, plus page totals.",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "success": {
+                  "type": "boolean"
+                },
+                "data": {
+                  "type": "object",
+                  "properties": {
+                    "pages": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "url": {
+                            "type": "string"
+                          },
+                          "summary": {
+                            "type": "object",
+                            "properties": {
+                              "score": {
+                                "type": "integer"
+                              },
+                              "totalIssues": {
+                                "type": "integer"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "totalPages": {
+                      "type": "integer",
+                      "description": "Web pages tested, not result pages."
+                    },
+                    "totalPagesWithIssues": {
+                      "type": "integer"
+                    },
+                    "info": {
+                      "type": "object",
+                      "description": "TestHub paging info for this result page."
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "name": "list_custom_dashboard_issues_by_rule",
+        "method": "POST",
+        "path": "/api/custom_dashboards/{id}/rules",
+        "host": "dashboard",
+        "auth": {
+          "type": "oauth2"
+        },
+        "mode": "read",
+        "entity": "custom_dashboard",
+        "path_params": [
+          {
+            "name": "id",
+            "type": "integer",
+            "required": true,
+            "description": "The dashboard id from list_custom_dashboards.",
+            "example": 12345
+          }
+        ],
+        "body": [
+          {
+            "name": "url",
+            "type": "string",
+            "maxLength": 4096,
+            "description": "Keep one page: a url from list_custom_dashboard_pages.",
+            "example": "https://example.com/checkout"
+          },
+          {
+            "name": "severity",
+            "type": "array",
+            "description": "Impact to keep: minor, moderate, serious or critical. Only the FIRST value is applied, so send one.",
+            "example": [
+              "critical"
+            ]
+          },
+          {
+            "name": "guideline_tag",
+            "type": "string",
+            "description": "Keep rules carrying this tag: a WCAG criterion tag such as wcag143, a category such as cat.color, or on an RGAA dashboard rgaa_X_Y or rgaa_theme_N.",
+            "example": "wcag143"
+          }
+        ],
+        "intent": "List the accessibility rules a custom dashboard violates across all its scans, each with confirmed and needs-review issue counts and impact, most issues first - use this for 'what are the top issues on this dashboard', a per-page or per-severity breakdown, and for the rule code the component drill-down takes.",
+        "guidance": [
+          "For a breakdown by WCAG success criterion ('which WCAG criteria fail most'), use list_custom_dashboard_issues_by_guideline instead of mapping rules to criteria yourself.",
+          "data.rules[].code (e.g. color-contrast) is what list_custom_dashboard_rule_components and get_custom_dashboard_issue take inside rule_code; id is the numeric rule id and is not used by them.",
+          "violationCount is confirmed issues, needsReviewCount is issues pending review, issueCount their sum (the sort key). Rules with neither are left out. data.confirmedIssueCount and data.needsReviewIssueCount are the totals of the listed rules, so they follow the filters.",
+          "These totals already merge the dashboard's scans: never add up the underlying reports instead.",
+          "Only the first severity value is used; to cover two severities make two calls.",
+          "A severity outside minor, moderate, serious, critical or a url over 4096 characters answers 422."
+        ],
+        "returns": [
+          "data.rules.code",
+          "data.rules.id",
+          "data.rules.help",
+          "data.rules.description",
+          "data.rules.impact",
+          "data.rules.tags",
+          "data.rules.violationCount",
+          "data.rules.needsReviewCount",
+          "data.rules.issueCount",
+          "data.confirmedIssueCount",
+          "data.needsReviewIssueCount"
+        ],
+        "paginated": false,
+        "responses": {
+          "401": {
+            "$response": "DashboardUnauthorized"
+          },
+          "403": {
+            "$response": "DashboardForbidden"
+          },
+          "404": {
+            "$response": "DashboardNotFound"
+          },
+          "422": {
+            "$response": "DashboardUnprocessable"
+          },
+          "500": {
+            "$response": "DashboardUpstreamFailure"
+          },
+          "200": {
+            "description": "Violated rules, most issues first, with confirmed and needs-review totals.",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "success": {
+                  "type": "boolean"
+                },
+                "data": {
+                  "type": "object",
+                  "properties": {
+                    "rules": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "code": {
+                            "type": "string",
+                            "description": "Rule code; what rule_code takes."
+                          },
+                          "id": {
+                            "type": "integer"
+                          },
+                          "help": {
+                            "type": "string"
+                          },
+                          "description": {
+                            "type": "string"
+                          },
+                          "tags": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "impact": {
+                            "type": "string"
+                          },
+                          "violationCount": {
+                            "type": "integer",
+                            "description": "Confirmed issues."
+                          },
+                          "needsReviewCount": {
+                            "type": "integer"
+                          },
+                          "issueCount": {
+                            "type": "integer",
+                            "description": "violationCount + needsReviewCount."
+                          },
+                          "violationConfidence": {
+                            "type": "number"
+                          },
+                          "needsReviewConfidence": {
+                            "type": "number"
+                          }
+                        }
+                      }
+                    },
+                    "confirmedIssueCount": {
+                      "type": "integer"
+                    },
+                    "needsReviewIssueCount": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "name": "list_custom_dashboard_issues_by_guideline",
+        "method": "POST",
+        "path": "/api/custom_dashboards/{id}/guidelines",
+        "host": "dashboard",
+        "auth": {
+          "type": "oauth2"
+        },
+        "mode": "read",
+        "entity": "custom_dashboard",
+        "path_params": [
+          {
+            "name": "id",
+            "type": "integer",
+            "required": true,
+            "description": "The dashboard id from list_custom_dashboards.",
+            "example": 12345
+          }
+        ],
+        "body": [
+          {
+            "name": "url",
+            "type": "string",
+            "maxLength": 4096,
+            "description": "Keep one page: a url from list_custom_dashboard_pages.",
+            "example": "https://example.com/checkout"
+          },
+          {
+            "name": "severity",
+            "type": "array",
+            "description": "Impact to keep: minor, moderate, serious or critical. Only the FIRST value is applied, so send one.",
+            "example": [
+              "serious"
+            ]
+          },
+          {
+            "name": "guideline_tag",
+            "type": "string",
+            "description": "Keep one criterion (wcag143) or category (cat.color); on an RGAA dashboard an RGAA criterion (rgaa_8_5) or theme (rgaa_theme_8).",
+            "example": "wcag143"
+          }
+        ],
+        "intent": "List the WCAG success criteria (or RGAA criteria on an RGAA dashboard) a custom dashboard fails, each with its number, name, level, confirmed and needs-review issue counts and the rules behind it, most issues first - use this for 'which WCAG criteria fail most on this dashboard' or the issues under one criterion.",
+        "guidance": [
+          "The rows are under data.rules but each row is a CRITERION, not a rule: tag (wcag143), value (1.4.3), name, level (A, AA, AAA), principle, regulations, and rules = the rule codes behind it.",
+          "To list the failing elements for a criterion, pass that row's rules array as rule_code to list_custom_dashboard_rule_components.",
+          "A rule tagged with several criteria counts in each row, so the rows can add up to more than data.confirmedIssueCount; the two data totals count each rule once and match list_custom_dashboard_issues_by_rule.",
+          "On an RGAA 4.1 dashboard the rows are RGAA criteria (rgaa_X_Y) and their names are in French.",
+          "Criteria with no issues are left out: for passing and not-covered criteria use get_custom_dashboard_conformance_summary.",
+          "Only the first severity value is used. A severity outside minor, moderate, serious, critical or a url over 4096 characters answers 422."
+        ],
+        "returns": [
+          "data.rules.tag",
+          "data.rules.value",
+          "data.rules.name",
+          "data.rules.level",
+          "data.rules.principle",
+          "data.rules.violationCount",
+          "data.rules.needsReviewCount",
+          "data.rules.issueCount",
+          "data.rules.rules",
+          "data.confirmedIssueCount",
+          "data.needsReviewIssueCount"
+        ],
+        "paginated": false,
+        "responses": {
+          "401": {
+            "$response": "DashboardUnauthorized"
+          },
+          "403": {
+            "$response": "DashboardForbidden"
+          },
+          "404": {
+            "$response": "DashboardNotFound"
+          },
+          "422": {
+            "$response": "DashboardUnprocessable"
+          },
+          "500": {
+            "$response": "DashboardUpstreamFailure"
+          },
+          "200": {
+            "description": "Failing criteria, most issues first, under data.rules.",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "success": {
+                  "type": "boolean"
+                },
+                "data": {
+                  "type": "object",
+                  "properties": {
+                    "rules": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "tag": {
+                            "type": "string",
+                            "description": "wcag143, or rgaa_X_Y on RGAA dashboards."
+                          },
+                          "code": {
+                            "type": "string",
+                            "description": "Same as tag."
+                          },
+                          "value": {
+                            "type": "string",
+                            "description": "Human number, e.g. 1.4.3."
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "help": {
+                            "type": "string",
+                            "description": "Same as name."
+                          },
+                          "description": {
+                            "type": "string"
+                          },
+                          "level": {
+                            "type": "string"
+                          },
+                          "principle": {
+                            "type": "string"
+                          },
+                          "regulations": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "violationCount": {
+                            "type": "integer"
+                          },
+                          "needsReviewCount": {
+                            "type": "integer"
+                          },
+                          "issueCount": {
+                            "type": "integer"
+                          },
+                          "rules": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            },
+                            "description": "Rule codes behind this criterion."
+                          }
+                        }
+                      }
+                    },
+                    "confirmedIssueCount": {
+                      "type": "integer"
+                    },
+                    "needsReviewIssueCount": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "name": "list_custom_dashboard_rule_components",
+        "method": "POST",
+        "path": "/api/custom_dashboards/{id}/components",
+        "host": "dashboard",
+        "auth": {
+          "type": "oauth2"
+        },
+        "mode": "read",
+        "entity": "custom_dashboard",
+        "path_params": [
+          {
+            "name": "id",
+            "type": "integer",
+            "required": true,
+            "description": "The dashboard id from list_custom_dashboards.",
+            "example": 12345
+          }
+        ],
+        "body": [
+          {
+            "name": "rule_code",
+            "type": "array",
+            "required": true,
+            "description": "Rule codes to drill into: one rules[].code from list_custom_dashboard_issues_by_rule, or a criterion row's rules array from list_custom_dashboard_issues_by_guideline.",
+            "example": [
+              "color-contrast"
+            ]
+          },
+          {
+            "name": "needs_review",
+            "type": "boolean",
+            "required": true,
+            "description": "false: confirmed issues only. true: the confirmed-only filter is lifted.",
+            "example": false
+          },
+          {
+            "name": "url",
+            "type": "string",
+            "maxLength": 4096,
+            "description": "Keep one page: a url from list_custom_dashboard_pages.",
+            "example": "https://example.com/checkout"
+          },
+          {
+            "name": "severity",
+            "type": "array",
+            "description": "Impact to keep: minor, moderate, serious or critical. Only the FIRST value is applied.",
+            "example": [
+              "critical"
+            ]
+          },
+          {
+            "name": "page",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000,
+            "default": 1,
+            "description": "Result page number, from 1.",
+            "example": 2
+          },
+          {
+            "name": "page_size",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1500,
+            "default": 30,
+            "description": "Components per result page, 1 to 1500.",
+            "example": 100
+          }
+        ],
+        "intent": "List the page elements (components, e.g. button#submit) that fail given rules on a custom dashboard, each with its issue count - use this to see which elements break a rule or criterion before reading individual issues.",
+        "guidance": [
+          "data.components[].id is the component id get_custom_dashboard_issue takes as component_id, together with the same rule_code.",
+          "issueCount is the sum over the component's behaviours; behaviours splits it by behaviour (the behaviour value can be passed to get_custom_dashboard_issue as behaviour_value).",
+          "data.totalComponents is the total across all result pages; data.info carries the paging state.",
+          "No HTML, selector or fix text here: read those per issue with get_custom_dashboard_issue.",
+          "Missing rule_code or needs_review answers 422, as does a severity outside minor, moderate, serious, critical, page outside 1-1000 or page_size outside 1-1500."
+        ],
+        "returns": [
+          "data.components.id",
+          "data.components.issueCount",
+          "data.components.behaviours",
+          "data.totalComponents",
+          "data.info"
+        ],
+        "paginated": true,
+        "max_page_size": 1500,
+        "responses": {
+          "401": {
+            "$response": "DashboardUnauthorized"
+          },
+          "403": {
+            "$response": "DashboardForbidden"
+          },
+          "404": {
+            "$response": "DashboardNotFound"
+          },
+          "422": {
+            "$response": "DashboardUnprocessable"
+          },
+          "500": {
+            "$response": "DashboardUpstreamFailure"
+          },
+          "200": {
+            "description": "One result page of failing components with issue counts.",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "success": {
+                  "type": "boolean"
+                },
+                "data": {
+                  "type": "object",
+                  "properties": {
+                    "components": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "description": "Component id, e.g. button#submit."
+                          },
+                          "issueCount": {
+                            "type": "integer"
+                          },
+                          "behaviours": {
+                            "type": "array",
+                            "items": {
+                              "type": "object"
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "totalComponents": {
+                      "type": "integer"
+                    },
+                    "info": {
+                      "type": "object"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "name": "get_custom_dashboard_issue",
+        "method": "POST",
+        "path": "/api/custom_dashboards/{id}/issue",
+        "host": "dashboard",
+        "auth": {
+          "type": "oauth2"
+        },
+        "mode": "read",
+        "entity": "custom_dashboard",
+        "path_params": [
+          {
+            "name": "id",
+            "type": "integer",
+            "required": true,
+            "description": "The dashboard id from list_custom_dashboards.",
+            "example": 12345
+          }
+        ],
+        "body": [
+          {
+            "name": "component_id",
+            "type": "string",
+            "required": true,
+            "description": "A components[].id from list_custom_dashboard_rule_components.",
+            "example": "button#submit"
+          },
+          {
+            "name": "rule_code",
+            "type": "array",
+            "required": true,
+            "description": "The same rule codes used for list_custom_dashboard_rule_components.",
+            "example": [
+              "color-contrast"
+            ]
+          },
+          {
+            "name": "needs_review",
+            "type": "boolean",
+            "description": "false or omitted: confirmed issues only. true: the confirmed-only filter is lifted. Ignored when issue_id is sent.",
+            "example": false
+          },
+          {
+            "name": "url",
+            "type": "string",
+            "maxLength": 4096,
+            "description": "Keep one page: a url from list_custom_dashboard_pages.",
+            "example": "https://example.com/checkout"
+          },
+          {
+            "name": "severity",
+            "type": "array",
+            "description": "Impact to keep: minor, moderate, serious or critical. Only the FIRST value is applied.",
+            "example": [
+              "critical"
+            ]
+          },
+          {
+            "name": "starting_after",
+            "type": "string",
+            "description": "Paging forward: the data.issueId of the issue just read.",
+            "example": "3f2a9c1e-0000-4000-8000-000000000000"
+          },
+          {
+            "name": "ending_before",
+            "type": "string",
+            "description": "Paging backward: the data.issueId of the issue just read.",
+            "example": "3f2a9c1e-0000-4000-8000-000000000000"
+          },
+          {
+            "name": "issue_id",
+            "type": "string",
+            "description": "Jump to this one issue by its data.issueId (a uuid, not a number).",
+            "example": "3f2a9c1e-0000-4000-8000-000000000000"
+          },
+          {
+            "name": "behaviour_value",
+            "type": "string",
+            "description": "Keep one behaviour of the component, from its behaviours in list_custom_dashboard_rule_components.",
+            "example": "example-behaviour"
+          }
+        ],
+        "intent": "Read one accessibility issue on a custom dashboard - the failing element's HTML, selector, page, failure summary, impact, the rule and how to fix it, review state, and which scans found it with links to their reports - stepping through a component's issues one at a time.",
+        "guidance": [
+          "Returns ONE issue per call. To read the next one send starting_after = the data.issueId just read, with the same component_id and rule_code.",
+          "issueId is a uuid string. ruleId is the rule code. sourceTests lists the scans the issue was found in, each with buildName, issueStatus (visible or hidden) and reportLink - the link to give a user.",
+          "duplicateCount above 0 means the same issue was found elsewhere and folded into this one: list them with list_custom_dashboard_duplicate_issues using this issue's signatureV2 and issueId.",
+          "scanRunId names the scan run the issue came from.",
+          "404 'Issue not found' means the issue's scan or local record could not be resolved. 500 'TestHub request failed' is also what comes back when no issue matches the filters.",
+          "Missing component_id or rule_code answers 422."
+        ],
+        "returns": [
+          "data.issueId",
+          "data.ruleId",
+          "data.componentId",
+          "data.impact",
+          "data.url",
+          "data.html",
+          "data.target",
+          "data.failureSummary",
+          "data.ruleData",
+          "data.remediationData",
+          "data.needsReview",
+          "data.confirmed",
+          "data.sourceTests",
+          "data.signatureV2",
+          "data.duplicateCount",
+          "data.scanRunId",
+          "data.issueIndex"
+        ],
+        "paginated": false,
+        "responses": {
+          "401": {
+            "$response": "DashboardUnauthorized"
+          },
+          "403": {
+            "$response": "DashboardForbidden"
+          },
+          "404": {
+            "$response": "DashboardNotFound"
+          },
+          "422": {
+            "$response": "DashboardUnprocessable"
+          },
+          "500": {
+            "$response": "DashboardUpstreamFailure"
+          },
+          "200": {
+            "description": "One issue under data.",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "success": {
+                  "type": "boolean"
+                },
+                "data": {
+                  "type": "object",
+                  "properties": {
+                    "issueId": {
+                      "type": "string",
+                      "description": "Issue uuid."
+                    },
+                    "signatureV2": {
+                      "type": "string"
+                    },
+                    "duplicateCount": {
+                      "type": "integer"
+                    },
+                    "ruleId": {
+                      "type": "string",
+                      "description": "Rule code."
+                    },
+                    "componentId": {
+                      "type": "string"
+                    },
+                    "impact": {
+                      "type": "string"
+                    },
+                    "url": {
+                      "type": "string"
+                    },
+                    "html": {
+                      "type": "string"
+                    },
+                    "target": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "failureSummary": {
+                      "type": "string"
+                    },
+                    "confirmed": {
+                      "type": "boolean"
+                    },
+                    "needsReview": {
+                      "type": "boolean"
+                    },
+                    "ruleData": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "help": {
+                          "type": "string"
+                        },
+                        "description": {
+                          "type": "string"
+                        },
+                        "tags": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    },
+                    "remediationData": {
+                      "type": "object"
+                    },
+                    "sourceTests": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "buildName": {
+                            "type": "string"
+                          },
+                          "issueStatus": {
+                            "type": "string"
+                          },
+                          "reportLink": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    },
+                    "scanRunId": {
+                      "type": "string"
+                    },
+                    "proxyMap": {
+                      "type": "object"
+                    },
+                    "issueIndex": {
+                      "type": "integer"
+                    },
+                    "timestamp": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "name": "list_custom_dashboard_duplicate_issues",
+        "method": "GET",
+        "path": "/api/custom_dashboards/{id}/duplicate_issues",
+        "host": "dashboard",
+        "auth": {
+          "type": "oauth2"
+        },
+        "mode": "read",
+        "entity": "custom_dashboard",
+        "path_params": [
+          {
+            "name": "id",
+            "type": "integer",
+            "required": true,
+            "description": "The dashboard id from list_custom_dashboards.",
+            "example": 12345
+          }
+        ],
+        "query": [
+          {
+            "name": "signature_v2",
+            "type": "string",
+            "required": true,
+            "description": "data.signatureV2 of the issue read with get_custom_dashboard_issue.",
+            "example": "examplesignaturev2hash"
+          },
+          {
+            "name": "representative_uuid",
+            "type": "string",
+            "required": true,
+            "description": "data.issueId of that same issue.",
+            "example": "3f2a9c1e-0000-4000-8000-000000000000"
+          },
+          {
+            "name": "after_uuid",
+            "type": "string",
+            "description": "Next page: data.pageInfo.afterUuid from the previous page. Never together with before_uuid.",
+            "example": "3f2a9c1e-0000-4000-8000-000000000001"
+          },
+          {
+            "name": "before_uuid",
+            "type": "string",
+            "description": "Previous page: data.pageInfo.beforeUuid from the previous page. Never together with after_uuid.",
+            "example": "3f2a9c1e-0000-4000-8000-000000000002"
+          },
+          {
+            "name": "per_page",
+            "type": "integer",
+            "default": 100,
+            "description": "Duplicates per page.",
+            "example": 50
+          }
+        ],
+        "intent": "List the duplicate copies of one custom dashboard issue - the same problem found on other pages or in other scans that the dashboard folded into a single issue - each with its page and element - use this for 'where else does this issue occur'.",
+        "guidance": [
+          "Call it only after get_custom_dashboard_issue, and only when that issue's duplicateCount is above 0: signature_v2 and representative_uuid both come from that answer.",
+          "Pages by cursor: send data.pageInfo.afterUuid back as after_uuid for the next page; sending both after_uuid and before_uuid answers 422.",
+          "The duplicates are already excluded from the dashboard's issue counts: never add them back.",
+          "A dashboard with no scans answers 200 with issues [].",
+          "Missing signature_v2 or representative_uuid answers 422."
+        ],
+        "returns": [
+          "data.issues",
+          "data.pageInfo.afterUuid",
+          "data.pageInfo.beforeUuid"
+        ],
+        "paginated": true,
+        "max_page_size": 100,
+        "responses": {
+          "401": {
+            "$response": "DashboardUnauthorized"
+          },
+          "403": {
+            "$response": "DashboardForbidden"
+          },
+          "404": {
+            "$response": "DashboardNotFound"
+          },
+          "422": {
+            "$response": "DashboardUnprocessable"
+          },
+          "500": {
+            "$response": "DashboardUpstreamFailure"
+          },
+          "200": {
+            "description": "One cursor page of duplicate issues.",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "success": {
+                  "type": "boolean"
+                },
+                "data": {
+                  "type": "object",
+                  "properties": {
+                    "issues": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      }
+                    },
+                    "pageInfo": {
+                      "type": "object",
+                      "properties": {
+                        "afterUuid": {
+                          "type": "string",
+                          "description": "null on the last page."
+                        },
+                        "beforeUuid": {
+                          "type": "string",
+                          "description": "null on the first page."
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "name": "list_custom_dashboard_scan_tags",
+        "method": "GET",
+        "path": "/api/custom_dashboards/tags",
+        "host": "dashboard",
+        "auth": {
+          "type": "oauth2"
+        },
+        "mode": "read",
+        "entity": "custom_dashboard",
+        "intent": "List the account's Website Scanner tags (id and name) that can be used to pick scans when building a custom dashboard - use this for 'what scan tags do we have'.",
+        "guidance": [
+          "These are the account's Website Scanner tags, not tags of one dashboard: it takes no dashboard id and does not say which dashboards or scans carry each tag.",
+          "data.tags is the whole list, with no paging.",
+          "403 with errorCode FEATURE_NOT_ENABLED means the tag filter is not switched on for this account yet; 502 with errorCode CENTRAL_SCANNER_UPSTREAM_ERROR means the Website Scanner service did not answer - retry shortly."
+        ],
+        "returns": [
+          "data.tags.id",
+          "data.tags.name"
+        ],
+        "paginated": false,
+        "responses": {
+          "401": {
+            "$response": "DashboardUnauthorized"
+          },
+          "403": {
+            "$response": "DashboardForbidden"
+          },
+          "422": {
+            "$response": "DashboardUnprocessable"
+          },
+          "502": {
+            "$response": "DashboardUpstreamFailure"
+          },
+          "200": {
+            "description": "Every Website Scanner tag in the account.",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "success": {
+                  "type": "boolean"
+                },
+                "data": {
+                  "type": "object",
+                  "properties": {
+                    "tags": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "integer"
+                          },
+                          "name": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "name": "list_custom_dashboard_wcag_versions",
+        "method": "GET",
+        "path": "/api/custom_dashboards/wcag_versions",
+        "host": "dashboard",
+        "auth": {
+          "type": "oauth2"
+        },
+        "mode": "read",
+        "entity": "custom_dashboard",
+        "intent": "List the accessibility standards a custom dashboard can be measured against - WCAG 2.0, 2.1 and 2.2 at levels A, AA and AAA, RGAA 4.1, and the account's Custom Configuration when it has one - use this for 'which WCAG versions can a dashboard use'.",
+        "guidance": [
+          "The list is under data.wcag_versions (snake_case, unlike the other dashboard answers). Each entry has label and value.",
+          "For the standard versions value equals label: WCAG 2.2 AAA, WCAG 2.2 AA, WCAG 2.2 A, WCAG 2.1 AAA, WCAG 2.1 AA, WCAG 2.1 A, WCAG 2.0 AAA, WCAG 2.0 AA, WCAG 2.0 A, RGAA 4.1.",
+          "When the account has a custom rule configuration it comes first, labelled Custom Configuration, and its value is the configuration's version number, not a label.",
+          "It takes no dashboard id: for the version one dashboard uses, read settings.wcagVersion from get_custom_dashboard."
+        ],
+        "returns": [
+          "data.wcag_versions.label",
+          "data.wcag_versions.value"
+        ],
+        "paginated": false,
+        "responses": {
+          "401": {
+            "$response": "DashboardUnauthorized"
+          },
+          "403": {
+            "$response": "DashboardForbidden"
+          },
+          "422": {
+            "$response": "DashboardUnprocessable"
+          },
+          "200": {
+            "description": "The selectable standards.",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "success": {
+                  "type": "boolean"
+                },
+                "data": {
+                  "type": "object",
+                  "properties": {
+                    "wcag_versions": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "label": {
+                            "type": "string"
+                          },
+                          "value": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "name": "get_build_page_trends",
+        "method": "GET",
+        "path": "/api/v2/projects/{project_name}/test_runs/{test_run_name}/trends",
+        "host": "dashboard",
+        "auth": {
+          "type": "oauth2"
+        },
+        "mode": "read",
+        "entity": "test_run",
+        "path_params": [
+          {
+            "name": "project_name",
+            "type": "string",
+            "required": true,
+            "description": "Not read; any value works.",
+            "example": "example-project"
+          },
+          {
+            "name": "test_run_name",
+            "type": "string",
+            "required": true,
+            "description": "Not read; any value works.",
+            "example": "Build"
+          }
+        ],
+        "query": [
+          {
+            "name": "th_build_id",
+            "type": "string",
+            "required": true,
+            "maxLength": 255,
+            "description": "The build's or scan run's thBuildId.",
+            "example": "abc123examplebuilduuid"
+          },
+          {
+            "name": "breakdown",
+            "type": "string",
+            "required": true,
+            "values": [
+              "page"
+            ],
+            "description": "Always page. Anything else, or leaving it out, answers 422.",
+            "example": "page"
+          },
+          {
+            "name": "central_scanner",
+            "type": "boolean",
+            "values": [
+              true,
+              false
+            ],
+            "description": "true for a Website Scanner run; false or omitted for an Automated Tests build. Unlike the other build reads, false really means false here; any other value answers 422.",
+            "example": true
+          },
+          {
+            "name": "page_key",
+            "type": "string",
+            "description": "One page's URL or key, to get that page alone. Omit for every page. Matching ignores case, a leading www. and one trailing /.",
+            "example": "https://example.com/checkout"
+          }
+        ],
+        "intent": "Follow each page of a build or scan run over the recent builds of the same name: per page and per build, whether it was scanned, its issue count, severity split and score - use it to see which pages got better or worse.",
+        "guidance": [
+          "data.window lists up to 8 recent completed builds of the same name (Website Scanner: same scan), oldest first; window[].thBuildId opens each one and window[].id is the TestHub id.",
+          "data.pages[].runs lines up with data.window by position. Each run has pageStatus (scanned, redirected, failed, not_scanned), matchedUrls, issueCount, issueSummary (critical/serious/moderate/minor) and score. issueCount, issueSummary and score are null when the page has no data in that build.",
+          "A page_key that matches no page of this build returns one entry with pageKey null and every run not_scanned - it is not an error.",
+          "It does not return rule names, components or individual issues; use list_build_issues_by_rule with pages for that.",
+          "413 errorCode page_trend_too_many_pages (with pageCount and limit, 1500 by default): retry with page_key for one page. 429 page_trend_rate_limited: 30 calls a minute per user, wait Retry-After seconds. 504 page_trend_timeout (10 s budget) and 502 page_trend_source_failed are upstream failures. 422 invalid_page_trend_params: breakdown is not page, central_scanner is not true/false, or page_url / page_key_hash were sent (both refused).",
+          "data.degraded is non-null when Website Scanner page statuses could not be read for some builds (window_indexes). A page-level error page_trend_source_failed means that page's data is missing upstream for the open build.",
+          "Wrong central_scanner for the build answers 404 \"TestRun Not Found\"."
+        ],
+        "returns": [
+          "data.mode",
+          "data.pageCount",
+          "data.window",
+          "data.pages.pageKey",
+          "data.pages.error",
+          "data.pages.runs",
+          "data.degraded"
+        ],
+        "responses": {
+          "401": {
+            "$response": "DashboardUnauthorized"
+          },
+          "403": {
+            "$response": "DashboardForbidden"
+          },
+          "404": {
+            "$response": "DashboardNotFound"
+          },
+          "413": {
+            "description": "Too many pages for an all-pages read: {success:false, errorCode:\"page_trend_too_many_pages\", pageCount, limit}. Retry with page_key."
+          },
+          "422": {
+            "$response": "DashboardUnprocessable"
+          },
+          "429": {
+            "description": "{success:false, errorCode:\"page_trend_rate_limited\", retryAfter}; Retry-After header in seconds."
+          },
+          "502": {
+            "$response": "DashboardUpstreamFailure"
+          },
+          "504": {
+            "$response": "DashboardUpstreamFailure"
+          },
+          "200": {
+            "description": "Per-page trend over the run window under data. From code (PageTrendService#assemble); not yet seen live.",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "success": {
+                  "type": "boolean"
+                },
+                "data": {
+                  "type": "object",
+                  "properties": {
+                    "mode": {
+                      "type": "string",
+                      "description": "all_pages or single_page"
+                    },
+                    "pageCount": {
+                      "type": "integer"
+                    },
+                    "degraded": {
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "description": "nested record; null when nothing degraded"
+                    },
+                    "window": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "integer"
+                          },
+                          "thBuildId": {
+                            "type": "string"
+                          },
+                          "buildNumber": {
+                            "type": "integer"
+                          },
+                          "timestamp": {
+                            "type": "string"
+                          },
+                          "isGrouped": {
+                            "type": "boolean"
+                          }
+                        }
+                      }
+                    },
+                    "pages": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "pageKey": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "error": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "runs": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "pageStatus": {
+                                  "type": "string"
+                                },
+                                "matchedUrls": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "description": "url and scanStatus"
+                                  }
+                                },
+                                "issueCount": {
+                                  "type": [
+                                    "integer",
+                                    "null"
+                                  ]
+                                },
+                                "issueSummary": {
+                                  "type": [
+                                    "object",
+                                    "null"
+                                  ],
+                                  "description": "critical, serious, moderate, minor counts"
+                                },
+                                "score": {
+                                  "type": [
+                                    "number",
+                                    "null"
+                                  ]
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "name": "get_build_issue_filters",
+        "method": "GET",
+        "path": "/api/v2/projects/{project_name}/test_runs/{test_run_name}/filters",
+        "host": "dashboard",
+        "auth": {
+          "type": "oauth2"
+        },
+        "mode": "read",
+        "entity": "test_run",
+        "path_params": [
+          {
+            "name": "project_name",
+            "type": "string",
+            "required": true,
+            "description": "Not read; any value works.",
+            "example": "example-project"
+          },
+          {
+            "name": "test_run_name",
+            "type": "string",
+            "required": true,
+            "description": "Not read; any value works.",
+            "example": "Build"
+          }
+        ],
+        "query": [
+          {
+            "name": "th_build_id",
+            "type": "string",
+            "required": true,
+            "description": "The build's or scan run's thBuildId.",
+            "example": "abc123examplebuilduuid"
+          },
+          {
+            "name": "central_scanner",
+            "type": "boolean",
+            "description": "true for a Website Scanner run; leave it OUT for an Automated Tests build (any value counts as true).",
+            "example": true
+          }
+        ],
+        "intent": "List the values a build's or scan run's issues can be filtered by - the pages, components, issue categories, test files, tags and (Automated Tests only) test cases present in it - to pick the exact pages, components or categories values the issue capabilities accept.",
+        "guidance": [
+          "data.filters.pages, components and categories are the exact strings list_build_issues_by_rule, list_build_issues_by_guideline and the component capabilities take as pages, components and categories.",
+          "data.filters.tests (Automated Tests only) gives each test case's local id (what tests takes), name, file, tags, scopeList and th_btcer_id. Website Scanner runs have no tests key.",
+          "Keys inside data are NOT camelCased: th_btcer_id stays snake_case. status is always the fixed list passed, failed, skipped.",
+          "It holds no counts and no issues. On an RGAA report, categories are RGAA theme keys (rgaa_theme_N).",
+          "A build whose test cases TestHub cannot return answers 200 with success false, the message \"Testhub request failed. Testcases not found at TestHub\" and empty lists.",
+          "Wrong central_scanner answers 404 \"TestRun Not Found\"; a missing th_build_id answers 422."
+        ],
+        "returns": [
+          "data.filters.pages",
+          "data.filters.components",
+          "data.filters.categories",
+          "data.filters.files",
+          "data.filters.tags",
+          "data.filters.tests",
+          "data.filters.status"
+        ],
+        "responses": {
+          "401": {
+            "$response": "DashboardUnauthorized"
+          },
+          "403": {
+            "$response": "DashboardForbidden"
+          },
+          "404": {
+            "$response": "DashboardNotFound"
+          },
+          "422": {
+            "$response": "DashboardUnprocessable"
+          },
+          "500": {
+            "$response": "DashboardUpstreamFailure"
+          },
+          "200": {
+            "description": "Filter values under data.filters, keys not camelCased. From code (TestRunsController#filters_for_testhub); not yet seen live.",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "success": {
+                  "type": "boolean"
+                },
+                "message": {
+                  "type": "string",
+                  "description": "only when success is false"
+                },
+                "data": {
+                  "type": "object",
+                  "properties": {
+                    "filters": {
+                      "type": "object",
+                      "properties": {
+                        "status": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "files": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "tags": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "pages": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "components": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "categories": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "tests": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "integer"
+                              },
+                              "name": {
+                                "type": "string"
+                              },
+                              "tags": {
+                                "type": [
+                                  "array",
+                                  "null"
+                                ]
+                              },
+                              "file": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "scopeList": {
+                                "type": [
+                                  "array",
+                                  "null"
+                                ]
+                              },
+                              "th_btcer_id": {
+                                "type": "string"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "name": "get_build_test_case_list_filters",
+        "method": "GET",
+        "path": "/api/v2/projects/{project_name}/test_runs/{test_run_name}/test_case_filters",
+        "host": "dashboard",
+        "auth": {
+          "type": "oauth2"
+        },
+        "mode": "read",
+        "entity": "test_case",
+        "path_params": [
+          {
+            "name": "project_name",
+            "type": "string",
+            "required": true,
+            "description": "Not read; any value works.",
+            "example": "example-project"
+          },
+          {
+            "name": "test_run_name",
+            "type": "string",
+            "required": true,
+            "description": "Not read; any value works.",
+            "example": "Build"
+          }
+        ],
+        "query": [
+          {
+            "name": "th_build_id",
+            "type": "string",
+            "required": true,
+            "description": "The Automated Tests build's thBuildId.",
+            "example": "abc123examplebuilduuid"
+          },
+          {
+            "name": "central_scanner",
+            "type": "boolean",
+            "description": "true for a Website Scanner run; leave it out for an Automated Tests build (any value counts as true)."
+          }
+        ],
+        "intent": "List the values a build's test case list can be filtered by - test statuses, test files, tags and pages visited - before calling search_build_test_cases.",
+        "guidance": [
+          "Same code as get_build_issue_filters but stops early: only status, files, tags and pages, no components, categories or tests.",
+          "data.filters.pages are the exact URLs search_build_test_cases takes as pages. status is always the fixed list passed, failed, skipped.",
+          "No counts and no test cases; use list_build_test_cases or search_build_test_cases for those.",
+          "A build whose test cases TestHub cannot return answers 200 with success false and empty lists. Wrong central_scanner answers 404 \"TestRun Not Found\"; a missing th_build_id answers 422."
+        ],
+        "returns": [
+          "data.filters.status",
+          "data.filters.files",
+          "data.filters.tags",
+          "data.filters.pages"
+        ],
+        "responses": {
+          "401": {
+            "$response": "DashboardUnauthorized"
+          },
+          "403": {
+            "$response": "DashboardForbidden"
+          },
+          "404": {
+            "$response": "DashboardNotFound"
+          },
+          "422": {
+            "$response": "DashboardUnprocessable"
+          },
+          "500": {
+            "$response": "DashboardUpstreamFailure"
+          },
+          "200": {
+            "description": "Filter values under data.filters. From code (TestRunsController#filters_for_testhub(false)); not yet seen live.",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "success": {
+                  "type": "boolean"
+                },
+                "data": {
+                  "type": "object",
+                  "properties": {
+                    "filters": {
+                      "type": "object",
+                      "properties": {
+                        "status": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "files": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "tags": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "pages": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "name": "search_build_test_cases",
+        "method": "POST",
+        "path": "/api/v2/projects/{project_name}/test_runs/{test_run_name}/test_case_search",
+        "host": "dashboard",
+        "auth": {
+          "type": "oauth2"
+        },
+        "mode": "read",
+        "entity": "test_case",
+        "path_params": [
+          {
+            "name": "project_name",
+            "type": "string",
+            "required": true,
+            "description": "Not read; any value works.",
+            "example": "example-project"
+          },
+          {
+            "name": "test_run_name",
+            "type": "string",
+            "required": true,
+            "description": "Not read; any value works.",
+            "example": "Build"
+          }
+        ],
+        "body": [
+          {
+            "name": "th_build_id",
+            "type": "string",
+            "required": true,
+            "description": "The Automated Tests build's thBuildId.",
+            "example": "abc123examplebuilduuid"
+          },
+          {
+            "name": "central_scanner",
+            "type": "boolean",
+            "description": "true for a Website Scanner run (each scanned page is one test case); leave it out for an Automated Tests build (any value counts as true)."
+          },
+          {
+            "name": "name",
+            "type": "string",
+            "json_path": "/filters/name",
+            "description": "Text to match in test case names (the dashboard sends it from 3 characters).",
+            "example": "Full page"
+          },
+          {
+            "name": "status",
+            "type": "array",
+            "json_path": "/filters/status",
+            "description": "Test statuses to keep: passed, failed, skipped.",
+            "example": [
+              "failed"
+            ]
+          },
+          {
+            "name": "pages",
+            "type": "array",
+            "json_path": "/filters/pages",
+            "description": "Only test cases that visited these exact page URLs (values from get_build_test_case_list_filters).",
+            "example": [
+              "https://example.com/"
+            ]
+          },
+          {
+            "name": "page",
+            "type": "integer",
+            "minimum": 1,
+            "default": 1,
+            "description": "Page number; follow info.next.",
+            "example": 2
+          },
+          {
+            "name": "page_size",
+            "type": "integer",
+            "minimum": 1,
+            "default": 30,
+            "description": "Test cases per page.",
+            "example": 30
+          }
+        ],
+        "intent": "Find test cases in an Automated Tests build by name text, status or page visited, each with file, status, browser and OS, pages and issue counts - the filtered version of list_build_test_cases.",
+        "guidance": [
+          "Same response as list_build_test_cases: top-level {success, filters, testCases, th_build_id, info}, no data wrapper. testCases[].id or thBtcerId is what get_build_test_case_overview takes.",
+          "name, status and pages are sent flat; this surface nests them under filters. With no filter it returns every test case, like list_build_test_cases.",
+          "A pages filter that matches no test case answers 500 with an empty body, not an empty list; read it as no match. A build with no ingested test cases also answers 500.",
+          "Paging: follow info.next until null.",
+          "Wrong central_scanner answers 404 \"TestRun Not Found\"; a missing th_build_id answers 422."
+        ],
+        "returns": [
+          "testCases.id",
+          "testCases.thBtcerId",
+          "testCases.name",
+          "testCases.status",
+          "testCases.file",
+          "testCases.summary",
+          "testCases.pages",
+          "testCases.browserData",
+          "testCases.osData",
+          "info.next"
+        ],
+        "paginated": true,
+        "max_page_size": 30,
+        "responses": {
+          "401": {
+            "$response": "DashboardUnauthorized"
+          },
+          "403": {
+            "$response": "DashboardForbidden"
+          },
+          "404": {
+            "$response": "DashboardNotFound"
+          },
+          "422": {
+            "$response": "DashboardUnprocessable"
+          },
+          "500": {
+            "$response": "DashboardUpstreamFailure"
+          },
+          "200": {
+            "description": "Same top-level shape as list_build_test_cases (filters, testCases, th_build_id, info). From code (TestRunsController#test_cases_for_testhub); not yet seen live with filters."
+          }
+        }
+      },
+      {
+        "name": "get_build_test_case_details",
+        "method": "POST",
+        "path": "/api/v2/projects/{project_name}/test_runs/{test_run_name}/test_cases/meta",
+        "host": "dashboard",
+        "auth": {
+          "type": "oauth2"
+        },
+        "mode": "read",
+        "entity": "test_case",
+        "path_params": [
+          {
+            "name": "project_name",
+            "type": "string",
+            "required": true,
+            "description": "Not read; any value works.",
+            "example": "example-project"
+          },
+          {
+            "name": "test_run_name",
+            "type": "string",
+            "required": true,
+            "description": "Not read; any value works.",
+            "example": "Build"
+          }
+        ],
+        "body": [
+          {
+            "name": "th_build_id",
+            "type": "string",
+            "required": true,
+            "description": "The Automated Tests build's thBuildId.",
+            "example": "abc123examplebuilduuid"
+          },
+          {
+            "name": "test_case_ids",
+            "type": "array",
+            "json_path": "/testCaseIds",
+            "description": "Local test case ids (integers, testCases[].id). Send this OR testhub_btcer_uuid; one of the two is required.",
+            "example": [
+              12345
+            ]
+          },
+          {
+            "name": "testhub_btcer_uuid",
+            "type": "string",
+            "description": "One test case's thBtcerId, instead of test_case_ids.",
+            "example": "abc123examplebtceruuid"
+          }
+        ],
+        "intent": "Read the details of one or several Automated Tests test cases - name, file, tags, scopes, browser and OS, severity counts, and for a single test case the linked ticket.",
+        "guidance": [
+          "Automated Tests only: a Website Scanner run's thBuildId answers 404 \"TestRun Not Found\".",
+          "Neither test_case_ids nor testhub_btcer_uuid answers 422 \"Either 'testCaseIds' or 'testhub_btcer_uuid' is required\". Ids not in this build answer 404 {success:false, data:[]}.",
+          "data.tests[].issueSummary is the severity counts plus issueCount; there are no pages, no score and no issues here - get_build_test_case_overview has those.",
+          "data.tests[].integration (the linked Jira or other ticket) appears only when exactly one test case is asked for and ticket linking is on for the account.",
+          "data.tests[].file is the test's source location from TestHub."
+        ],
+        "returns": [
+          "data.tests.id",
+          "data.tests.testhubBtcerUuid",
+          "data.tests.name",
+          "data.tests.file",
+          "data.tests.tags",
+          "data.tests.scopeList",
+          "data.tests.osData",
+          "data.tests.browserData",
+          "data.tests.issueSummary",
+          "data.tests.integration"
+        ],
+        "responses": {
+          "401": {
+            "$response": "DashboardUnauthorized"
+          },
+          "403": {
+            "$response": "DashboardForbidden"
+          },
+          "404": {
+            "$response": "DashboardNotFound"
+          },
+          "422": {
+            "$response": "DashboardUnprocessable"
+          },
+          "500": {
+            "$response": "DashboardUpstreamFailure"
+          },
+          "200": {
+            "description": "Test case details under data.tests. From code (TestCasesController#meta); not yet seen live.",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "success": {
+                  "type": "boolean"
+                },
+                "data": {
+                  "type": "object",
+                  "properties": {
+                    "tests": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "integer"
+                          },
+                          "testhubBtcerUuid": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "tags": {
+                            "type": [
+                              "array",
+                              "null"
+                            ]
+                          },
+                          "file": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "scopeList": {
+                            "type": [
+                              "array",
+                              "null"
+                            ]
+                          },
+                          "osData": {
+                            "type": "object",
+                            "description": "nested record"
+                          },
+                          "browserData": {
+                            "type": "object",
+                            "description": "nested record"
+                          },
+                          "issueSummary": {
+                            "type": "object",
+                            "description": "severity counts plus issueCount"
+                          },
+                          "integration": {
+                            "type": [
+                              "object",
+                              "null"
+                            ],
+                            "description": "only for a single test case with ticket linking on"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "name": "get_build_test_case_issue_filters",
+        "method": "GET",
+        "path": "/api/v2/projects/{project_name}/test_runs/{test_run_name}/test_cases/{id}/filters",
+        "host": "dashboard",
+        "auth": {
+          "type": "oauth2"
+        },
+        "mode": "read",
+        "entity": "test_case",
+        "path_params": [
+          {
+            "name": "project_name",
+            "type": "string",
+            "required": true,
+            "description": "Not read; any value works.",
+            "example": "example-project"
+          },
+          {
+            "name": "test_run_name",
+            "type": "string",
+            "required": true,
+            "description": "Not read; any value works.",
+            "example": "Build"
+          },
+          {
+            "name": "id",
+            "type": "string",
+            "required": true,
+            "description": "The test case's local id (testCases[].id). Use the integer id: a thBtcerId gives incomplete or build-wide values (see guidance).",
+            "example": "12345"
+          }
+        ],
+        "query": [
+          {
+            "name": "th_build_id",
+            "type": "string",
+            "required": true,
+            "description": "The build's thBuildId.",
+            "example": "abc123examplebuilduuid"
+          }
+        ],
+        "intent": "List the values one test case's issues can be filtered by - severities, the pages it visited, and the components and issue categories it has issues on.",
+        "guidance": [
+          "data.filters.severity is always the fixed list of impacts. pages, components and categories are scoped to this test case.",
+          "Use the local integer id. With a thBtcerId, components and categories come back empty on a non-grouped build and cover the WHOLE build on a grouped build.",
+          "An id that is not in the build does not 404: it answers 200 with empty lists (non-grouped) or build-wide values (grouped). Confirm the id with list_build_test_cases first.",
+          "central_scanner is not read here. No counts and no issues.",
+          "An unknown th_build_id answers 404 \"TestRun Not Found\"; a missing one answers 422."
+        ],
+        "returns": [
+          "data.filters.severity",
+          "data.filters.pages",
+          "data.filters.components",
+          "data.filters.categories"
+        ],
+        "responses": {
+          "401": {
+            "$response": "DashboardUnauthorized"
+          },
+          "403": {
+            "$response": "DashboardForbidden"
+          },
+          "404": {
+            "$response": "DashboardNotFound"
+          },
+          "422": {
+            "$response": "DashboardUnprocessable"
+          },
+          "500": {
+            "$response": "DashboardUpstreamFailure"
+          },
+          "200": {
+            "description": "Filter values under data.filters. From code (TestCasesController#filters); not yet seen live.",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "success": {
+                  "type": "boolean"
+                },
+                "data": {
+                  "type": "object",
+                  "properties": {
+                    "filters": {
+                      "type": "object",
+                      "properties": {
+                        "severity": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "pages": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "components": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "categories": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "name": "list_report_comparison_filters",
+        "method": "GET",
+        "path": "/api/compare/filters",
+        "host": "dashboard",
+        "auth": {
+          "type": "oauth2"
+        },
+        "mode": "read",
+        "entity": "comparison",
+        "query": [
+          {
+            "name": "product",
+            "type": "string",
+            "required": true,
+            "values": [
+              "automated-tests",
+              "central_scanner",
+              "lcnc"
+            ],
+            "description": "automated-tests for two Automated Tests builds, central_scanner for two runs of one Website Scanner scan.",
+            "example": "automated-tests"
+          },
+          {
+            "name": "ids",
+            "type": "string",
+            "required": true,
+            "pattern": "^[a-zA-Z0-9]+(,[a-zA-Z0-9]+)*$",
+            "description": "Two TestHub build uuids joined by a comma (thBuildId, or the trend point id for a scan). Order does not matter.",
+            "example": "abc123def456,ghi789jkl012"
+          },
+          {
+            "name": "type",
+            "type": "string",
+            "values": [
+              "new",
+              "retained",
+              "resolved"
+            ],
+            "default": "new",
+            "description": "Which bucket the filter options are taken from. Omitted means new.",
+            "example": "retained"
+          }
+        ],
+        "intent": "List the values the comparison can be filtered by - the pages, components, issue categories and tests that hold new, retained or resolved issues between two runs - use this to find the exact page URL, componentId or test id to pass to the comparison rules, guidelines, components and issue capabilities.",
+        "guidance": [
+          "data.pages are page URLs, data.components componentIds, data.categories rule category tags such as cat.color. Each list holds only values that have issues in the chosen bucket.",
+          "data.tests: on two non-grouped (or one grouped, one not) builds each row has id (the test case id the comparison filters take in tests), name, file, tags, scopeList and thBtcerId. On two grouped builds id is the test NAME, which is what tests takes there.",
+          "It holds no counts: take counts from get_report_comparison_summary.",
+          "A failure while TestHub looks up the test names answers 500, not a clean error message.",
+          "A 200 with success false and 'Comparison of larger reports are currently not supported.' means the runs are too large to compare. Two runs of different builds answer 404 'TestRun Not Found'; an RGAA run against a WCAG run answers 422 mixed_standard_comparison."
+        ],
+        "returns": [
+          "data.pages",
+          "data.components",
+          "data.categories",
+          "data.tests.id",
+          "data.tests.name",
+          "data.tests.file"
+        ],
+        "responses": {
+          "401": {
+            "$response": "DashboardUnauthorized"
+          },
+          "403": {
+            "$response": "DashboardForbidden"
+          },
+          "404": {
+            "$response": "DashboardNotFound"
+          },
+          "422": {
+            "$response": "DashboardUnprocessable"
+          },
+          "500": {
+            "$response": "DashboardUpstreamFailure"
+          },
+          "200": {
+            "description": "Filter options for the chosen bucket. From the code, not a live call.",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "success": {
+                  "type": "boolean"
+                },
+                "data": {
+                  "type": "object",
+                  "properties": {
+                    "pages": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "components": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "categories": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "tests": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": [
+                              "integer",
+                              "string"
+                            ],
+                            "description": "test case id; the test name on two grouped builds"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "file": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "tags": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "scopeList": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "thBtcerId": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "name": "get_report_comparison_scan_logs",
+        "method": "GET",
+        "path": "/api/compare/scan_logs",
+        "host": "dashboard",
+        "auth": {
+          "type": "oauth2"
+        },
+        "mode": "read",
+        "entity": "comparison",
+        "query": [
+          {
+            "name": "product",
+            "type": "string",
+            "required": true,
+            "values": [
+              "central_scanner"
+            ],
+            "description": "central_scanner: this view exists for two runs of one Website Scanner scan.",
+            "example": "central_scanner"
+          },
+          {
+            "name": "ids",
+            "type": "string",
+            "required": true,
+            "pattern": "^[a-zA-Z0-9]+(,[a-zA-Z0-9]+)*$",
+            "description": "Two Website Scanner run ids (the trend point id from get_website_scanner_scan_trends, the run's thBuildId) joined by a comma. Order does not matter.",
+            "example": "abc123def456,ghi789jkl012"
+          }
+        ],
+        "intent": "Compare the page-by-page scan outcome of two Website Scanner runs - for each URL, whether it loaded, failed or redirected in the base run and in the new run, with a short reason - use this to explain why a page's issues appeared or vanished between runs.",
+        "guidance": [
+          "data is a bare array, one row per page URL: pageUrl, baseScanReport {cumulativeStatus, description} and newScanReport {cumulativeStatus, description}. A page scanned in only one run has only that run's key.",
+          "cumulativeStatus is success, failure or redirect. description is 'Success', the redirect target URL, 'HTTP <code>', 'Could not load the page', 'Failed to start the test', 'Failed to login', 'Local connection not established', or 'Page loaded successfully' / 'Redirected to <url>' followed by a new line and 'Failed to process issues'.",
+          "Base is the older run. Only pages that loaded in both runs are compared in the summary, so a page that failed here explains a missing count there.",
+          "It holds no issues, scores or timings; for one run's own log with score and time use get_scan_run_page_logs.",
+          "When the scanner's log service does not answer, the reply is still 200 with data [] - empty does not prove the runs scanned nothing.",
+          "On an Automated Tests pair the answer is not verified; do not use it there."
+        ],
+        "returns": [
+          "data.pageUrl",
+          "data.baseScanReport.cumulativeStatus",
+          "data.baseScanReport.description",
+          "data.newScanReport.cumulativeStatus",
+          "data.newScanReport.description"
+        ],
+        "responses": {
+          "401": {
+            "$response": "DashboardUnauthorized"
+          },
+          "403": {
+            "$response": "DashboardForbidden"
+          },
+          "404": {
+            "$response": "DashboardNotFound"
+          },
+          "422": {
+            "$response": "DashboardUnprocessable"
+          },
+          "500": {
+            "$response": "DashboardUpstreamFailure"
+          },
+          "200": {
+            "description": "One row per page with each run's outcome. From the code, not a live call.",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "success": {
+                  "type": "boolean"
+                },
+                "data": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "pageUrl": {
+                        "type": "string"
+                      },
+                      "baseScanReport": {
+                        "type": "object",
+                        "properties": {
+                          "cumulativeStatus": {
+                            "type": "string"
+                          },
+                          "description": {
+                            "type": "string"
+                          }
+                        }
+                      },
+                      "newScanReport": {
+                        "type": "object",
+                        "properties": {
+                          "cumulativeStatus": {
+                            "type": "string"
+                          },
+                          "description": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "name": "list_report_comparison_rule_components",
+        "method": "POST",
+        "path": "/api/compare/components",
+        "host": "dashboard",
+        "auth": {
+          "type": "oauth2"
+        },
+        "mode": "read",
+        "entity": "comparison",
+        "query": [
+          {
+            "name": "product",
+            "type": "string",
+            "required": true,
+            "values": [
+              "automated-tests",
+              "central_scanner",
+              "lcnc"
+            ],
+            "description": "automated-tests for two Automated Tests builds, central_scanner for two runs of one Website Scanner scan. Goes in the query string.",
+            "example": "automated-tests"
+          },
+          {
+            "name": "ids",
+            "type": "string",
+            "required": true,
+            "pattern": "^[a-zA-Z0-9]+(,[a-zA-Z0-9]+)*$",
+            "description": "Two TestHub build uuids joined by a comma. Goes in the query string. Order does not matter.",
+            "example": "abc123def456,ghi789jkl012"
+          }
+        ],
+        "body": [
+          {
+            "name": "ruleId",
+            "type": "string",
+            "description": "The rule's numeric id from list_report_comparison_rules (data.id), not its code. Omitted means components across every rule in the bucket.",
+            "example": "12345"
+          },
+          {
+            "name": "type",
+            "type": "string",
+            "values": [
+              "new",
+              "retained",
+              "resolved"
+            ],
+            "default": "new",
+            "description": "Which bucket. Omitted means new.",
+            "example": "new"
+          },
+          {
+            "name": "severity",
+            "type": "array",
+            "description": "Keep only issues of these impacts: minor, moderate, serious, critical.",
+            "example": [
+              "critical"
+            ]
+          },
+          {
+            "name": "pages",
+            "type": "array",
+            "description": "Keep only issues on these page URLs (list_report_comparison_filters data.pages).",
+            "example": [
+              "https://www.example.com/"
+            ]
+          },
+          {
+            "name": "components",
+            "type": "array",
+            "description": "Keep only these componentIds.",
+            "example": [
+              "button#submit"
+            ]
+          },
+          {
+            "name": "tests",
+            "type": "array",
+            "description": "Automated Tests only: test case ids (integers); test names for two grouped builds.",
+            "example": [
+              12345
+            ]
+          },
+          {
+            "name": "categories",
+            "type": "array",
+            "description": "Rule category tags such as cat.color. Only categories present in either run are accepted; any other value answers 422.",
+            "example": [
+              "cat.color"
+            ]
+          },
+          {
+            "name": "issueStatus",
+            "type": "string",
+            "values": [
+              "visible",
+              "hidden",
+              "non-issue"
+            ],
+            "default": "visible",
+            "description": "visible is the normal list.",
+            "example": "visible"
+          },
+          {
+            "name": "needsReview",
+            "type": "boolean",
+            "description": "true for needs-review issues only, false for confirmed only; omit for both.",
+            "example": false
+          },
+          {
+            "name": "bestPractices",
+            "type": "boolean",
+            "description": "true for best-practice rules only, false to leave them out; omit for both.",
+            "example": false
+          }
+        ],
+        "intent": "List the page components (elements) behind one rule's new, retained or resolved issues between two runs, each with its issue count, page count and first page URL - use this to drill from a rule in the comparison into the elements, and get the componentId get_report_comparison_issue takes.",
+        "guidance": [
+          "product and ids go in the query string; ruleId and the filters go in the JSON body.",
+          "data is a bare array of components, most issues first: id (the componentId for get_report_comparison_issue), issueCount, pageCount, url (the first page, alphabetically) and behaviours (value, issueCount, preferred). issueCount leaves out the behaviour the team marked preferred.",
+          "Send the rule's numeric data.id from list_report_comparison_rules as ruleId. On two grouped builds a ruleId that matches no rule is ignored and components of every rule come back, so check the id first.",
+          "An empty array is a normal answer: nothing in that bucket for that rule.",
+          "For the elements behind one WCAG criterion use list_report_comparison_guideline_components.",
+          "Errors: 404 'TestRun Not Found' for runs of different builds, 422 for a bad filter value or an RGAA-vs-WCAG pair, a 200 with success false for runs too large to compare, 500 'request time out' after 30 seconds."
+        ],
+        "returns": [
+          "data.id",
+          "data.issueCount",
+          "data.pageCount",
+          "data.url",
+          "data.behaviours"
+        ],
+        "responses": {
+          "401": {
+            "$response": "DashboardUnauthorized"
+          },
+          "403": {
+            "$response": "DashboardForbidden"
+          },
+          "404": {
+            "$response": "DashboardNotFound"
+          },
+          "422": {
+            "$response": "DashboardUnprocessable"
+          },
+          "500": {
+            "$response": "DashboardUpstreamFailure"
+          },
+          "200": {
+            "description": "data is an array of components. From the code, not a live call.",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "success": {
+                  "type": "boolean"
+                },
+                "data": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "issueCount": {
+                        "type": "integer"
+                      },
+                      "pageCount": {
+                        "type": [
+                          "integer",
+                          "null"
+                        ]
+                      },
+                      "url": {
+                        "type": "string"
+                      },
+                      "behaviours": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "value": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "issueCount": {
+                              "type": "integer"
+                            },
+                            "preferred": {
+                              "type": "boolean"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "name": "list_report_comparison_guideline_components",
+        "method": "POST",
+        "path": "/api/compare/guidelines/{guideline_tag}/components",
+        "host": "dashboard",
+        "auth": {
+          "type": "oauth2"
+        },
+        "mode": "read",
+        "entity": "comparison",
+        "path_params": [
+          {
+            "name": "guideline_tag",
+            "type": "string",
+            "required": true,
+            "pattern": "^(wcag\\d+|rgaa_\\d+_\\d+|rgaa_theme_\\d+)$",
+            "description": "data.tag from list_report_comparison_guidelines, e.g. wcag143. The dotted number 1.4.3 answers 422.",
+            "example": "wcag412"
+          }
+        ],
+        "query": [
+          {
+            "name": "product",
+            "type": "string",
+            "required": true,
+            "values": [
+              "automated-tests",
+              "central_scanner",
+              "lcnc"
+            ],
+            "description": "automated-tests for two Automated Tests builds, central_scanner for two runs of one Website Scanner scan. Goes in the query string.",
+            "example": "automated-tests"
+          },
+          {
+            "name": "ids",
+            "type": "string",
+            "required": true,
+            "pattern": "^[a-zA-Z0-9]+(,[a-zA-Z0-9]+)*$",
+            "description": "Two TestHub build uuids joined by a comma. Goes in the query string. Order does not matter.",
+            "example": "abc123def456,ghi789jkl012"
+          }
+        ],
+        "body": [
+          {
+            "name": "type",
+            "type": "string",
+            "values": [
+              "new",
+              "retained",
+              "resolved"
+            ],
+            "default": "new",
+            "description": "Which bucket. Omitted means new.",
+            "example": "new"
+          },
+          {
+            "name": "severity",
+            "type": "array",
+            "description": "Keep only issues of these impacts: minor, moderate, serious, critical.",
+            "example": [
+              "serious"
+            ]
+          },
+          {
+            "name": "pages",
+            "type": "array",
+            "description": "Keep only issues on these page URLs.",
+            "example": [
+              "https://www.example.com/"
+            ]
+          },
+          {
+            "name": "components",
+            "type": "array",
+            "description": "Keep only these componentIds.",
+            "example": [
+              "button#submit"
+            ]
+          },
+          {
+            "name": "tests",
+            "type": "array",
+            "description": "Automated Tests only: test case ids (integers); test names for two grouped builds.",
+            "example": [
+              12345
+            ]
+          },
+          {
+            "name": "categories",
+            "type": "array",
+            "description": "Rule category tags such as cat.color; only categories present in either run are accepted.",
+            "example": [
+              "cat.color"
+            ]
+          },
+          {
+            "name": "issueStatus",
+            "type": "string",
+            "values": [
+              "visible",
+              "hidden",
+              "non-issue"
+            ],
+            "default": "visible",
+            "description": "visible is the normal list.",
+            "example": "visible"
+          },
+          {
+            "name": "needsReview",
+            "type": "boolean",
+            "description": "true for needs-review issues only, false for confirmed only; omit for both.",
+            "example": false
+          },
+          {
+            "name": "bestPractices",
+            "type": "boolean",
+            "description": "true for best-practice rules only, false to leave them out; omit for both.",
+            "example": false
+          }
+        ],
+        "intent": "List the page components (elements) behind one WCAG (or RGAA) criterion's new, retained or resolved issues between two runs, with issue count, page count, first page URL and the rules involved - use this to drill from a criterion in the comparison into the failing elements.",
+        "guidance": [
+          "product and ids go in the query string; the tag goes in the path; the filters go in the JSON body.",
+          "data is a bare array of components, most issues first: id (the componentId get_report_comparison_issue takes; pair it with guidelineTag there), issueCount, pageCount, url and behaviours.",
+          "behaviours rows carry ruleCode, value, issueCount and preferred. When none of the component's rules has behaviour choices, behaviours is a single row with ruleCode '' and value '', so read the rules from list_report_comparison_guidelines instead.",
+          "RGAA comparisons take tags like rgaa_3_2 (criterion) or rgaa_theme_3 (theme).",
+          "A tag with no issues in the bucket returns 200 with data [].",
+          "Errors: 422 for a malformed tag or bad filter, 404 'TestRun Not Found' for runs of different builds, 500 'request time out' after 30 seconds."
+        ],
+        "returns": [
+          "data.id",
+          "data.issueCount",
+          "data.pageCount",
+          "data.url",
+          "data.behaviours"
+        ],
+        "responses": {
+          "401": {
+            "$response": "DashboardUnauthorized"
+          },
+          "403": {
+            "$response": "DashboardForbidden"
+          },
+          "404": {
+            "$response": "DashboardNotFound"
+          },
+          "422": {
+            "$response": "DashboardUnprocessable"
+          },
+          "500": {
+            "$response": "DashboardUpstreamFailure"
+          },
+          "200": {
+            "description": "data is an array of components. From the code, not a live call.",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "success": {
+                  "type": "boolean"
+                },
+                "data": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "issueCount": {
+                        "type": "integer"
+                      },
+                      "pageCount": {
+                        "type": [
+                          "integer",
+                          "null"
+                        ]
+                      },
+                      "url": {
+                        "type": "string"
+                      },
+                      "behaviours": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "ruleCode": {
+                              "type": "string"
+                            },
+                            "value": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "issueCount": {
+                              "type": "integer"
+                            },
+                            "preferred": {
+                              "type": "boolean"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "name": "list_suppressed_issue_rules",
+        "method": "POST",
+        "path": "/api/v1/suppressed_issues/rules",
+        "host": "dashboard",
+        "auth": {
+          "type": "oauth2"
+        },
+        "mode": "read",
+        "entity": "issue",
+        "body": [
+          {
+            "name": "window",
+            "type": "string",
+            "values": [
+              "last_week",
+              "last_month",
+              "last_two_months",
+              "last_three_months",
+              "last_four_months",
+              "last_six_months"
+            ],
+            "default": "last_week",
+            "description": "How far back to look, by when the report was created.",
+            "example": "last_month"
+          },
+          {
+            "name": "issueStatus",
+            "type": "string",
+            "values": [
+              "hidden",
+              "non-issue"
+            ],
+            "default": "hidden",
+            "description": "hidden: issues someone hid. non-issue: issues a reviewer marked Not an issue.",
+            "example": "hidden"
+          },
+          {
+            "name": "severity",
+            "type": "array",
+            "maxItems": 1,
+            "description": "One impact to keep: minor, moderate, serious or critical. Only the first value is used.",
+            "example": [
+              "serious"
+            ]
+          },
+          {
+            "name": "pages",
+            "type": "array",
+            "maxItems": 1,
+            "description": "One page URL to keep. Only the first value is used.",
+            "example": [
+              "https://www.example.com/"
+            ]
+          }
+        ],
+        "intent": "List the accessibility rules behind the suppressed Workflow Analyzer issues - issues someone hid or marked 'Not an issue' - across all the team's Workflow Analyzer reports in a time window, each rule with its count - use this to audit what has been taken off the normal issue lists.",
+        "guidance": [
+          "A suppressed issue is a Workflow Analyzer issue taken off the normal list: hidden (with a reason; confirmed and needs-review issues both count) or marked 'Not an issue' by a reviewer. This view gathers them from every Workflow Analyzer report created in the window that the user's team can see, and counts the same problem repeated across reports once.",
+          "data.rules is rows of id, code (the rule name, which the components and issue capabilities take in rule_codes), help, description, tags, impact and issueCount for the chosen tab, most first. Rules with 0 on that tab are left out.",
+          "data.hiddenIssueCount and data.markedAsNonIssueCount are the totals of both tabs whatever issueStatus is.",
+          "It holds no visible issues, no per-report breakdown and no who/when/why; read those with get_suppressed_issue. Workflow Analyzer only.",
+          "403 when the hidden-issues view is not switched on for the account, the plan lacks Workflow Analyzer reports, or the user lacks builds:view. 502 'Failed to fetch suppressed issues from TestHub' when the issue store does not answer. 422 for a value outside the lists."
+        ],
+        "returns": [
+          "data.rules.code",
+          "data.rules.help",
+          "data.rules.impact",
+          "data.rules.issueCount",
+          "data.hiddenIssueCount",
+          "data.markedAsNonIssueCount"
+        ],
+        "responses": {
+          "401": {
+            "$response": "DashboardUnauthorized"
+          },
+          "403": {
+            "$response": "DashboardForbidden"
+          },
+          "422": {
+            "$response": "DashboardUnprocessable"
+          },
+          "500": {
+            "$response": "DashboardUpstreamFailure"
+          },
+          "502": {
+            "$response": "DashboardUpstreamFailure"
+          },
+          "200": {
+            "description": "Rule rows for the chosen tab plus both tab totals. From the code, not a live call.",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "success": {
+                  "type": "boolean"
+                },
+                "data": {
+                  "type": "object",
+                  "properties": {
+                    "rules": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "integer"
+                          },
+                          "code": {
+                            "type": "string"
+                          },
+                          "help": {
+                            "type": "string"
+                          },
+                          "description": {
+                            "type": "string"
+                          },
+                          "tags": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "impact": {
+                            "type": "string"
+                          },
+                          "issueCount": {
+                            "type": "integer"
+                          }
+                        }
+                      }
+                    },
+                    "hiddenIssueCount": {
+                      "type": "integer"
+                    },
+                    "markedAsNonIssueCount": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "name": "list_suppressed_issue_guidelines",
+        "method": "POST",
+        "path": "/api/v1/suppressed_issues/guidelines",
+        "host": "dashboard",
+        "auth": {
+          "type": "oauth2"
+        },
+        "mode": "read",
+        "entity": "issue",
+        "body": [
+          {
+            "name": "window",
+            "type": "string",
+            "values": [
+              "last_week",
+              "last_month",
+              "last_two_months",
+              "last_three_months",
+              "last_four_months",
+              "last_six_months"
+            ],
+            "default": "last_week",
+            "description": "How far back to look, by when the report was created.",
+            "example": "last_month"
+          },
+          {
+            "name": "issueStatus",
+            "type": "string",
+            "values": [
+              "hidden",
+              "non-issue"
+            ],
+            "default": "hidden",
+            "description": "hidden: issues someone hid. non-issue: issues a reviewer marked Not an issue.",
+            "example": "non-issue"
+          },
+          {
+            "name": "severity",
+            "type": "array",
+            "maxItems": 1,
+            "description": "One impact to keep. Only the first value is used.",
+            "example": [
+              "critical"
+            ]
+          },
+          {
+            "name": "pages",
+            "type": "array",
+            "maxItems": 1,
+            "description": "One page URL to keep. Only the first value is used.",
+            "example": [
+              "https://www.example.com/"
+            ]
+          }
+        ],
+        "intent": "List the WCAG success criteria behind the suppressed (hidden or 'Not an issue') Workflow Analyzer issues across the team's reports in a time window, with counts and the rules under each - use this to see which WCAG criteria have issues taken off the normal lists.",
+        "guidance": [
+          "Suppressed means hidden or marked 'Not an issue', gathered across every Workflow Analyzer report created in the window that the user's team can see, each problem counted once.",
+          "The rows are under data.rules even though they are criteria: tag (wcag143), value (1.4.3), name, level, principle, issueCount and rules (the rule codes - send them as rule_codes to list_suppressed_issue_components).",
+          "WCAG only: rules with no WCAG success-criterion tag (best practices) do not appear here, so totals can be below list_suppressed_issue_rules. A rule tagged with two criteria counts under both.",
+          "data.hiddenIssueCount and data.markedAsNonIssueCount are rule-level totals of both tabs.",
+          "403 when the hidden-issues view is off for the account, the plan lacks Workflow Analyzer, or builds:view is missing; 502 when the issue store does not answer."
+        ],
+        "returns": [
+          "data.rules.tag",
+          "data.rules.value",
+          "data.rules.name",
+          "data.rules.level",
+          "data.rules.issueCount",
+          "data.rules.rules",
+          "data.hiddenIssueCount",
+          "data.markedAsNonIssueCount"
+        ],
+        "responses": {
+          "401": {
+            "$response": "DashboardUnauthorized"
+          },
+          "403": {
+            "$response": "DashboardForbidden"
+          },
+          "422": {
+            "$response": "DashboardUnprocessable"
+          },
+          "500": {
+            "$response": "DashboardUpstreamFailure"
+          },
+          "502": {
+            "$response": "DashboardUpstreamFailure"
+          },
+          "200": {
+            "description": "Criterion rows under data.rules plus both tab totals. From the code, not a live call.",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "success": {
+                  "type": "boolean"
+                },
+                "data": {
+                  "type": "object",
+                  "properties": {
+                    "rules": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "tag": {
+                            "type": "string"
+                          },
+                          "code": {
+                            "type": "string"
+                          },
+                          "help": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "description": {
+                            "type": "string"
+                          },
+                          "value": {
+                            "type": "string"
+                          },
+                          "level": {
+                            "type": "string"
+                          },
+                          "principle": {
+                            "type": "string"
+                          },
+                          "tags": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "rules": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "issueCount": {
+                            "type": "integer"
+                          }
+                        }
+                      }
+                    },
+                    "hiddenIssueCount": {
+                      "type": "integer"
+                    },
+                    "markedAsNonIssueCount": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "name": "list_suppressed_issue_components",
+        "method": "POST",
+        "path": "/api/v1/suppressed_issues/components",
+        "host": "dashboard",
+        "auth": {
+          "type": "oauth2"
+        },
+        "mode": "read",
+        "entity": "issue",
+        "paginated": true,
+        "max_page_size": 100,
+        "body": [
+          {
+            "name": "rule_codes",
+            "type": "array",
+            "required": true,
+            "minItems": 1,
+            "description": "Rule codes: [code] of one row from list_suppressed_issue_rules, or the rules list of one row from list_suppressed_issue_guidelines.",
+            "example": [
+              "label"
+            ]
+          },
+          {
+            "name": "window",
+            "type": "string",
+            "values": [
+              "last_week",
+              "last_month",
+              "last_two_months",
+              "last_three_months",
+              "last_four_months",
+              "last_six_months"
+            ],
+            "default": "last_week",
+            "description": "Use the same window as the rules or guidelines call.",
+            "example": "last_month"
+          },
+          {
+            "name": "issueStatus",
+            "type": "string",
+            "values": [
+              "hidden",
+              "non-issue"
+            ],
+            "default": "hidden",
+            "description": "Use the same tab as the rules or guidelines call.",
+            "example": "hidden"
+          },
+          {
+            "name": "severity",
+            "type": "array",
+            "maxItems": 1,
+            "description": "One impact to keep. Only the first value is used.",
+            "example": [
+              "serious"
+            ]
+          },
+          {
+            "name": "pages",
+            "type": "array",
+            "maxItems": 1,
+            "description": "One page URL to keep. Only the first value is used.",
+            "example": [
+              "https://www.example.com/"
+            ]
+          },
+          {
+            "name": "page",
+            "type": "integer",
+            "minimum": 1,
+            "default": 1,
+            "description": "1-based page.",
+            "example": 1
+          },
+          {
+            "name": "per_page",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100,
+            "default": 100,
+            "description": "Components per page.",
+            "example": 100
+          }
+        ],
+        "intent": "List the page components (elements) whose issues for a rule (or a criterion's rules) were suppressed - hidden or marked 'Not an issue' - across the team's Workflow Analyzer reports, with counts - use this to drill from a suppressed rule into the elements and get the component id get_suppressed_issue takes.",
+        "guidance": [
+          "data.components rows: id (the component_id get_suppressed_issue takes), issueCount and behaviours (value, issueCount, preferred). data.totalComponents is the total; data.info carries the paging.",
+          "Keep window and issueStatus the same as on the rules or guidelines call, or the counts will not match.",
+          "Missing or empty rule_codes answers 422.",
+          "No page URLs or per-report detail here; read them with get_suppressed_issue.",
+          "403 when the hidden-issues view is off for the account, the plan lacks Workflow Analyzer, or builds:view is missing; 502 when the issue store does not answer."
+        ],
+        "returns": [
+          "data.components.id",
+          "data.components.issueCount",
+          "data.components.behaviours",
+          "data.totalComponents",
+          "data.info"
+        ],
+        "responses": {
+          "401": {
+            "$response": "DashboardUnauthorized"
+          },
+          "403": {
+            "$response": "DashboardForbidden"
+          },
+          "422": {
+            "$response": "DashboardUnprocessable"
+          },
+          "500": {
+            "$response": "DashboardUpstreamFailure"
+          },
+          "502": {
+            "$response": "DashboardUpstreamFailure"
+          },
+          "200": {
+            "description": "One page of components. From the code; data.info keys from the repo's OpenAPI file, not a live call.",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "success": {
+                  "type": "boolean"
+                },
+                "data": {
+                  "type": "object",
+                  "properties": {
+                    "components": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "issueCount": {
+                            "type": "integer"
+                          },
+                          "behaviours": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "value": {
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ]
+                                },
+                                "issueCount": {
+                                  "type": "integer"
+                                },
+                                "preferred": {
+                                  "type": "boolean"
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "totalComponents": {
+                      "type": "integer"
+                    },
+                    "info": {
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "description": "nested record"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "name": "get_suppressed_issue",
+        "method": "POST",
+        "path": "/api/v1/suppressed_issues/issue",
+        "host": "dashboard",
+        "auth": {
+          "type": "oauth2"
+        },
+        "mode": "read",
+        "entity": "issue",
+        "body": [
+          {
+            "name": "rule_codes",
+            "type": "array",
+            "required": true,
+            "minItems": 1,
+            "description": "The same rule codes sent to list_suppressed_issue_components.",
+            "example": [
+              "label"
+            ]
+          },
+          {
+            "name": "component_id",
+            "type": "string",
+            "required": true,
+            "description": "data.components[].id from list_suppressed_issue_components.",
+            "example": "input#email"
+          },
+          {
+            "name": "window",
+            "type": "string",
+            "values": [
+              "last_week",
+              "last_month",
+              "last_two_months",
+              "last_three_months",
+              "last_four_months",
+              "last_six_months"
+            ],
+            "default": "last_week",
+            "description": "Same window as the earlier calls.",
+            "example": "last_month"
+          },
+          {
+            "name": "issueStatus",
+            "type": "string",
+            "values": [
+              "hidden",
+              "non-issue"
+            ],
+            "default": "hidden",
+            "description": "Same tab as the earlier calls.",
+            "example": "hidden"
+          },
+          {
+            "name": "starting_after",
+            "type": "string",
+            "description": "Paging: data.issueId of the issue just read, to get the next one. Not with ending_before.",
+            "example": "123e4567-e89b-12d3-a456-426614174000"
+          },
+          {
+            "name": "ending_before",
+            "type": "string",
+            "description": "Paging backwards: data.issueId of the issue just read. Not with starting_after.",
+            "example": "123e4567-e89b-12d3-a456-426614174000"
+          },
+          {
+            "name": "issue_id",
+            "type": "string",
+            "description": "Jump to this issue (a TestHub issue uuid, data.issueId).",
+            "example": "123e4567-e89b-12d3-a456-426614174000"
+          },
+          {
+            "name": "behaviour_value",
+            "type": "string",
+            "description": "Keep only issues with this behaviour value (behaviours[].value from the components list)."
+          },
+          {
+            "name": "severity",
+            "type": "array",
+            "maxItems": 1,
+            "description": "One impact to keep. Only the first value is used.",
+            "example": [
+              "serious"
+            ]
+          },
+          {
+            "name": "pages",
+            "type": "array",
+            "maxItems": 1,
+            "description": "One page URL to keep. Only the first value is used.",
+            "example": [
+              "https://www.example.com/"
+            ]
+          }
+        ],
+        "intent": "Read one suppressed (hidden or 'Not an issue') Workflow Analyzer issue - the element's HTML, selector, page, failure message, rule - with who suppressed it, when, why, and every report where it was suppressed - stepping through a component's suppressed issues one at a time.",
+        "guidance": [
+          "One issue per call. To read the next, send data.issueId back as starting_after with the same rule_codes, component_id, window and issueStatus. 404 'Issue not found' means there are no more.",
+          "data.issueId is a TestHub uuid, not a number; data.ruleId is the rule CODE here, not a number.",
+          "Suppression fields: hideReason, suppressedBy, suppressedAt for this issue; sourceTests[] lists each Workflow Analyzer report where it is suppressed (id = report id, buildName, reportLink, issueStatus, reason, suppressedBy, suppressedAt). sourceTests can be cut short: sourceTestsTruncated true and sourceTestsTotal give the real number.",
+          "data.duplicateCount and data.signatureV2 feed list_suppressed_issue_duplicates (with data.issueId as representative_uuid). data.issueIndex is its position in the component.",
+          "Missing rule_codes or component_id, or both starting_after and ending_before, answers 422. 403 when the hidden-issues view is off, the plan lacks Workflow Analyzer, or builds:view is missing; 502 when the issue store does not answer."
+        ],
+        "returns": [
+          "data.issueId",
+          "data.componentId",
+          "data.url",
+          "data.html",
+          "data.target",
+          "data.failureSummary",
+          "data.impact",
+          "data.ruleData",
+          "data.issueStatus",
+          "data.hideReason",
+          "data.suppressedBy",
+          "data.suppressedAt",
+          "data.sourceTests",
+          "data.duplicateCount",
+          "data.signatureV2",
+          "data.issueIndex"
+        ],
+        "responses": {
+          "401": {
+            "$response": "DashboardUnauthorized"
+          },
+          "403": {
+            "$response": "DashboardForbidden"
+          },
+          "404": {
+            "$response": "DashboardNotFound"
+          },
+          "422": {
+            "$response": "DashboardUnprocessable"
+          },
+          "500": {
+            "$response": "DashboardUpstreamFailure"
+          },
+          "502": {
+            "$response": "DashboardUpstreamFailure"
+          },
+          "200": {
+            "description": "One suppressed issue under data. Keys from SuppressedIssues::IssuePresenter, not a live call.",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "success": {
+                  "type": "boolean"
+                },
+                "data": {
+                  "type": "object",
+                  "properties": {
+                    "issueId": {
+                      "type": "string"
+                    },
+                    "signatureV2": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "duplicateCount": {
+                      "type": "integer"
+                    },
+                    "componentId": {
+                      "type": "string"
+                    },
+                    "ruleId": {
+                      "type": "string"
+                    },
+                    "url": {
+                      "type": "string"
+                    },
+                    "target": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "html": {
+                      "type": "string"
+                    },
+                    "failureSummary": {
+                      "type": "string"
+                    },
+                    "impact": {
+                      "type": "string"
+                    },
+                    "confirmed": {
+                      "type": [
+                        "boolean",
+                        "null"
+                      ]
+                    },
+                    "ruleData": {
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "description": "nested record"
+                    },
+                    "engineInfo": {
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "description": "nested record"
+                    },
+                    "page": {
+                      "type": "object",
+                      "description": "nested record"
+                    },
+                    "issueStatus": {
+                      "type": "string"
+                    },
+                    "hideReason": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "suppressedBy": {
+                      "description": "who suppressed it"
+                    },
+                    "suppressedAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "sourceTests": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "integer"
+                          },
+                          "buildName": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "reportLink": {
+                            "type": "string"
+                          },
+                          "issueStatus": {
+                            "type": "string"
+                          },
+                          "reason": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "suppressedBy": {
+                            "description": "who suppressed it on that report"
+                          },
+                          "suppressedAt": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          }
+                        }
+                      }
+                    },
+                    "sourceTestsTotal": {
+                      "type": [
+                        "integer",
+                        "null"
+                      ]
+                    },
+                    "sourceTestsTruncated": {
+                      "type": "boolean"
+                    },
+                    "issueIndex": {
+                      "type": [
+                        "integer",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "name": "list_suppressed_issue_duplicates",
+        "method": "GET",
+        "path": "/api/v1/suppressed_issues/duplicates",
+        "host": "dashboard",
+        "auth": {
+          "type": "oauth2"
+        },
+        "mode": "read",
+        "entity": "issue",
+        "paginated": true,
+        "max_page_size": 100,
+        "query": [
+          {
+            "name": "signature_v2",
+            "type": "string",
+            "required": true,
+            "description": "data.signatureV2 from get_suppressed_issue.",
+            "example": "0f3c9e2a7b1d4c6e8f0a2b4c6d8e0f1a3b5c7d9e1f2a4b6c8d0e2f4a6b8c0d2e"
+          },
+          {
+            "name": "representative_uuid",
+            "type": "string",
+            "required": true,
+            "description": "data.issueId from get_suppressed_issue.",
+            "example": "123e4567-e89b-12d3-a456-426614174000"
+          },
+          {
+            "name": "window",
+            "type": "string",
+            "values": [
+              "last_week",
+              "last_month",
+              "last_two_months",
+              "last_three_months",
+              "last_four_months",
+              "last_six_months"
+            ],
+            "default": "last_week",
+            "description": "Same window the issue was read under.",
+            "example": "last_month"
+          },
+          {
+            "name": "issueStatus",
+            "type": "string",
+            "values": [
+              "hidden",
+              "non-issue"
+            ],
+            "default": "hidden",
+            "description": "Same tab the issue was read under.",
+            "example": "hidden"
+          },
+          {
+            "name": "after_uuid",
+            "type": "string",
+            "description": "Paging: data.pageInfo.nextCursor from the previous page. Not with before_uuid."
+          },
+          {
+            "name": "before_uuid",
+            "type": "string",
+            "description": "Paging backwards: data.pageInfo.prevCursor. Not with after_uuid."
+          },
+          {
+            "name": "per_page",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100,
+            "default": 100,
+            "description": "Rows per page.",
+            "example": 100
+          }
+        ],
+        "intent": "List every other suppressed copy of one suppressed Workflow Analyzer issue - the same problem on other pages or reports - with the report, page, selector and who suppressed each one and when - use this to answer 'where else was this hidden'.",
+        "guidance": [
+          "data.issues rows: uuid, url, target, confirmed (false = marked Not an issue on that report; null or true = hidden), recordStatus, scanRunId, buildUuid, buildName, suppressedBy (a user id), suppressedAt and reportId (the Workflow Analyzer report id). data.duplicateCount is the group size.",
+          "Paging: send data.pageInfo.nextCursor as after_uuid until it is null. A cursor that has gone stale gives an empty page with nextCursor null, not an error.",
+          "Missing signature_v2 or representative_uuid, or both cursors, answers 422.",
+          "No rule or fix help here; read those from get_suppressed_issue.",
+          "403 when the hidden-issues view is off, the plan lacks Workflow Analyzer, or builds:view is missing; 502 when the issue store does not answer."
+        ],
+        "returns": [
+          "data.issues.uuid",
+          "data.issues.url",
+          "data.issues.target",
+          "data.issues.confirmed",
+          "data.issues.buildName",
+          "data.issues.reportId",
+          "data.issues.suppressedBy",
+          "data.issues.suppressedAt",
+          "data.duplicateCount",
+          "data.pageInfo.nextCursor"
+        ],
+        "responses": {
+          "401": {
+            "$response": "DashboardUnauthorized"
+          },
+          "403": {
+            "$response": "DashboardForbidden"
+          },
+          "422": {
+            "$response": "DashboardUnprocessable"
+          },
+          "500": {
+            "$response": "DashboardUpstreamFailure"
+          },
+          "502": {
+            "$response": "DashboardUpstreamFailure"
+          },
+          "200": {
+            "description": "One page of suppressed duplicates. TestHub's rows passed through; keys from the controller comments and the repo's OpenAPI file, not a live call."
+          }
+        }
+      },
+      {
+        "name": "mark_preferred_behavior",
+        "method": "PATCH",
+        "path": "/api/issues/{id}/preferred",
+        "host": "dashboard",
+        "auth": {
+          "type": "oauth2"
+        },
+        "mode": "write",
+        "entity": "issue",
+        "path_params": [
+          {
+            "name": "id",
+            "type": "integer",
+            "required": true,
+            "description": "The local integer issue id (issueId) of the variant to mark, not testhubIssueUuid.",
+            "example": 12345
+          }
+        ],
+        "body": [
+          {
+            "name": "preferred",
+            "type": "boolean",
+            "required": true,
+            "json_path": "/preferred",
+            "description": "true marks this variant as the preferred (correct) one and un-marks the previous choice; false clears the choice when this variant is the current preferred one.",
+            "example": true
+          },
+          {
+            "name": "test_type",
+            "type": "string",
+            "required": true,
+            "values": [
+              "TestCase",
+              "Test"
+            ],
+            "json_path": "/test_type",
+            "description": "TestCase for Automated Tests and Website Scanner, Test for Workflow Analyzer. PDF reports have no preferred behaviour.",
+            "example": "TestCase"
+          }
+        ],
+        "intent": "Mark which variant of an inconsistent component is the preferred (correct) one on the consistency rules, or clear that choice - the 'Mark as preferred' action on the dashboard.",
+        "guidance": [
+          "APPROVAL FIRST: before calling, tell the user exactly what will change (the rule, the component, the variant you will mark and the one it replaces, the report) and wait for an explicit yes in their own words. A request to make the change is not that yes: ask first, and send user_permission granted only after it.",
+          "Only the three consistency rules take this (Consistent identification, Consistent navigation layout, Consistent navigation relative order): the engine found one component that looks or behaves differently on different pages and cannot know which version is right. Any other issue answers 422 'Invalid issue type'.",
+          "Read before you ask: get_build_issue (or the Workflow Analyzer consolidated report) to find each variant's issueId and how it differs, and name both variants in the preview.",
+          "The report's score is re-calculated after the change, and the other variants then count as the inconsistent ones.",
+          "Scope: on a Workflow Analyzer report it applies to that report only. On an Automated Tests build or Website Scanner run that is the LATEST of its build name or scan, it is also saved for that build name or scan, so later runs inherit it. Say which in the preview.",
+          "To undo: mark the previously preferred variant again (preferred true), or send preferred false on the current one to clear the choice. Repeating the current state answers 200 'already marked' and changes nothing.",
+          "403: not the report's author while team report management is off, a role without builds update or manage issues, or AGENT_REPORT_ACTIONS_DISABLED when the account's agent kill switch is on. The reply is {success, message}."
+        ],
+        "returns": [
+          "success",
+          "message"
+        ],
+        "responses": {
+          "401": {
+            "$response": "DashboardUnauthorized"
+          },
+          "403": {
+            "$response": "DashboardForbidden"
+          },
+          "404": {
+            "$response": "DashboardNotFound"
+          },
+          "422": {
+            "$response": "DashboardUnprocessable"
+          },
+          "500": {
+            "$response": "DashboardUpstreamFailure"
+          },
+          "200": {
+            "description": "{success: true, message}: marked preferred, cleared, or already in that state."
+          }
+        }
       }
     ],
     "entities": {
@@ -8429,7 +12463,11 @@
           "get_report_comparison_summary",
           "list_report_comparison_rules",
           "list_report_comparison_guidelines",
-          "get_report_comparison_issue"
+          "get_report_comparison_issue",
+          "list_report_comparison_filters",
+          "get_report_comparison_scan_logs",
+          "list_report_comparison_rule_components",
+          "list_report_comparison_guideline_components"
         ],
         "key_facts": []
       },
@@ -8452,7 +12490,18 @@
           "list_custom_dashboard_scans",
           "get_custom_dashboard_issue_summary",
           "get_custom_dashboard_category_summary",
-          "get_custom_dashboard_score_summary"
+          "get_custom_dashboard_score_summary",
+          "get_custom_dashboard_conformance_summary",
+          "get_custom_dashboard_score_trends",
+          "get_custom_dashboard_issue_trends",
+          "list_custom_dashboard_pages",
+          "list_custom_dashboard_issues_by_rule",
+          "list_custom_dashboard_issues_by_guideline",
+          "list_custom_dashboard_rule_components",
+          "get_custom_dashboard_issue",
+          "list_custom_dashboard_duplicate_issues",
+          "list_custom_dashboard_scan_tags",
+          "list_custom_dashboard_wcag_versions"
         ],
         "key_facts": []
       },
@@ -8511,7 +12560,13 @@
           "bulk_hide_issue_components",
           "review_needs_review_issue",
           "submit_bulk_review_decisions",
-          "undo_bulk_review_decisions"
+          "undo_bulk_review_decisions",
+          "list_suppressed_issue_rules",
+          "list_suppressed_issue_guidelines",
+          "list_suppressed_issue_components",
+          "get_suppressed_issue",
+          "list_suppressed_issue_duplicates",
+          "mark_preferred_behavior"
         ],
         "key_facts": []
       },
@@ -8546,7 +12601,11 @@
         "relations": [],
         "capabilities": [
           "list_build_test_cases",
-          "get_build_test_case_overview"
+          "get_build_test_case_overview",
+          "get_build_test_case_list_filters",
+          "search_build_test_cases",
+          "get_build_test_case_details",
+          "get_build_test_case_issue_filters"
         ],
         "key_facts": []
       },
@@ -8567,7 +12626,9 @@
           "search_build_report_runs",
           "get_build_report_metadata",
           "get_build_report_overview",
-          "list_build_issues_by_rule"
+          "list_build_issues_by_rule",
+          "get_build_page_trends",
+          "get_build_issue_filters"
         ],
         "key_facts": []
       },

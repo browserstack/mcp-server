@@ -47,7 +47,7 @@ const byName = (name: string) =>
 describe("the Web Accessibility dashboard capabilities", () => {
   it("are part of Web Accessibility, not a product of their own", () => {
     expect(products.web_accessibility_dashboard).toBeUndefined();
-    expect(dash.length).toBe(40);
+    expect(dash.length).toBe(67);
     // A twin of list_automated_tests_projects that agents picked instead of it, and a UI
     // polling check no natural request reached in isolated agent sessions.
     expect(byName("list_accessibility_projects")).toBeUndefined();
@@ -90,6 +90,7 @@ describe("the Web Accessibility dashboard capabilities", () => {
       "bulk_hide_issue_components",
       "hide_issues",
       "link_ticket_to_issue",
+      "mark_preferred_behavior",
       "rerun_website_scanner_scan",
       "review_needs_review_issue",
       "revoke_false_positive_feedback",
@@ -392,7 +393,7 @@ describe("every write asks for an explicit yes first", () => {
     (c) => c.mode === "write" && c.host === "dashboard",
   );
 
-  it("covers all seven writes", () => expect(writes.length).toBe(7));
+  it("covers all eight writes", () => expect(writes.length).toBe(8));
 
   it.each(writes.map((c) => [c.name, c]))("%s leads with the approval rule", (_name, c: any) => {
     expect(c.guidance[0]).toMatch(/^APPROVAL FIRST/);

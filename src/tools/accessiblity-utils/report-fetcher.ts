@@ -823,7 +823,11 @@ export class AccessibilityReportFetcher {
         throw new ScanRunNotFoundError(source.thBuildId, routeMissing);
       }
       if (!initResp.ok || !initData?.success) {
-        throw new CallerError(startFailure(source, initResp.status, initData));
+        const message = startFailure(source, initResp.status, initData);
+        // A 4xx names something about the request; a 5xx, no answer, or a 2xx that
+        // reports failure in its body is the product's, and stays untagged.
+        const callers = initResp.status >= 400 && initResp.status < 500;
+        throw callers ? new CallerError(message) : new Error(message);
       }
       taskId = initData.data.task_id;
     }
@@ -842,7 +846,8 @@ export class AccessibilityReportFetcher {
         reportResp.data;
       if (!reportData.success) {
         reportExports.delete(key);
-        throw new CallerError(`Failed to fetch report: ${reportData.error}`);
+        // The export task failed on the product's side after it had accepted the request.
+        throw new Error(`Failed to fetch report: ${reportData.error}`);
       }
       const link = reportData.data?.reportLink;
       if (link) {

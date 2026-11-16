@@ -334,8 +334,11 @@ export class AccessibilityScanner {
         body,
       });
       const data = response.data;
+      // A 2xx with success:false carries whatever the product could not do: a bad setting
+      // is the caller's, "user info missing" or an internal error is not. Left untagged
+      // until the body says which, so it is not counted as the caller's by default.
       if (!data.success)
-        throw new CallerError(
+        throw new Error(
           `Unable to start scan: ${data.errors?.join(", ") || JSON.stringify(data)}`,
         );
       return data;
@@ -707,9 +710,7 @@ export class AccessibilityScanner {
       });
       const data = response.data;
       if (!data.success)
-        throw new CallerError(
-          `Failed to get status: ${data.errors?.join(", ")}`,
-        );
+        throw new Error(`Failed to get status: ${data.errors?.join(", ")}`);
       return data;
     } catch (err: any) {
       const msg = err?.response?.data?.message || err?.message || String(err);

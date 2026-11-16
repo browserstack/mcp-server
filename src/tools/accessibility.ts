@@ -116,7 +116,6 @@ import {
   type ScanArgs,
 } from "./accessiblity-utils/scan-rerun.js";
 import { CallerError } from "../lib/error.js";
-import { markCallerFault } from "../lib/upstream-status.js";
 
 export { EXPERT_QUERY_MAX_CHARS };
 
@@ -1003,10 +1002,7 @@ async function fetchAccessibilityIssues(
       // id, it knows no such run; where it cannot yet, the scan list is searched, as for a link.
       const bare = source.scanName === undefined;
       const thBuildId = source.thBuildId;
-      if (bare && !error.routeMissing) {
-        markCallerFault();
-        return buildIdNotFound(thBuildId);
-      }
+      if (bare && !error.routeMissing) return buildIdNotFound(thBuildId);
       const why = error.routeMissing
         ? "This API does not read a run by its build id yet"
         : "The API could not read this run by the link's build id (not found, or not visible to this account)";
@@ -1014,10 +1010,12 @@ async function fetchAccessibilityIssues(
         source = await reportFetcher.findScanRun(source);
       } catch (searchError) {
         if (bare && searchError instanceof ScanNotInListError) {
-          markCallerFault();
           return buildIdNotFound(thBuildId, searchError);
         }
-        throw new CallerError(
+        // Only a list that was searched and held nothing is the caller's link; a list
+        // that could not be read is not.
+        const Kind = searchError instanceof CallerError ? CallerError : Error;
+        throw new Kind(
           `${why}, and searching the scan list found nothing either: ${
             searchError instanceof Error
               ? searchError.message

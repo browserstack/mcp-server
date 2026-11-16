@@ -128,8 +128,9 @@ export class AccessibilityAuthConfig {
       logger.info(
         `Auth config API returned: ${JSON.stringify(safeAuthConfigData(data))}`,
       );
+      // A 2xx with success:false is the product's answer, not the caller's input.
       if (!data.success) {
-        throw new CallerError(
+        throw new Error(
           `Unable to create auth config: ${data.errors?.join(", ")}`,
         );
       }
@@ -183,8 +184,9 @@ export class AccessibilityAuthConfig {
       });
 
       const data = response.data;
+      // A 2xx with success:false is the product's answer, not the caller's input.
       if (!data.success) {
-        throw new CallerError(
+        throw new Error(
           `Unable to create auth config: ${data.errors?.join(", ")}`,
         );
       }
@@ -220,8 +222,9 @@ export class AccessibilityAuthConfig {
       });
 
       const data = response.data;
+      // A 2xx with success:false is the product's answer, not the caller's input.
       if (!data.success) {
-        throw new CallerError(
+        throw new Error(
           `Unable to get auth config: ${data.errors?.join(", ")}`,
         );
       }

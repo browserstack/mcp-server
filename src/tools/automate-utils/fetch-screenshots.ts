@@ -15,6 +15,7 @@ import {
   isBrowserStackUrl,
 } from "../appautomate-utils/framework-builds.js";
 import { resolveAppAutomateBuildId } from "../failurelogs-utils/resolve-app-build-id.js";
+import { CallerError } from "../../lib/error.js";
 
 /** The session is unknown to the generic logs endpoint (404). */
 export class SessionLogsNotFoundError extends Error {
@@ -52,7 +53,7 @@ async function extractScreenshotUrls(
   });
 
   if (response.status === 413) {
-    throw new Error(
+    throw new CallerError(
       "The logs for this session are too large (over 5 MB) to find screenshots here. Open the session in the BrowserStack dashboard to view them.",
     );
   }
@@ -179,7 +180,7 @@ async function convertUrlsToBase64(urls: string[]): Promise<Screenshot[]> {
 
   const screenshots = results.filter((s): s is Screenshot => s !== null);
   if (urls.length > 0 && screenshots.length === 0) {
-    throw new Error(
+    throw new CallerError(
       "The screenshots in this session are too large (over 10 MB each) to fetch here. Open the session in the BrowserStack dashboard to view them.",
     );
   }

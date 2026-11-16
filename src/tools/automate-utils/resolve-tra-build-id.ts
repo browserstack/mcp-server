@@ -2,7 +2,7 @@ import { SessionType } from "../../lib/constants.js";
 import { getBrowserStackAuth } from "../../lib/get-auth.js";
 import { BrowserStackConfig } from "../../lib/types.js";
 import { apiClient } from "../../lib/apiClient.js";
-import { HttpError, isNotFoundError } from "../../lib/error.js";
+import { HttpError, isNotFoundError, CallerError } from "../../lib/error.js";
 import { fetchLatestBuildId } from "../rca-agent-utils/tra-builds.js";
 import { sessionsListUrl } from "./list-session-ids.js";
 import {
@@ -151,7 +151,7 @@ export async function mapHashedToTra(
   } catch (error) {
     if (!(error instanceof TraBuildNotFoundError)) throw error;
     if (!error.unknownToAutomate) throw error;
-    throw new Error(
+    throw new CallerError(
       `${original instanceof Error ? original.message : String(original)}. ` +
         "No TRA build has this id; get one with listBuildId.",
     );

@@ -1,12 +1,13 @@
 import { apiClient } from "../../lib/apiClient.js";
 import { z } from "zod";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
-import { formatAxiosError } from "../../lib/error.js";
+import { formatAxiosError, CallerError } from "../../lib/error.js";
 import { projectIdentifierToId } from "../testmanagement-utils/TCG-utils/api.js";
 import { getBrowserStackAuth } from "../../lib/get-auth.js";
 import { BrowserStackConfig } from "../../lib/types.js";
 import { getTMBaseURL } from "../../lib/tm-base-url.js";
 import { wrapUntrusted } from "../../lib/untrusted-content.js";
+import { markCallerFault } from "../../lib/upstream-status.js";
 
 // Schema for combined project/folder creation
 export const CreateProjFoldSchema = z.object({
@@ -52,7 +53,7 @@ export async function createProjectOrFolder(
   } = CreateProjFoldSchema.parse(args);
 
   if (!project_name && !project_identifier && !folder_name) {
-    throw new Error(
+    throw new CallerError(
       "Provide project_name (to create project), or project_identifier and folder_name (to create folder).",
     );
   }
@@ -82,6 +83,7 @@ export async function createProjectOrFolder(
       });
 
       if (!res.data.success) {
+        markCallerFault();
         return {
           content: [
             {
@@ -102,7 +104,7 @@ export async function createProjectOrFolder(
   // Step 2: Create folder if folder_name provided
   if (folder_name) {
     if (!projId)
-      throw new Error("Cannot create folder without project_identifier.");
+      throw new CallerError("Cannot create folder without project_identifier.");
     try {
       const tmBaseUrl = await getTMBaseURL(config);
       const res = await apiClient.post({
@@ -125,6 +127,7 @@ export async function createProjectOrFolder(
       });
 
       if (!res.data.success) {
+        markCallerFault();
         return {
           content: [
             {

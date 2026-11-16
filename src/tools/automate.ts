@@ -38,6 +38,9 @@ export async function fetchAutomationScreenshotsTool(
       config,
     );
 
+    // Not tagged as the caller's: an empty result is also what a parsing bug in our
+    // own log reader produces (#545), so it stays unattributed until the tool can tell
+    // "nothing captured" from "nothing found".
     if (screenshots.length === 0) {
       return {
         content: [

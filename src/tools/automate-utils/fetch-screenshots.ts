@@ -80,10 +80,6 @@ const RESPONSE_VALUE_PATTERN = new RegExp(
 const DEBUG_SCREENSHOT_PATTERN = new RegExp(
   String.raw`${LOG_PREFIX}DEBUG (https://\S+)$`,
 );
-// Each S3 segment is one separator (`.` or `-`) followed by alphanumerics. The
-// separator and body classes are disjoint so the segment has a single parse and
-// the pattern matches in linear time: `s3-us-west-2`, `s3.us-west-2`,
-// `s3.dualstack.us-east-1`, etc. all split into separate `-token`/`.token` parts.
 const TRUSTED_HOST_PATTERN =
   /(^|\.)browserstack\.com$|\.s3([.-][a-z0-9]+)*\.amazonaws\.com$|\.backblazeb2\.com$/;
 

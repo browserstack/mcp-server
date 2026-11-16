@@ -220,8 +220,8 @@ class ApiClient {
       return new ApiResponse<T>(res);
     } catch (error: any) {
       // Status 0: the request was sent and got no answer. A refused URL never was sent.
-      if (error.response) recordUpstreamStatus(error.response.status);
-      else if (axios.isAxiosError(error) && error.request)
+      if (error?.response) recordUpstreamStatus(error.response.status);
+      else if (error?.isAxiosError === true && error.request)
         recordUpstreamStatus(0);
       if (error.response && !raise_error) {
         return new ApiResponse<T>(error.response);

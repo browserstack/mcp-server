@@ -64,14 +64,14 @@ describe("withToolCall failure attribution", () => {
   });
 
   it.each([
+    [400, "caller", undefined],
     [404, "caller", undefined],
     [409, "caller", undefined],
+    [422, "caller", undefined],
     [401, "caller", "blocked"],
     [402, "caller", "blocked"],
     [403, "caller", "blocked"],
     [429, "caller", "blocked"],
-    [400, "mcp", "contract_drift"],
-    [422, "mcp", "contract_drift"],
     [405, "mcp", "contract_drift"],
     [410, "mcp", "contract_drift"],
     [415, "mcp", "contract_drift"],
@@ -112,15 +112,43 @@ describe("withToolCall failure attribution", () => {
       failure_class: "upstream",
     });
     vi.clearAllMocks();
-    const drift = await rowOf(() => {
+    // The body the agent wrote is what a 422 rejects, so it is the caller's unless the
+    // handler says otherwise.
+    const rejected = await rowOf(() => {
       trackMCP("invokeCapability", clientInfo, undefined, config, {
         upstream_ok: false,
         upstream_status: 422,
       });
       return { content: [] };
     });
+    expect(rejected).toMatchObject({ outcome: "ok", failure_class: "caller" });
+    expect(rejected).not.toHaveProperty("failure_reason");
+    vi.clearAllMocks();
+    const drift = await rowOf(() => {
+      trackMCP("invokeCapability", clientInfo, undefined, config, {
+        upstream_ok: false,
+        upstream_status: 410,
+      });
+      return { content: [] };
+    });
     expect(drift).toMatchObject({
       outcome: "ok",
+      failure_class: "mcp",
+      failure_reason: "contract_drift",
+    });
+  });
+
+  it("lets a handler that validated the request in full declare drift on a 422", async () => {
+    const row = await rowOf(() => {
+      recordUpstreamStatus(422);
+      trackMCP("someTool", clientInfo, undefined, config, {
+        failure_class: "mcp",
+        failure_reason: "contract_drift",
+      });
+      return failed;
+    });
+    expect(row).toMatchObject({
+      upstream_status: 422,
       failure_class: "mcp",
       failure_reason: "contract_drift",
     });

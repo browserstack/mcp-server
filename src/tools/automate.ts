@@ -22,7 +22,6 @@ import {
 import { trackMCP } from "../lib/instrumentation.js";
 import logger from "../logger.js";
 import { BrowserStackConfig } from "../lib/types.js";
-import { markCallerFault } from "../lib/upstream-status.js";
 
 // Tool function that fetches and processes screenshots from BrowserStack Automate session
 export async function fetchAutomationScreenshotsTool(

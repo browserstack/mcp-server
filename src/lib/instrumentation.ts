@@ -294,11 +294,15 @@ const PROGRAMMING_ERRORS = [TypeError, RangeError, ReferenceError, SyntaxError];
 const BLOCKED_STATUSES = new Set([401, 402, 403, 429]);
 
 /**
- * 4xx that mean the product did not accept the shape of the request. Our own validation
- * had passed it, so the index or tool disagrees with the API: contract drift, ours to fix.
- * A 404 is deliberately not here: it is almost always an id that names nothing.
+ * 4xx that can only mean the product no longer serves the request as the tool or index
+ * describes it: the method, the resource or the media type changed. Contract drift, ours
+ * to fix. A 400 or 422 is deliberately NOT here: the server validates the shape of a
+ * request, not its values, and the body an agent writes for `invokeCapability` or a
+ * Test Management create is usually what the product is rejecting. Those stay the
+ * caller's; a handler that knows the request was fully validated sets `contract_drift`
+ * itself through its trackMCP extras.
  */
-const DRIFT_STATUSES = new Set([400, 405, 410, 415, 422]);
+const DRIFT_STATUSES = new Set([405, 410, 415]);
 
 interface Attribution {
   failure_class: FailureClass;
@@ -346,8 +350,8 @@ function byTokenMint(kind: unknown): Attribution {
  * Attributes a failed call. Evidence is read in order: the registry's refusal reason,
  * the region probe, an upstream outage, a programming error, a rejection of the caller's
  * input (`CallerError`, `markCallerFault`), the product's 4xx, then whether the handler
- * threw. A handler that knows better passes `failure_class` in its trackMCP extras,
- * which wins because extras are spread last onto the row.
+ * threw. A handler that knows better passes `failure_class` (and `failure_reason`) in
+ * its trackMCP extras, which win because extras are spread last onto the row.
  *
  * A completed capability invoke returns the product's 4xx/5xx as a normal result with
  * `upstream_ok: false`; that row is attributed by its status like any other, so one

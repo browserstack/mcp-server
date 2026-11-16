@@ -82,7 +82,7 @@ const DEBUG_SCREENSHOT_PATTERN = new RegExp(
   String.raw`${LOG_PREFIX}DEBUG (https://\S+)$`,
 );
 const TRUSTED_HOST_PATTERN =
-  /(^|\.)browserstack\.com$|\.s3([.-][a-z0-9-]+)*\.amazonaws\.com$|\.backblazeb2\.com$/;
+  /(^|\.)browserstack\.com$|\.s3([.-][a-z0-9]+)*\.amazonaws\.com$|\.backblazeb2\.com$/;
 
 function isTrustedScreenshotUrl(value: string): boolean {
   try {

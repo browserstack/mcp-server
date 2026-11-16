@@ -78,6 +78,19 @@ describe("parseScreenshotUrls", () => {
     expect(parseScreenshotUrls(logs)).toEqual([b2, direct]);
   });
 
+  it("accepts regional S3 bucket hosts with dashed region segments", () => {
+    const west = `https://bstack-shots.s3-us-west-2.amazonaws.com/${S}/a.png`;
+    const dual = `https://bstack-shots.s3.dualstack.us-east-1.amazonaws.com/${S}/b.png`;
+    const dotRegion = `https://bstack-shots.s3.ap-south-1.amazonaws.com/${S}/c.png`;
+    const logs = [
+      `2026-10-13 9:00:00:000 DEBUG ${west}`,
+      `2026-10-13 9:00:01:000 DEBUG ${dual}`,
+      `2026-10-13 9:00:02:000 DEBUG ${dotRegion}`,
+    ].join("\r\n");
+
+    expect(parseScreenshotUrls(logs)).toEqual([west, dual, dotRegion]);
+  });
+
   it("skips intermediate lines between a screenshot request and its response", () => {
     const logs = [
       `2026-10-13 9:00:00:000 REQUEST [2026-10-13 9:00:00:000] GET /session/${S}/screenshot {}`,

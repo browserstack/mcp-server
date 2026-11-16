@@ -180,8 +180,10 @@ export async function fetchTestCaseDetails(
       test_case_ids: testCaseIds,
     },
   });
+  // TCG accepted the request and reports failure in its body: the product's answer, not
+  // the caller's input, so it stays untagged.
   if (res.data.data.success !== true) {
-    throw new CallerError(`Fetch details failed: ${res.data.data.message}`);
+    throw new Error(`Fetch details failed: ${res.data.data.message}`);
   }
   return res.data.request_trace_id;
 }
@@ -222,7 +224,7 @@ export async function pollTestCaseDetails(
     });
 
     if (!poll.data.data.success) {
-      throw new CallerError(`Polling failed: ${poll.data.data.message}`);
+      throw new Error(`Polling failed: ${poll.data.data.message}`);
     }
 
     for (const msg of poll.data.data.message) {
@@ -481,8 +483,9 @@ export async function projectIdentifierToId(
       accept: "application/json, text/plain, */*",
     },
   });
+  // The list itself could not be read: the product's answer, not the identifier's fault.
   if (response.data.success !== true) {
-    throw new CallerError(
+    throw new Error(
       `Failed to fetch project ID: ${response.statusText || response.status}`,
     );
   }
@@ -511,7 +514,7 @@ export async function testCaseIdentifierToDetails(
   });
 
   if (response.data.success !== true) {
-    throw new CallerError(
+    throw new Error(
       `Failed to fetch test case details: ${response.statusText || response.status}`,
     );
   }

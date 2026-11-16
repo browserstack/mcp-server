@@ -9,7 +9,6 @@ export interface RAGChunk {
 import { getBrowserStackAuth } from "../../lib/get-auth.js";
 import { BrowserStackConfig } from "../../lib/types.js";
 import { getRegionalHost } from "../../lib/regional-host.js";
-import { CallerError } from "../../lib/error.js";
 
 export interface AccessibilityRAGResponse {
   content: Array<{
@@ -49,8 +48,10 @@ export async function queryAccessibilityRAG(
 
   const responseData = response.data as any;
 
+  // The RAG endpoint answered 2xx and reported failure in its body: "Query is too long" is
+  // the caller's, "Something went wrong" is not. Untagged until the message says which.
   if (!responseData.success) {
-    throw new CallerError("Something went wrong: " + responseData.message);
+    throw new Error("Something went wrong: " + responseData.message);
   }
 
   // Parse the stringified JSON data

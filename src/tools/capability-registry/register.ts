@@ -37,8 +37,19 @@ import {
   resolveResponses,
 } from "./index-loader.js";
 import { assertSelectable, narrowResponse } from "./narrow.js";
+import { ClashResolution, resolveClash } from "./policy.js";
 import { invokeWithFallbacks } from "./fallback.js";
 import { invoke } from "./resolve.js";
+import {
+  forgetOrigin,
+  markOriginAnswered,
+  notReady,
+  originAnswered,
+  probeSatisfied,
+  renderOrigin,
+} from "./origin.js";
+import { invokeWithPolling } from "./poll.js";
+import { runChain } from "./chain.js";
 import { agentHandoff, agentSummary, agentsOf, matchAgents } from "./agents.js";
 import { isEnabled as askIsEnabled } from "../ask-browserstack/config.js";
 import { PRODUCTS as ASK_PRODUCTS } from "../ask-browserstack/types.js";
@@ -55,7 +66,7 @@ import {
   unreadable,
   vocabularyOf,
 } from "./search.js";
-import { Mode, guidanceLines } from "./types.js";
+import { Capability, Mode, guidanceLines } from "./types.js";
 
 export const PERMISSION_VALUES = ["not_asked", "granted", "denied"] as const;
 
@@ -364,24 +375,54 @@ export function addCapabilityRegistryTools(
       // THE VERDICT TRAVELS WITH THE CALLER. Signed here, read back by the search — which
       // is how the search can know what this call concluded about the whole request
       // without the server keeping a note between the two.
+      // A clash the indexes already decide between themselves is reported as decided, so
+      // the caller never has to put a question the products have answered. See policy.ts.
+      const decided =
+        ambiguity.products.length > 1
+          ? resolveClash(registry.index.products, ambiguity.products)
+          : undefined;
       const listingToken = query
         ? signRouting(
-            ambiguity.products.length > 1
-              ? {
-                  verdict: "clash",
-                  terms: ambiguity.terms,
-                  products: ambiguity.products,
-                }
-              : ambiguity.unknown
-                ? { verdict: "blank" }
-                : { verdict: "settled", product: ambiguity.settled },
+            decided
+              ? { verdict: "settled", product: decided.product }
+              : ambiguity.products.length > 1
+                ? {
+                    verdict: "clash",
+                    terms: ambiguity.terms,
+                    products: ambiguity.products,
+                  }
+                : ambiguity.unknown
+                  ? { verdict: "blank" }
+                  : { verdict: "settled", product: ambiguity.settled },
           )
         : undefined;
       /** The product's title for the question put to a person; the key stays the handle. */
       const label = (name: string) =>
         registry.index.products[name]?.title ?? DEFAULT_TITLES[name] ?? name;
-      const routing =
-        ambiguity.products.length > 1
+      const routing = decided
+        ? {
+            verdict: "resolved_by_policy" as const,
+            note:
+              `These products overlap (${ambiguity.terms.map((t) => `'${t}'`).join(", ")}), ` +
+              `but the choice is already decided: ${decided.note} ` +
+              `SEARCH ${decided.product}. Do NOT ask the user which product to use — they ` +
+              "have no choice to make here. DO tell them which product you used and why. " +
+              `If they name ${decided.over.join(" or ")} themselves, use what they named. ` +
+              // NO ENTITLEMENT DATA EXISTS TO CHECK THIS FOR THEM. Only App Automate and
+              // Automate publish a plan call, and it reports capacity rather than whether
+              // the account owns the product; App Live publishes none. So the server
+              // cannot know the account lacks the product it just chose, and the caller
+              // is the only thing standing between that and a dead end.
+              `If ${decided.product} then reports that the account's PLAN DOES NOT ` +
+              `INCLUDE it, use ${decided.over.join(" or ")} instead and say so. Only that ` +
+              "error means switch: a parallel limit, a busy device or a bad app id is " +
+              "reported to the user as-is.",
+            routing_token: listingToken,
+            product: decided.product,
+            preferred_over: decided.over,
+            shared_terms: ambiguity.terms,
+          }
+        : ambiguity.products.length > 1
           ? {
               verdict: "products_clash" as const,
               note:
@@ -689,6 +730,8 @@ export function addCapabilityRegistryTools(
       }
       /** The product was taken on the caller's word, for a quote the index cannot read. */
       let routingUnverified = false;
+      /** Set when the indexes' own declarations, not the user, settled the product. */
+      let routedBy: ClashResolution | undefined;
       if (!isBrowseQuery(query)) {
         // JUDGE THE USER'S WORDS, NOT THE AGENT'S REWRITE.
         //
@@ -769,8 +812,44 @@ export function addCapabilityRegistryTools(
         // vocabulary is the least settled kind there is, and it used to pass this gate
         // untouched because there was no shared word in it to object to.
         const blank = routable && ambiguity.unknown && !settled;
+        // A CLASH THE PRODUCTS HAVE ALREADY DECIDED IS NOT THE USER'S QUESTION.
+        //
+        // Only the plain clash is eligible. `blank` has no candidates to choose between,
+        // and `mismatch` is the caller contradicting the user's own words, which no
+        // product declaration should be able to wave through.
+        const resolved =
+          routable && ambiguity.products.length > 1 && !settled && !answered
+            ? resolveClash(registry.index.products, ambiguity.products)
+            : undefined;
+        if (resolved && resolved.product !== product) {
+          // Pointing at the right product rather than answering for the wrong one. The
+          // token says `settled`, so the corrected search goes straight through.
+          return refuse(
+            "searchCapability",
+            "product_resolved",
+            `'${subject}' could mean ${ambiguity.products.join(" or ")}, and that choice ` +
+              `is already decided: ${resolved.note} Search ${resolved.product}, not ` +
+              `${product}, and TELL THE USER which product you used. Resend with ` +
+              "`routing_token` set to the token below. The user is not asked, because " +
+              "they have not been given a choice to make here.",
+            {
+              routing_token: signRouting({
+                verdict: "settled",
+                product: resolved.product,
+              }),
+              routed: {
+                product: resolved.product,
+                over: resolved.over,
+                why: resolved.note,
+              },
+            },
+            { product: resolved.product },
+          );
+        }
+        routedBy = resolved;
         if (
           routable &&
+          !resolved &&
           (ambiguity.products.length > 1 || reopened || blank || mismatch) &&
           !settled &&
           !answered
@@ -900,10 +979,30 @@ export function addCapabilityRegistryTools(
         weak_match: weak,
         coverage: Math.round(rest.coverage * 100) / 100,
         ...(routingUnverified ? { routing_unverified: true } : {}),
+        ...(routedBy ? { routed_by_policy: true } : {}),
       });
       return ok({
         ...(agentMatches.length
           ? { use_agent: agentHandoff(product, agentMatches) }
+          : {}),
+        // THE PRODUCT WAS CHOSEN FOR THE CALLER, SO THE CALLER HAS TO SAY SO. A silent
+        // pick is the failure this gate exists to stop, and a pick the server made is no
+        // different: the user still ends up on a product nobody told them about.
+        ...(routedBy
+          ? {
+              routed: {
+                product: routedBy.product,
+                over: routedBy.over,
+                why: routedBy.note,
+                tell_user: `Say which product you used and why: ${routedBy.note}`,
+                if_not_on_this_plan:
+                  `If ${routedBy.product} reports that the account's plan does not ` +
+                  `include it, re-search ${routedBy.over.join(" or ")} and tell the user. ` +
+                  "Only that error means switch — a parallel limit, a busy device or a " +
+                  "bad app id is reported as-is. The server cannot check the plan for " +
+                  "you: no entitlement data is published for these products.",
+              },
+            }
           : {}),
         // NO build_id. It is provenance — for our logs and for cache busting — and
         // resolution must never depend on it, which is exactly why no caller has anything
@@ -1030,6 +1129,15 @@ export function addCapabilityRegistryTools(
               input.path as string,
               input.product,
             );
+        if (capability.internal)
+          return refuse(
+            "describeCapability",
+            "capability_internal",
+            `${capability.name} is a step of a chain and is not called on its own; ` +
+              "describe the chain that uses it instead",
+            undefined,
+            identity,
+          );
 
         identity = {
           capability: capability.name,
@@ -1072,6 +1180,8 @@ export function addCapabilityRegistryTools(
           send_empty_body,
           local_only,
           disabled,
+          origin,
+          steps,
           ...contract
         } = capability;
         void unresolved;
@@ -1080,6 +1190,14 @@ export function addCapabilityRegistryTools(
         void send_empty_body;
         void local_only;
         void disabled;
+        // Plumbing too: how the builder parameters are rendered into an origin and which
+        // hosts it may land on is how WE reach the product. The parameters themselves stay
+        // in their group, flagged, so the caller sees what to pass and where. `poll` stays,
+        // because a call that may take minutes is something the caller plans around.
+        void origin;
+        // Which siblings a chain calls is how WE answer it; the caller sees one capability
+        // with parameters and returns, which is the point of declaring the chain.
+        void steps;
         return ok({
           // No build_id here either, same reason. `product` stays: describeCapability
           // resolves by NAME and its product argument is optional, so the answer has to
@@ -1260,6 +1378,16 @@ export function addCapabilityRegistryTools(
           body: input.body,
         };
 
+        if (capability.internal) {
+          return refuse(
+            "invokeCapability",
+            "capability_internal",
+            `${handle} is a step of a chain and is not called on its own; ` +
+              "invoke the chain that uses it instead",
+            undefined,
+            identity,
+          );
+        }
         if (capability.invocable === false) {
           // THE ONE PLACE describe AND invoke DIVERGE, deliberately. Everywhere else a name
           // that describes is a name that invokes, and breaking that is its own bug class —
@@ -1325,23 +1453,171 @@ export function addCapabilityRegistryTools(
           }
         }
 
+        const lookup = (name: string) =>
+          registry.byNameLookup(name, product).capability;
+        /** One request at the product's own origin, or a named host of it. */
+        const runFixed = async (
+          target: Capability,
+          targetArgs: GroupedArguments,
+        ) =>
+          invoke(
+            target,
+            targetArgs,
+            await deps.baseUrlFor(product, target.host),
+            deps.credentialsFor(),
+            transport,
+            registry.index.products[product]?.auth,
+            product,
+          );
         // The base URL is resolved per target rather than once: a fallback step may sit
-        // on a different named host from the capability that declared it.
-        const { result, attempts } = await invokeWithFallbacks(
-          capability,
-          args,
-          async (target, targetArgs) =>
-            invoke(
+        // on a different named host from the capability that declared it — or, for a
+        // capability with `base_from`, at an origin a sibling has to be asked for first.
+        // Such an origin is reached without credentials, and forgotten when a call on it
+        // answers 404 or cannot connect, so an ended session is resolved afresh rather
+        // than driven at a stale proxy.
+        /** Set when the first call on a fresh origin had to be sent more than once. */
+        let readiness:
+          | { attempts: number; elapsed_seconds: number }
+          | undefined;
+        const run = async (
+          target: Capability,
+          targetArgs: GroupedArguments,
+        ) => {
+          if (!target.origin) return runFixed(target, targetArgs);
+          // THE CALLER SAYS WHERE. The origin is rendered from the parameters flagged
+          // base_url_builder, checked against the capability's host allowlist, and the
+          // request goes there with no credentials: the session id in the path admits it.
+          const { base, rest } = renderOrigin(product, target, targetArgs);
+          const caller = deps.credentialsFor().username ?? "";
+          // THE FIRST READ ON A FRESH ORIGIN IS RE-SENT WHILE THE ORIGIN SAYS "NOT YET".
+          // The device's Appium session comes up after the session is listed; until then
+          // the proxy either holds a request or answers a plain 404 "Session not found."
+          // A write is never re-sent (see `origin.ready`), and once anything else has
+          // answered, a timeout or that 404 is a fault.
+          const ready = target.origin.ready;
+          const started = Date.now();
+          const probeMs = ready?.probe_seconds
+            ? ready.probe_seconds * 1000
+            : undefined;
+          let attempts = 0;
+          // WITH A PROBE PATH THE ORIGIN IS BROUGHT UP FIRST, AND THE COMMAND SENT ONCE.
+          // For App Live the probe is GET …/sessions: the device creates its Appium
+          // session on that call and lists it once it exists. Nothing is re-sent, so a
+          // write is as safe as a read here, and the command's own timeout applies to it.
+          if (ready?.probe_path && !originAnswered(caller, base)) {
+            const probeUrl = `${base.replace(/\/$/, "")}${ready.probe_path}`;
+            const headers = {
+              "request-source": "ai-chatbot",
+              "Content-Type": "application/json",
+            };
+            const windowMs = ready.timeout_seconds * 1000;
+            const stepMs = probeMs ?? 30_000;
+            let probes = 0;
+            for (;;) {
+              probes += 1;
+              const probe = await transport(
+                "GET",
+                probeUrl,
+                headers,
+                {},
+                undefined,
+                {
+                  timeoutMs: stepMs,
+                },
+              );
+              if (probeSatisfied(probe.status, probe.body)) {
+                markOriginAnswered(caller, base);
+                break;
+              }
+              if (Date.now() - started + stepMs > windowMs) break;
+              // A refusal comes back at once; a held request has already waited.
+              if (probe.status !== 0)
+                await new Promise((resolve) => setTimeout(resolve, stepMs));
+            }
+            if (probes > 1 || Date.now() - started > 1000)
+              readiness = {
+                attempts: probes,
+                elapsed_seconds: Math.round((Date.now() - started) / 100) / 10,
+              };
+            const answer = await invoke(
               target,
-              targetArgs,
-              await deps.baseUrlFor(product, target.host),
+              rest,
+              base,
               deps.credentialsFor(),
               transport,
               registry.index.products[product]?.auth,
               product,
-            ),
-          (name) => registry.byNameLookup(name, product).capability,
-        );
+              { anonymous: true },
+            );
+            if (answer.http_response.status === 404) forgetOrigin(caller, base);
+            return answer;
+          }
+          for (;;) {
+            attempts += 1;
+            const fresh = ready !== undefined && !originAnswered(caller, base);
+            const answer = await invoke(
+              target,
+              rest,
+              base,
+              deps.credentialsFor(),
+              transport,
+              registry.index.products[product]?.auth,
+              product,
+              {
+                anonymous: true,
+                ...(fresh && probeMs ? { timeoutMs: probeMs } : {}),
+              },
+            );
+            const status = answer.http_response.status;
+            if (attempts > 1)
+              readiness = {
+                attempts,
+                elapsed_seconds: Math.round((Date.now() - started) / 100) / 10,
+              };
+            const pending = notReady(answer);
+            if (!pending) {
+              if (status === 404) forgetOrigin(caller, base);
+              else markOriginAnswered(caller, base);
+              return answer;
+            }
+            // A 404 comes back at once, so the next attempt waits the probe length rather
+            // than hammering the proxy; a timeout has already waited that long.
+            const attemptMs = probeMs ?? (target.timeout_seconds ?? 45) * 1000;
+            const withinWindow =
+              ready !== undefined &&
+              Date.now() - started + attemptMs <= ready.timeout_seconds * 1000;
+            if (fresh && target.mode === "read" && withinWindow) {
+              if (status === 404)
+                await new Promise((resolve) => setTimeout(resolve, attemptMs));
+              continue;
+            }
+            forgetOrigin(caller, base);
+            return answer;
+          }
+        };
+        /** One call as invokeCapability makes it: origin, fallbacks and polling included. */
+        const runOne = (target: Capability, targetArgs: GroupedArguments) =>
+          invokeWithPolling(
+            target,
+            targetArgs,
+            (t, a) => invokeWithFallbacks(t, a, run, lookup),
+            (outcome) => outcome.result,
+          );
+        // A CHAIN RUNS ITS STEPS THROUGH THE SAME PATH, one after another, and answers
+        // with what they took; anything else answers with its own one call.
+        const chained = capability.steps
+          ? await runChain(capability, args, lookup, runOne)
+          : undefined;
+        const {
+          outcome: { result, attempts },
+          polled,
+        } = chained
+          ? {
+              outcome: { result: chained.result, attempts: undefined },
+              polled: undefined,
+            }
+          : await runOne(capability, args);
+        const chain = chained?.chain;
         // NARROWING IS APPLIED TO A SUCCESS ONLY. A 4xx body is the diagnosis the caller
         // needs whole, and a selection that happened to match none of its keys would
         // quietly empty it. `narrowResponse` refuses an unsupported `select` by throwing,
@@ -1373,6 +1649,14 @@ export function addCapabilityRegistryTools(
           // Only when the chain ran: a capability without `fallbacks` answers exactly as
           // before, and one whose first call succeeded has nothing to report.
           ...(attempts ? { fallback: { attempts } } : {}),
+          // Only when the call waited: how many requests it took and whether the
+          // condition was met, so a timed-out wait is read as "not yet", not as success.
+          ...(polled ? { polled } : {}),
+          // Only when the first call on a fresh origin was re-sent: how many times and
+          // for how long, so a slow start is visible rather than silently absorbed.
+          ...(readiness ? { readiness } : {}),
+          // Only for a chain: each step's status, so a refusal is placed and a wait seen.
+          ...(chain ? { chain } : {}),
         };
         // AN IMAGE LEAVES THE JSON. Where the capability says its body carries one, the
         // base64 is lifted out and sent as an MCP image block beside the text, so the

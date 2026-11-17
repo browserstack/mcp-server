@@ -967,7 +967,7 @@
     "guidance": [
      "WORKS ON EVERY BROWSER: desktop Chrome, Chrome for Android and Safari on iPhone all answer 200 and leave the field empty; typing afterwards starts from nothing.",
      "Takes no parameters of its own.",
-     "Confirm with get_element_property on \"value\", which reads empty afterwards \u2014 on Safari for iOS, where property reads answer 405, use get_element_attribute with name value instead. Measured empty after clearing on desktop Chrome, Chrome for Android and Safari on iPhone.",
+     "Confirm with get_element_property on \"value\", which reads empty afterwards \u2014 on Safari for iOS, where property reads answer 405, use get_element_attribute with name value instead.",
      "Clearing also fires the page's own change handlers, so a form may revalidate and show an error about the now-empty field.",
      "The element must be editable; anything else answers \"invalid element state\"."
     ],

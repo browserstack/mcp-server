@@ -1,7 +1,12 @@
+import { HttpError } from "../../src/lib/error";
 import { describe, it, expect, vi, beforeEach, Mock } from "vitest";
 import { fetchBuildInsightsTool } from "../../src/tools/build-insights";
 import { fetchFromBrowserStackAPI } from "../../src/lib/utils";
-import { resolveHashedBuildId } from "../../src/tools/automate-utils/resolve-hashed-build-id";
+import {
+  NoSessionsError,
+  resolveHashedBuildId,
+} from "../../src/tools/automate-utils/resolve-hashed-build-id";
+import { mapHashedToTra } from "../../src/tools/automate-utils/resolve-tra-build-id";
 
 vi.mock("../../src/lib/utils", () => ({
   fetchFromBrowserStackAPI: vi.fn(),
@@ -11,9 +16,20 @@ vi.mock("../../src/logger", () => ({
   default: { error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug: vi.fn() },
 }));
 vi.mock("../../src/lib/instrumentation", () => ({ trackMCP: vi.fn() }));
-vi.mock("../../src/tools/automate-utils/resolve-hashed-build-id", () => ({
-  resolveHashedBuildId: vi.fn(),
-}));
+vi.mock(
+  "../../src/tools/automate-utils/resolve-hashed-build-id",
+  async (importOriginal) => ({
+    ...(await importOriginal<any>()),
+    resolveHashedBuildId: vi.fn(),
+  }),
+);
+vi.mock(
+  "../../src/tools/automate-utils/resolve-tra-build-id",
+  async (importOriginal) => ({
+    ...(await importOriginal<any>()),
+    mapHashedToTra: vi.fn(),
+  }),
+);
 
 const mockConfig = {
   "browserstack-username": "fake-user",
@@ -24,7 +40,7 @@ const HASHED_ID = "ca9cccc228cf0e3ff3cb90dd62e2e2bfb4b20bc7";
 
 describe("fetchBuildInsightsTool", () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
     // Default: the build has no resolvable sessions; insights still succeed.
     (resolveHashedBuildId as Mock).mockRejectedValue(
       new Error("No BrowserStack sessions found"),
@@ -126,6 +142,71 @@ describe("fetchBuildInsightsTool", () => {
 
     expect(result.isError).toBeFalsy();
     expect(result.content[1].text).toContain("No Quality Gate Profiles");
+  });
+
+  it("SUCCESS: says plainly when an uploaded build has no sessions", async () => {
+    (fetchFromBrowserStackAPI as Mock)
+      .mockResolvedValueOnce({ name: "junit" })
+      .mockResolvedValueOnce({});
+    (resolveHashedBuildId as Mock).mockRejectedValue(
+      new NoSessionsError("build-123"),
+    );
+
+    const result = await fetchBuildInsightsTool(
+      { buildId: "build-123" },
+      mockConfig,
+    );
+
+    expect(result.content[0].text).toContain(
+      '"sessions": "none: results were uploaded',
+    );
+    expect(result.content[0].text).not.toContain("hashed_id");
+  });
+
+  it("SUCCESS: maps an Automate hashed id to its TRA build and retries", async () => {
+    (fetchFromBrowserStackAPI as Mock)
+      .mockRejectedValueOnce(
+        new HttpError(
+          `Failed to fetch from x/${HASHED_ID}: 404 Not Found`,
+          404,
+        ),
+      )
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({ name: "Mapped Build" })
+      .mockResolvedValueOnce({});
+    (mapHashedToTra as Mock).mockResolvedValue({
+      traBuildId: "zz00000000000000000000000000000000000003",
+      hashedBuildId: HASHED_ID,
+      sessionType: "app-automate",
+      projectName: "P",
+      buildName: "B",
+    });
+
+    const result = await fetchBuildInsightsTool(
+      { buildId: HASHED_ID },
+      mockConfig,
+    );
+
+    expect(result.content[0].text).toContain("Mapped Build");
+    expect(result.content[0].text).toContain(
+      '"tra_build_id": "zz00000000000000000000000000000000000003"',
+    );
+    expect(result.content[0].text).toContain(`"hashed_id": "${HASHED_ID}"`);
+    expect(result.content[0].text).toContain('"session_type": "app-automate"');
+    expect(resolveHashedBuildId).not.toHaveBeenCalled();
+  });
+
+  it("FAIL: keeps the 404 and adds the reason when a hashed id has no TRA build", async () => {
+    (fetchFromBrowserStackAPI as Mock).mockRejectedValue(
+      new HttpError(`Failed to fetch from x/${HASHED_ID}: 404 Not Found`, 404),
+    );
+    (mapHashedToTra as Mock).mockRejectedValue(
+      new Error("automate build has no TRA build"),
+    );
+
+    await expect(
+      fetchBuildInsightsTool({ buildId: HASHED_ID }, mockConfig),
+    ).rejects.toThrow("automate build has no TRA build");
   });
 
   it("FAIL: throws error for invalid build ID", async () => {

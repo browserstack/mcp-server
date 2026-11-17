@@ -69,11 +69,7 @@ export const PLAN_WRITES_VIA_CAPABILITIES =
   " Creating a test plan or sub-plan, and linking or unlinking test runs, are not " +
   "available as tools here: use the capability functions (they ask you to confirm first).";
 
-/** A build id comes from either build-lookup tool. */
-export const NEEDS_BUILD_ID = needsIdFrom(
-  "a BrowserStack build id",
-  "getBuildId or listBuildId",
-);
+export const NEEDS_BUILD_ID = needsIdFrom("a TRA build id", "listBuildId");
 
 /**
  * Session ids ARE listable now — PR #395 added `listSessions`, which merged into main while
@@ -81,7 +77,7 @@ export const NEEDS_BUILD_ID = needsIdFrom(
  * pointing at the agent when a real tool exists is exactly what the header above forbids.
  */
 export const NEEDS_SESSION_ID =
-  " Needs a session id: listSessions lists them; getBuildId or listBuildId finds the build.";
+  " Needs a session id: listSessions or listTestIds list them; listBuildId finds the build.";
 
 /**
  * A scan run's ids come from startAccessibilityScan; a build's id is printed by the SDK at

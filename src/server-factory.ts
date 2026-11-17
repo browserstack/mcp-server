@@ -9,7 +9,9 @@ import logger from "./logger.js";
 import addSDKTools from "./tools/bstack-sdk.js";
 import addPercyTools from "./tools/percy-sdk.js";
 import addBrowserLiveTools from "./tools/live.js";
-import addAccessibilityTools from "./tools/accessibility.js";
+import addAccessibilityTools, {
+  addAccessibilityFixWorkflow,
+} from "./tools/accessibility.js";
 import addTestManagementTools from "./tools/testmanagement.js";
 import addAppAutomationTools from "./tools/appautomate.js";
 import addFailureLogsTools from "./tools/get-failure-logs.js";
@@ -76,6 +78,7 @@ export class BrowserStackMcpServer {
 
     setupOnInitialized(this.server, this.config);
     this.registerTools();
+    addAccessibilityFixWorkflow(this.server);
   }
 
   /**

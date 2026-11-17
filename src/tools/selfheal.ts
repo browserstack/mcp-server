@@ -1,3 +1,4 @@
+import { isNotFoundError } from "../lib/error.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
@@ -16,6 +17,8 @@ import logger from "../logger.js";
 import { trackMCP } from "../lib/instrumentation.js";
 import { BrowserStackConfig } from "../lib/types.js";
 import { NEEDS_SESSION_ID } from "./tool-handoff.js";
+import { isHashedBuildId } from "./automate-utils/resolve-hashed-build-id.js";
+import { mapHashedToTra } from "./automate-utils/resolve-tra-build-id.js";
 
 // Local helper: returns the server-configured BrowserStack credentials, or
 // null when either is missing. Lives here because the self-heal tools need
@@ -284,10 +287,18 @@ export async function fetchSelfHealSelectorTool(
       };
     }
 
-    const report = await fetchSelfHealingReportByBuild(
-      buildUuid!,
-      effectiveConfig,
-    );
+    let report;
+    try {
+      report = await fetchSelfHealingReportByBuild(buildUuid!, effectiveConfig);
+    } catch (error) {
+      if (!isNotFoundError(error) || !isHashedBuildId(buildUuid!)) throw error;
+      const { traBuildId } = await mapHashedToTra(
+        buildUuid!,
+        error,
+        effectiveConfig,
+      );
+      report = await fetchSelfHealingReportByBuild(traBuildId, effectiveConfig);
+    }
 
     // Extract unique session IDs from the healing report and fetch test code
     const sessionIds = Array.from(
@@ -581,7 +592,7 @@ export default function addSelfHealTools(
         .optional(),
       buildUuid: z
         .string()
-        .describe("Build UUID. Fetches the build's self-healing report.")
+        .describe("TRA build id (listBuildId). Fetches its healing report.")
         .optional(),
     },
     {

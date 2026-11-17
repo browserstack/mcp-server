@@ -8,10 +8,12 @@ const m = vi.hoisted(() => ({
   sourceFromReportUrl: vi.fn(),
   reportStatus: vi.fn(),
   previousScanRun: vi.fn(),
+  scanRuns: vi.fn(),
   changesSinceLastRun: vi.fn(),
   parse: vi.fn(),
   loadMainIssues: vi.fn(),
   compareIssues: vi.fn(),
+  findScanRun: vi.fn(),
 }));
 
 vi.mock("../../src/tools/accessiblity-utils/report-fetcher.js", () => ({
@@ -22,7 +24,10 @@ vi.mock("../../src/tools/accessiblity-utils/report-fetcher.js", () => ({
     reportStatus = m.reportStatus;
     resolveBuild = vi.fn(async (source: unknown) => source);
     previousScanRun = m.previousScanRun;
+    scanRuns = m.scanRuns;
     changesSinceLastRun = m.changesSinceLastRun;
+    findScanRun = m.findScanRun;
+    score = vi.fn().mockResolvedValue(undefined);
   },
   EXPORT_WAIT_MS: 45_000,
   ExportPendingError: class extends Error {
@@ -33,6 +38,14 @@ vi.mock("../../src/tools/accessiblity-utils/report-fetcher.js", () => ({
       super("still generating");
     }
   },
+}));
+// A completed scan's read also reads its scan logs, for the pages it could not scan.
+vi.mock("../../src/tools/accessiblity-utils/scanner.js", () => ({
+  AccessibilityScanner: class {
+    setAuth = vi.fn();
+    unscannedPages = vi.fn(async () => []);
+  },
+  ScanTimeoutError: class extends Error {},
 }));
 vi.mock("../../src/tools/accessiblity-utils/report-parser.js", () => ({
   parseAccessibilityReportFromCSV: m.parse,
@@ -177,8 +190,31 @@ describe("fetchAccessibilityIssues comparing scan runs", () => {
     expect(out).toMatch(/image-alt/);
   });
 
+  it("compares a scanner link's run through its scan's ids, which only the scan list has", async () => {
+    const link = "https://accessibility.browserstack.com/site-scanner/projects/shop/builds?thBuildId=k3v9q2m7x1c8b4n6z0w5r2t9y4p1s8d3f6g0h2ja";
+    const byBuild = { kind: "scanBuild", thBuildId: "k3v9q2m7x1c8b4n6z0w5r2t9y4p1s8d3f6g0h2ja", scanName: "shop" };
+    m.sourceFromReportUrl.mockResolvedValue(byBuild);
+    m.findScanRun.mockResolvedValue({ kind: "scan", scanId: "7310042", scanRunId: "5520318" });
+    m.previousScanRun.mockResolvedValue({ id: 5520296, scanDate: "2026-10-21T11:31:00.584Z" });
+    m.changesSinceLastRun.mockResolvedValue({ newIssues: 1, retainedIssues: 146, resolvedIssues: 1 });
+
+    const result = await fetchIssues()({ reportUrl: link, compareWith: "previous" });
+
+    expect(m.findScanRun).toHaveBeenCalledWith(byBuild);
+    expect(m.previousScanRun).toHaveBeenCalledWith("7310042", "5520318");
+    expect(text(result)).toMatch(/1 new, 1 resolved, 146 still open/);
+  });
+
   it("compares with a run it is given, counting by matching the issues", async () => {
     m.previousScanRun.mockResolvedValue({ id: 5520296, scanDate: "2026-10-21T11:31:00.584Z" });
+    m.scanRuns.mockResolvedValue({
+      runs: [
+        { id: 5520318, scanDate: "2026-10-22T09:00:00.000Z" },
+        { id: 5520296, scanDate: "2026-10-21T11:31:00.584Z" },
+        { id: 5520281, scanDate: "2026-10-20T08:00:00.000Z" },
+      ],
+      complete: true,
+    });
 
     const result = await fetchIssues()({ ...RUN, compareWith: "5520281" });
 
@@ -244,10 +280,19 @@ describe("fetchAccessibilityIssues comparing scan runs", () => {
     expect(out).toMatch(/Not checked against the earlier run \(page did not load in run 5520296\)/);
   });
 
-  it("compares Website Scanner runs only", async () => {
-    const result = await fetchIssues()({ buildId: "q7m2k9x4c1v8b3n6z0w5r2t9y4p1s8d3f6g0h2ja", compareWith: "previous" });
+  // A report with no built-in compare is answered with how to compare it by hand, as
+  // guidance rather than an error, so the agent goes straight to reading both reports.
+  const READ_BOTH =
+    " Read both reports with fetchAccessibilityIssues and match issues by rule and CSS selector on each page; an issue in the later report only is new, in the earlier only is fixed, in both is still open.";
 
-    expect(result.isError).toBe(true);
-    expect(text(result)).toMatch(/Website Scanner/);
+  it("says to read both Workflow Analyzer reports and compare them, as guidance rather than an error", async () => {
+    const result = await fetchIssues()({ workflowReportId: "277527", compareWith: "277401" });
+
+    expect(result.isError).toBeFalsy();
+    expect(text(result).trim()).toBe(`Workflow Analyzer reports have no built-in compare.${READ_BOTH}`);
+    expect(text(result)).not.toMatch(/GitHub/);
+    expect(m.getReportLink).not.toHaveBeenCalled();
+    expect(m.reportStatus).not.toHaveBeenCalled();
   });
+
 });

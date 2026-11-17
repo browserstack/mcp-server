@@ -1,6 +1,7 @@
 import { apiClient } from "../../lib/apiClient.js";
 import logger from "../../logger.js";
 import { getRegionalHost } from "../../lib/regional-host.js";
+import { CallerError } from "../../lib/error.js";
 
 export interface AuthConfigResponse {
   success: boolean;
@@ -93,7 +94,7 @@ export class AccessibilityAuthConfig {
     authData: FormAuthData,
   ): Promise<AuthConfigResponse> {
     if (!this.auth?.username || !this.auth?.password) {
-      throw new Error(
+      throw new CallerError(
         "BrowserStack credentials are not set for AccessibilityAuthConfig.",
       );
     }
@@ -127,6 +128,7 @@ export class AccessibilityAuthConfig {
       logger.info(
         `Auth config API returned: ${JSON.stringify(safeAuthConfigData(data))}`,
       );
+      // A 2xx with success:false is the product's answer, not the caller's input.
       if (!data.success) {
         throw new Error(
           `Unable to create auth config: ${data.errors?.join(", ")}`,
@@ -151,7 +153,7 @@ export class AccessibilityAuthConfig {
     authData: BasicAuthData,
   ): Promise<AuthConfigResponse> {
     if (!this.auth?.username || !this.auth?.password) {
-      throw new Error(
+      throw new CallerError(
         "BrowserStack credentials are not set for AccessibilityAuthConfig.",
       );
     }
@@ -182,6 +184,7 @@ export class AccessibilityAuthConfig {
       });
 
       const data = response.data;
+      // A 2xx with success:false is the product's answer, not the caller's input.
       if (!data.success) {
         throw new Error(
           `Unable to create auth config: ${data.errors?.join(", ")}`,
@@ -200,7 +203,7 @@ export class AccessibilityAuthConfig {
 
   async getAuthConfig(configId: number): Promise<AuthConfigResponse> {
     if (!this.auth?.username || !this.auth?.password) {
-      throw new Error(
+      throw new CallerError(
         "BrowserStack credentials are not set for AccessibilityAuthConfig.",
       );
     }
@@ -219,6 +222,7 @@ export class AccessibilityAuthConfig {
       });
 
       const data = response.data;
+      // A 2xx with success:false is the product's answer, not the caller's input.
       if (!data.success) {
         throw new Error(
           `Unable to get auth config: ${data.errors?.join(", ")}`,
@@ -228,7 +232,9 @@ export class AccessibilityAuthConfig {
         (entry) => Number(entry.id) === Number(configId),
       );
       if (!match) {
-        throw new Error(`Auth config ${configId} not found for this account`);
+        throw new CallerError(
+          `Auth config ${configId} not found for this account`,
+        );
       }
       return {
         success: true,

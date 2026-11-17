@@ -179,6 +179,7 @@ export function sanitizeArgs(args: any) {
 }
 
 import { getBrowserStackAuth } from "../../lib/get-auth.js";
+import { markCallerFault } from "../../lib/upstream-status.js";
 
 /**
  * Fetch the project's form-fields and normalize priority/case_type to the
@@ -388,6 +389,7 @@ export async function createTestCase(
 
     const { data } = response.data;
     if (!data.success) {
+      markCallerFault();
       return {
         content: [
           {

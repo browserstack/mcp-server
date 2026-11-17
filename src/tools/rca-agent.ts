@@ -1,10 +1,15 @@
+import { isNotFoundError } from "../lib/error.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import logger from "../logger.js";
 import { BrowserStackConfig } from "../lib/types.js";
 import { getBrowserStackAuth } from "../lib/get-auth.js";
-import { getBuildId } from "./rca-agent-utils/get-build-id.js";
-import { listBuildId } from "./rca-agent-utils/list-build-id.js";
+import {
+  BuildLookupResult,
+  resolveBuild,
+} from "./rca-agent-utils/resolve-build.js";
+import { isHashedBuildId } from "./automate-utils/resolve-hashed-build-id.js";
+import { mapHashedToTra } from "./automate-utils/resolve-tra-build-id.js";
 import { getTestIds } from "./rca-agent-utils/get-failed-test-id.js";
 import { getRCAData } from "./rca-agent-utils/rca-data.js";
 import { formatRCAData } from "./rca-agent-utils/format-rca.js";
@@ -19,87 +24,45 @@ import {
   LIST_TEST_IDS_PARAMS,
 } from "./rca-agent-utils/constants.js";
 
-// Tool function to fetch build ID
+function buildLookupResult(result: BuildLookupResult): CallToolResult {
+  const content: CallToolResult["content"] = [
+    { type: "text", text: result.buildId },
+  ];
+  if (result.note) content.push({ type: "text", text: result.note });
+  return { content };
+}
+
+function buildLookupError(error: unknown): CallToolResult {
+  const errorMessage = error instanceof Error ? error.message : "Unknown error";
+  logger.error("Error fetching build ID: %s", errorMessage);
+  return {
+    content: [
+      { type: "text", text: `Error fetching build ID: ${errorMessage}` },
+    ],
+    isError: true,
+  };
+}
+
 export async function getBuildIdTool(
   args: BuildIdArgs,
   config: BrowserStackConfig,
 ): Promise<CallToolResult> {
   try {
-    const { browserStackProjectName, browserStackBuildName } = args;
-
-    const authString = getBrowserStackAuth(config);
-    const [username, accessKey] = authString.split(":");
-
-    const buildId = await getBuildId(
-      browserStackProjectName,
-      browserStackBuildName,
-      username,
-      accessKey,
-    );
-
-    return {
-      content: [
-        {
-          type: "text",
-          text: buildId,
-        },
-      ],
-    };
+    const [userName] = getBrowserStackAuth(config).split(":");
+    return buildLookupResult(await resolveBuild(args, config, { userName }));
   } catch (error) {
-    const errorMessage =
-      error instanceof Error ? error.message : "Unknown error";
-    logger.error("Error fetching build ID: %s", errorMessage);
-    return {
-      content: [
-        {
-          type: "text",
-          text: `Error fetching build ID: ${errorMessage}`,
-        },
-      ],
-      isError: true,
-    };
+    return buildLookupError(error);
   }
 }
 
-// Tool function to fetch the build ID across all users (no user scoping)
 export async function listBuildIdTool(
   args: BuildIdArgs,
   config: BrowserStackConfig,
 ): Promise<CallToolResult> {
   try {
-    const { browserStackProjectName, browserStackBuildName } = args;
-
-    const authString = getBrowserStackAuth(config);
-    const [username, accessKey] = authString.split(":");
-
-    const buildId = await listBuildId(
-      browserStackProjectName,
-      browserStackBuildName,
-      username,
-      accessKey,
-    );
-
-    return {
-      content: [
-        {
-          type: "text",
-          text: buildId,
-        },
-      ],
-    };
+    return buildLookupResult(await resolveBuild(args, config));
   } catch (error) {
-    const errorMessage =
-      error instanceof Error ? error.message : "Unknown error";
-    logger.error("Error fetching build ID: %s", errorMessage);
-    return {
-      content: [
-        {
-          type: "text",
-          text: `Error fetching build ID: ${errorMessage}`,
-        },
-      ],
-      isError: true,
-    };
+    return buildLookupError(error);
   }
 }
 
@@ -151,25 +114,37 @@ export async function listTestIdsTool(
   config: BrowserStackConfig,
 ): Promise<CallToolResult> {
   try {
-    const { buildId, status, includeFailureDetail } = args;
+    const { status, includeFailureDetail } = args;
     const authString = getBrowserStackAuth(config);
+    let buildId = args.buildId.trim();
+    let note: string | undefined;
 
-    // Get test IDs
-    const testIds = await getTestIds(
-      buildId,
-      authString,
-      status,
-      includeFailureDetail,
-    );
+    let testIds;
+    try {
+      testIds = await getTestIds(
+        buildId,
+        authString,
+        status,
+        includeFailureDetail,
+      );
+    } catch (error) {
+      if (!isNotFoundError(error) || !isHashedBuildId(buildId)) throw error;
+      const mapped = (await mapHashedToTra(buildId, error, config)).traBuildId;
+      note = `Automate build ${buildId} maps to TRA build ${mapped}.`;
+      buildId = mapped;
+      testIds = await getTestIds(
+        buildId,
+        authString,
+        status,
+        includeFailureDetail,
+      );
+    }
 
-    return {
-      content: [
-        {
-          type: "text",
-          text: JSON.stringify(testIds, null, 2),
-        },
-      ],
-    };
+    const content: CallToolResult["content"] = [
+      { type: "text", text: JSON.stringify(testIds, null, 2) },
+    ];
+    if (note) content.push({ type: "text", text: note });
+    return { content };
   } catch (error) {
     logger.error("Error listing test IDs", error);
     const errorMessage =
@@ -221,7 +196,7 @@ export default function addRCATools(
 
   tools.getBuildId = server.tool(
     "getBuildId",
-    "Get the BrowserStack build ID for a given project and build name, scoped to the current user's builds.",
+    "Like listBuildId, but a build-name lookup tries the caller's own builds first, then anyone's.",
     GET_BUILD_ID_PARAMS,
     {
       title: "Get Build ID",
@@ -247,7 +222,7 @@ export default function addRCATools(
 
   tools.listBuildId = server.tool(
     "listBuildId",
-    "Get the latest build ID for a project and build name, across all users (no user filter).",
+    "Find a TRA build id, any user: project + build name (latest run), + build number, or a dashboard link.",
     GET_BUILD_ID_PARAMS,
     {
       title: "List Build IDs",

@@ -47,6 +47,7 @@ import { apiClient } from "../../lib/apiClient.js";
 import { getRegionalHost, sessionApiHost } from "../../lib/regional-host.js";
 import { CallerError } from "../../lib/error.js";
 import { encodePathSegment } from "../../lib/path-segment.js";
+import { trustedRedirectGuard } from "../../lib/trusted-hosts.js";
 
 type SessionType = "automate" | "app-automate";
 
@@ -89,6 +90,8 @@ export async function fetchSelfHealingReportByBuild(
 
   const reportResp = await apiClient.get<SelfHealingReport>({
     url: presignedUrl,
+    maxRedirects: 5,
+    beforeRedirect: trustedRedirectGuard("self-healing report"),
   });
   await assertOkResponse(reportResp, "self-healing report payload");
 

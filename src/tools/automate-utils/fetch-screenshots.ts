@@ -17,6 +17,7 @@ import {
 import { resolveAppAutomateBuildId } from "../failurelogs-utils/resolve-app-build-id.js";
 import { CallerError } from "../../lib/error.js";
 import { encodePathSegment } from "../../lib/path-segment.js";
+import { trustedRedirectGuard } from "../../lib/trusted-hosts.js";
 
 /** The session is unknown to the generic logs endpoint (404). */
 export class SessionLogsNotFoundError extends Error {
@@ -143,6 +144,8 @@ async function fetchAndCompress(url: string): Promise<Screenshot | null> {
     url,
     responseType: "arraybuffer",
     maxContentLength: MAX_SCREENSHOT_BYTES,
+    maxRedirects: 5,
+    beforeRedirect: trustedRedirectGuard("screenshot"),
     raise_error: false,
   });
   if (response.status === 413) {

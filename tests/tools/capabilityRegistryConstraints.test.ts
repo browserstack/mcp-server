@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { bind } from "../../src/tools/capability-registry/bind.js";
+import { bind, coerce } from "../../src/tools/capability-registry/bind.js";
 import {
   Capability,
   WireParam,
@@ -422,16 +422,30 @@ describe("a numeric parameter is not coerced into a different value", () => {
   });
 });
 
-describe("nullable parameters", () => {
-  it("sends an explicit null where the contract marks the field nullable", () => {
-    const confirmed: WireParam = { name: "confirmed", type: "boolean", nullable: true };
+describe("accepts_null parameters", () => {
+  it("sends an explicit null where the capability opts in with accepts_null", () => {
+    const confirmed: WireParam = { name: "confirmed", type: "boolean", accepts_null: true };
     expect(call(withBody(confirmed), { confirmed: null }).body).toEqual({ confirmed: null });
     expect(call(withBody(confirmed), { confirmed: true }).body).toEqual({ confirmed: true });
   });
 
-  it("still refuses null for a field that is not nullable", () => {
+  it("still refuses null for a field that does not opt in", () => {
     const hidden: WireParam = { name: "hidden", type: "boolean" };
     expect(() => call(withBody(hidden), { hidden: null })).toThrow("'hidden' must be true or false");
+  });
+
+  it("ignores OpenAPI nullable, so tm's folder_id keeps refusing null as it did before", async () => {
+    const { readFileSync } = await import("node:fs");
+    const index = JSON.parse(
+      readFileSync(new URL("../../capability/tm.capability-index.json", import.meta.url), "utf8"),
+    );
+    for (const name of ["create_shared_component", "update_shared_component"]) {
+      const cap = (index.tm.capabilities as Capability[]).find((c) => c.name === name)!;
+      const folder = (cap.body ?? []).find((p) => p.name === "folder_id") as WireParam & { nullable?: true };
+      expect(folder.nullable, name).toBe(true);
+      expect(folder.accepts_null, name).toBeUndefined();
+      expect(() => coerce(null, folder), name).toThrow();
+    }
   });
 
   it("lets the needs-review capability put an issue back to pending", async () => {

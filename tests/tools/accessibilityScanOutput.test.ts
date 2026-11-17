@@ -1079,7 +1079,7 @@ describe("what a web report's answer says about its issues", () => {
       await handlers.fetchAccessibilityIssues({ scanId: "scan-42", scanRunId: "run-7" }, CONTEXT),
     );
     expect(body).toContain("call searchCapability with product web_accessibility");
-    expect(body).toContain("never tell the user they are unavailable");
+    expect(body).toContain("Check searchCapability before telling the user one is unavailable");
   });
 
   it("links the scan's own dashboard page, from the scans list, not a link made from its name", async () => {

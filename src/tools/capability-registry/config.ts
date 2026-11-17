@@ -157,6 +157,15 @@ function credentialsFrom(config: BrowserStackConfig): Credentials {
  * that reads like the caller's problem, when it is our missing configuration.
  */
 /**
+ * Products whose named hosts refuse to fall back to the regional host when only the
+ * product-level override is set. web_accessibility's `dashboard` host is the reason: a
+ * preprod override must never send its dashboard calls to production.
+ */
+const STRICT_NAMED_HOST_PRODUCTS: ReadonlySet<string> = new Set([
+  "web_accessibility",
+]);
+
+/**
  * The host a capability named, as opposed to the product's own.
  *
  * `_HOST_` is in the override variable deliberately. The environment-suffixed form is
@@ -184,7 +193,13 @@ function resolveNamedHost(
   // An override of the product's own host says "not production", but it does not say where
   // this host lives. Falling through to the regional (production) host would send a preprod
   // session's dashboard calls to production.
-  if (process.env[`CAPABILITY_REGISTRY_BASE_URL_${key}`]) {
+  //
+  // Scoped to the products listed in STRICT_NAMED_HOST_PRODUCTS so other products' named
+  // hosts (devicecontrol / mobiledevicecontrol `api`) keep their earlier fall-through.
+  if (
+    STRICT_NAMED_HOST_PRODUCTS.has(product) &&
+    process.env[`CAPABILITY_REGISTRY_BASE_URL_${key}`]
+  ) {
     throw new InvocationError(
       `CAPABILITY_REGISTRY_BASE_URL_${key} overrides product '${product}', but not its ` +
         `'${host}' host. Set CAPABILITY_REGISTRY_BASE_URL_${suffix} as well.`,

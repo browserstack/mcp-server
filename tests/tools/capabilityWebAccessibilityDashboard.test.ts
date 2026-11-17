@@ -291,6 +291,22 @@ describe("the dashboard follows the account's region", () => {
     );
   });
 
+  // The refusal is scoped to web_accessibility: device control's `api` host keeps the
+  // fall-through it had before, so setting only its product override changes nothing there.
+  it("leaves devicecontrol's named host falling through when only its product host is overridden", async () => {
+    const KEY = "CAPABILITY_REGISTRY_BASE_URL_DEVICECONTROL";
+    process.env[KEY] = "https://hub.example.test";
+    try {
+      const { resolveBaseUrl } =
+        await import("../../src/tools/capability-registry/config.js");
+      const resolved = await resolveBaseUrl("devicecontrol", CONFIG, products.devicecontrol, undefined, "api");
+      expect(resolved).toMatch(/^https:\/\//);
+      expect(resolved).not.toBe("https://hub.example.test");
+    } finally {
+      delete process.env[KEY];
+    }
+  });
+
   it.each([
     ["us", "https://accessibility.browserstack.com"],
     ["eu", "https://accessibility-eu.browserstack.com"],
@@ -444,11 +460,11 @@ describe("review fixes", () => {
     ).toMatchObject({ confirmed: null });
   });
 
-  it("declares nullable only on body parameters, the only place bind can send a null", () => {
+  it("declares accepts_null only on body parameters, the only place bind can send a null", () => {
     for (const product of Object.values<any>(products)) {
       for (const c of product.capabilities ?? []) {
         for (const group of ["path_params", "query"]) {
-          for (const p of c[group] ?? []) expect(p.nullable, `${c.name}.${p.name}`).toBeUndefined();
+          for (const p of c[group] ?? []) expect(p.accepts_null, `${c.name}.${p.name}`).toBeUndefined();
         }
       }
     }

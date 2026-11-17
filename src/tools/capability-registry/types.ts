@@ -118,8 +118,12 @@ export interface WireParam extends WireConstraints {
    * "null" is neither true nor false. web_accessibility's needs-review `confirmed` is the
    * case that forced this — `confirmed: null` with `hidden: false` is how the server puts a
    * confirmed issue back to pending, so refusing null left that undo with no route at all.
+   *
+   * Deliberately a separate key from OpenAPI's `nullable`, which bind ignores: tm already
+   * marks some fields `nullable` as documentation, and an opt-in key keeps their wire
+   * behaviour unchanged until a product chooses it.
    */
-  nullable?: true;
+  accepts_null?: true;
 }
 
 /**

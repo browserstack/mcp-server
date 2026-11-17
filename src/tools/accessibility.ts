@@ -584,7 +584,7 @@ const WEB_ISSUES_NOTE =
 // cases, issues by WCAG guideline, the elements behind a rule, one issue's detail, merging
 // reports) and once told the user test cases "aren't available". Point at the dashboard views.
 const WEB_MORE_VIEWS_NOTE =
-  "This answer is the issue list only. For a build's or scan run's test cases, its issues grouped by rule or by WCAG guideline, the elements behind a rule or guideline, one issue's full detail, or several Workflow Analyzer reports merged into one, call searchCapability with product web_accessibility: those are separate dashboard views, so never tell the user they are unavailable.";
+  "This answer is the issue list only. For a build's or scan run's test cases, its issues grouped by rule or by WCAG guideline, the elements behind a rule or guideline, one issue's full detail, or several Workflow Analyzer reports merged into one, call searchCapability with product web_accessibility: those are separate dashboard views. Check searchCapability before telling the user one is unavailable, and if a view then refuses (for example a 403 for scope, plan or access), relay that refusal as it came.";
 
 /** The CSV link, with what it is for: an answer gives a page of issues at a time. */
 function fullReportLine(reportLink: string): string {

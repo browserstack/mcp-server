@@ -18,3 +18,13 @@ vi.mock("sharp", () => {
 vi.mock("../src/lib/account-region.js", () => ({
   accountRegion: () => undefined,
 }));
+
+// No false-positive memory reads while fetching issues; tests/tools/fpMemory.test.ts
+// unmocks the module to test it.
+vi.mock(
+  "../src/tools/accessiblity-utils/fp-memory.js",
+  async (importOriginal) => ({
+    ...(await importOriginal<object>()),
+    memoryForReport: async () => undefined,
+  }),
+);

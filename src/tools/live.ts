@@ -8,6 +8,7 @@ import { BrowserStackConfig } from "../lib/types.js";
 import { isEnabled as capabilityRegistryEnabled } from "./capability-registry/config.js";
 import globalConfig from "../config.js";
 import { versionString } from "../lib/version-keyword.js";
+import { CallerError } from "../lib/error.js";
 
 // Define the schema shape
 const LiveArgsShape = {
@@ -42,9 +43,9 @@ async function launchDesktopSession(
   config: BrowserStackConfig,
 ): Promise<string> {
   if (!args.desiredBrowser)
-    throw new Error("You must provide a desiredBrowser");
+    throw new CallerError("You must provide a desiredBrowser");
   if (!args.desiredBrowserVersion)
-    throw new Error("You must provide a desiredBrowserVersion");
+    throw new CallerError("You must provide a desiredBrowserVersion");
 
   return startBrowserSession(
     {
@@ -66,7 +67,8 @@ async function launchMobileSession(
   args: z.infer<typeof LiveArgsSchema>,
   config: BrowserStackConfig,
 ): Promise<string> {
-  if (!args.desiredDevice) throw new Error("You must provide a desiredDevice");
+  if (!args.desiredDevice)
+    throw new CallerError("You must provide a desiredDevice");
 
   return startBrowserSession(
     {

@@ -17,6 +17,7 @@ import {
   MAX_ATTACHMENT_UPLOAD_BYTES,
 } from "../../lib/upload-validator.js";
 import appConfig from "../../config.js";
+import { markCallerFault } from "../../lib/upstream-status.js";
 
 /**
  * Schema for the upload file tool
@@ -45,6 +46,7 @@ export async function uploadFile(
   const { project_identifier, file_path } = args;
 
   if (!appConfig.UPLOAD_BASE_DIR) {
+    markCallerFault();
     return {
       content: [
         {

@@ -8,6 +8,7 @@ import {
 } from "../../lib/local.js";
 import config from "../../config.js";
 import { getRegionalHost } from "../../lib/regional-host.js";
+import { CallerError } from "../../lib/error.js";
 
 export interface AccessibilityScanResponse {
   success: boolean;
@@ -51,7 +52,7 @@ export class ScanTimeoutError extends Error {
  * start the scan with the advice to open an issue (or to send feedback, which an error
  * result gets), since nothing is broken and the message says what to do instead.
  */
-export class ScanRefusedError extends Error {
+export class ScanRefusedError extends CallerError {
   constructor(message: string) {
     super(message);
     this.name = "ScanRefusedError";
@@ -257,7 +258,7 @@ export class AccessibilityScanner {
     ownTunnel?: string,
   ): Promise<AccessibilityScanResponse> {
     if (!this.auth?.username || !this.auth?.password) {
-      throw new Error(
+      throw new CallerError(
         "BrowserStack credentials are not set for AccessibilityScanner.",
       );
     }
@@ -333,6 +334,9 @@ export class AccessibilityScanner {
         body,
       });
       const data = response.data;
+      // A 2xx with success:false carries whatever the product could not do: a bad setting
+      // is the caller's, "user info missing" or an internal error is not. Left untagged
+      // until the body says which, so it is not counted as the caller's by default.
       if (!data.success)
         throw new Error(
           `Unable to start scan: ${data.errors?.join(", ") || JSON.stringify(data)}`,

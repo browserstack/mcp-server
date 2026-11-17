@@ -18,6 +18,7 @@ import { createTestCasePayload } from "./helpers.js";
 import { getBrowserStackAuth } from "../../../lib/get-auth.js";
 import { BrowserStackConfig } from "../../../lib/types.js";
 import { getTMBaseURL } from "../../../lib/tm-base-url.js";
+import { CallerError } from "../../../lib/error.js";
 
 /**
  * Fetch default and custom form fields for a project.
@@ -162,7 +163,7 @@ export async function fetchTestCaseDetails(
   config: BrowserStackConfig,
 ): Promise<string> {
   if (testCaseIds.length === 0) {
-    throw new Error("No testCaseIds provided to fetchTestCaseDetails");
+    throw new CallerError("No testCaseIds provided to fetchTestCaseDetails");
   }
   const tmBaseUrl = await getTMBaseURL(config);
   const res = await apiClient.post({
@@ -179,6 +180,8 @@ export async function fetchTestCaseDetails(
       test_case_ids: testCaseIds,
     },
   });
+  // TCG accepted the request and reports failure in its body: the product's answer, not
+  // the caller's input, so it stays untagged.
   if (res.data.data.success !== true) {
     throw new Error(`Fetch details failed: ${res.data.data.message}`);
   }
@@ -480,6 +483,7 @@ export async function projectIdentifierToId(
       accept: "application/json, text/plain, */*",
     },
   });
+  // The list itself could not be read: the product's answer, not the identifier's fault.
   if (response.data.success !== true) {
     throw new Error(
       `Failed to fetch project ID: ${response.statusText || response.status}`,
@@ -490,7 +494,7 @@ export async function projectIdentifierToId(
       return project.id;
     }
   }
-  throw new Error(`Project with identifier ${projectId} not found.`);
+  throw new CallerError(`Project with identifier ${projectId} not found.`);
 }
 
 export async function testCaseIdentifierToDetails(
@@ -521,7 +525,7 @@ export async function testCaseIdentifierToDetails(
     !Array.isArray(response.data.test_cases) ||
     response.data.test_cases.length === 0
   ) {
-    throw new Error(
+    throw new CallerError(
       `No test cases found in response for identifier ${testCaseIdentifier}`,
     );
   }
@@ -551,5 +555,7 @@ export async function testCaseIdentifierToDetails(
     }
   }
 
-  throw new Error(`Test case with identifier ${testCaseIdentifier} not found.`);
+  throw new CallerError(
+    `Test case with identifier ${testCaseIdentifier} not found.`,
+  );
 }

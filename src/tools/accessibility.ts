@@ -1,5 +1,10 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
+import {
+  FIX_WORKFLOW_NAME,
+  FIX_WORKFLOW_TITLE,
+  fixWorkflowText,
+} from "./accessiblity-utils/fix-workflow.js";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import {
   AccessibilityScanner,
@@ -44,6 +49,11 @@ import { BrowserStackConfig } from "../lib/types.js";
 import { elicitCredentialsIfSupported } from "../lib/elicit-credentials.js";
 import logger from "../logger.js";
 import { NEEDS_A11Y_CONFIG_ID, NEEDS_A11Y_SCAN_ID } from "./tool-handoff.js";
+import {
+  applyMemory,
+  memoryForReport,
+  type MemoryView,
+} from "./accessiblity-utils/fp-memory.js";
 import {
   createErrorResponse,
   createSuccessResponse,
@@ -105,6 +115,7 @@ import {
   withNotes,
   type ScanArgs,
 } from "./accessiblity-utils/scan-rerun.js";
+import { CallerError } from "../lib/error.js";
 
 export { EXPERT_QUERY_MAX_CHARS };
 
@@ -158,6 +169,13 @@ async function initializeReportFetcher(
   return reportFetcher;
 }
 
+/**
+ * accessibilityExpert is going away; until it is removed it still answers, with this note,
+ * which names what to use instead so an agent stops reaching for it.
+ */
+const ACCESSIBILITY_EXPERT_DEPRECATED =
+  "Note: accessibilityExpert is deprecated and will be removed in a future release. To list or filter a report's issues, for example those failing a WCAG criterion, use fetchAccessibilityIssues and answer from its result; to scan a page, use startAccessibilityScan. For advice on a report, such as how to raise its score or which issues to fix first, call askBrowserStackAI with product a11y and give the user its answer. For a general WCAG or ARIA question, call askBrowserStackAI with product a11y too. If askBrowserStackAI says it is not enabled for this account, answer from the report's issues.";
+
 async function executeAccessibilityRAG(
   args: { query: string },
   server: McpServer,
@@ -172,14 +190,18 @@ async function executeAccessibilityRAG(
     );
     const { query, shortened, kept } = fitExpertQuery(args.query);
     const answer = await queryAccessibilityRAG(query, config);
-    if (!shortened) return answer;
     return {
       ...answer,
       content: [
-        {
-          type: "text",
-          text: `The question was ${args.query.length} characters; the knowledge base takes at most ${EXPERT_QUERY_MAX_CHARS}, so ${query.length} were sent: its ${kept ?? "opening"}. If the answer misses the point, ask again more briefly.`,
-        },
+        { type: "text", text: ACCESSIBILITY_EXPERT_DEPRECATED },
+        ...(shortened
+          ? [
+              {
+                type: "text" as const,
+                text: `The question was ${args.query.length} characters; the knowledge base takes at most ${EXPERT_QUERY_MAX_CHARS}, so ${query.length} were sent: its ${kept ?? "opening"}. If the answer misses the point, ask again more briefly.`,
+              },
+            ]
+          : []),
         ...(answer.content ?? []),
       ],
     };
@@ -990,7 +1012,10 @@ async function fetchAccessibilityIssues(
         if (bare && searchError instanceof ScanNotInListError) {
           return buildIdNotFound(thBuildId, searchError);
         }
-        throw new Error(
+        // Only a list that was searched and held nothing is the caller's link; a list
+        // that could not be read is not.
+        const Kind = searchError instanceof CallerError ? CallerError : Error;
+        throw new Kind(
           `${why}, and searching the scan list found nothing either: ${
             searchError instanceof Error
               ? searchError.message
@@ -1141,8 +1166,19 @@ async function fetchAccessibilityIssues(
   const notScanned = (await unscanned).filter(
     (p) => p.status !== "redirect" && !errorPageUrls.has(samePage(p.pageUrl)),
   );
+  // The memory for this page's rules comes with the issues, so it is applied whether or
+  // not the agent thinks to ask for it.
+  const fp = applyMemory(
+    await memoryForReport(setupAuth(config), Object.keys(rules ?? {}), pageUrl),
+    records,
+    pageUrl,
+  );
+  const beforeRemoval = fp.marked
+    ? ", before removing saved false positives"
+    : "";
 
   return createSuccessResponse([
+    ...fp.lead,
     ...preface,
     ...processingNote(processing),
     // What the run did not check, said on the first page with the whole report's counts.
@@ -1161,14 +1197,16 @@ async function fetchAccessibilityIssues(
         ]),
     // A page that did not load has no issues of its own to count.
     ...(page && error_pages.length === 0 ? pageNote(page) : []),
-    `Retrieved ${page_length} accessibility issues (Total: ${total_issues})`,
+    `Retrieved ${page_length} accessibility issues (Total: ${total_issues}${beforeRemoval})`,
     // The whole report's score and counts, said on its first page.
     ...scoreNote(score),
     ...(cursor ? [] : webSummaryNote(summary, total_issues)),
     ...excludedIssuesNote(duplicate_issues, unlinked_duplicates, hidden_issues),
     fullReportLine(reportLink),
     WEB_ISSUES_NOTE,
-    `Issues: ${wrapUntrusted("accessibility scan results", JSON.stringify({ issues: records, rules }))}`,
+    ...fp.notes,
+    `Issues: ${wrapUntrusted("accessibility scan results", JSON.stringify({ issues: fp.records, rules }))}`,
+    ...fp.closing,
     ...(cursor ? [] : [askAiNote(source)]),
     closingMessage(
       next_page,
@@ -1532,7 +1570,7 @@ async function createAuthConfig(
 
   if (args.type === "form") {
     if (!validateFormAuthArgs(args)) {
-      throw new Error(
+      throw new CallerError(
         "Form authentication requires usernameSelector, passwordSelector, and submitSelector",
       );
     }
@@ -1692,16 +1730,24 @@ function createScanSuccessResponse(
   settings: ScanSettings = {},
   applied?: ScanSettings,
   score?: ReportScore,
+  fp: MemoryView<(typeof report.records)[number]> = applyMemory(
+    undefined,
+    report.records,
+  ),
 ): CallToolResult {
   const cursor = report.next_page;
+  const beforeRemoval = fp.marked
+    ? " (before removing saved false positives)"
+    : "";
   const messages = [
+    ...fp.lead,
     `Accessibility scan "${name}" completed. ${scanDashboardNote(dashboardLink, scanId)}`,
     `Scan ID: ${scanId} and Scan Run ID: ${scanRunId}`,
     // The parser leaves an error page's rows out of the count; this says why.
     ...errorPagesNote(report.error_pages ?? [], "scan again"),
     scanSettingsNote(settings, applied),
     fullReportLine(reportUrl),
-    `We found ${report.total_issues} issues. Below are the details of the ${report.page_length} most critical issues.`,
+    `We found ${report.total_issues} issues${beforeRemoval}. Below are the details of the ${report.page_length} most critical issues.`,
     ...scoreNote(score),
     ...webSummaryNote(report.summary, report.total_issues),
     ...excludedIssuesNote(
@@ -1710,7 +1756,9 @@ function createScanSuccessResponse(
       report.hidden_issues,
     ),
     WEB_ISSUES_NOTE,
-    `Scan results: ${wrapUntrusted("accessibility scan results", JSON.stringify({ issues: report.records, rules: report.rules }))}`,
+    ...fp.notes,
+    `Scan results: ${wrapUntrusted("accessibility scan results", JSON.stringify({ issues: fp.records, rules: report.rules }))}`,
+    ...fp.closing,
     askAiNote({ kind: "scan", scanId, scanRunId }),
   ];
 
@@ -1738,6 +1786,8 @@ async function scanOutcome(
     name: string;
     scanId: string;
     scanRunId: string;
+    /** The scanned page, whose site the false-positive memory is read for. */
+    pageURL: string;
     settings: ScanSettings;
     rerun?: boolean;
   },
@@ -1816,6 +1866,17 @@ async function scanOutcome(
     parseAccessibilityReportFromCSV(reportLink),
     reportFetcher.score({ kind: "scan", scanId, scanRunId }),
   ]);
+  // Saved false positives for this page's rules are removed before the issues are shown,
+  // for a new scan and a re-run alike.
+  const fp = applyMemory(
+    await memoryForReport(
+      setupAuth(config),
+      Object.keys(report.rules ?? {}),
+      scan.pageURL,
+    ),
+    report.records,
+    scan.pageURL,
+  );
   return [
     createScanSuccessResponse(
       scanName,
@@ -1827,6 +1888,7 @@ async function scanOutcome(
       settings,
       applied,
       score,
+      fp,
     ),
     "completed",
   ];
@@ -1864,6 +1926,7 @@ async function runAccessibilityScan(
     name: scanName,
     scanId,
     scanRunId,
+    pageURL,
     settings,
   });
   // The rename is said first, so the name asked for is not taken for the scan's.
@@ -1960,6 +2023,7 @@ async function rerunAccessibilityScan(
     name,
     scanId,
     scanRunId,
+    pageURL: saved.urlList[0],
     settings: saved.settings,
     rerun: true,
   });
@@ -1983,7 +2047,7 @@ export default function addAccessibilityTools(
 
   tools.accessibilityExpert = server.tool(
     "accessibilityExpert",
-    "Answer accessibility, a11y, and WCAG questions using BrowserStack's accessibility knowledge base.",
+    "Deprecated, to be removed: answers accessibility, a11y, and WCAG questions from BrowserStack's accessibility knowledge base.",
     {
       query: z
         .string()
@@ -1992,7 +2056,7 @@ export default function addAccessibilityTools(
         ),
     },
     {
-      title: "Accessibility Expert",
+      title: "Accessibility Expert (deprecated)",
       readOnlyHint: true,
       openWorldHint: false,
       destructiveHint: false,
@@ -2180,7 +2244,7 @@ export default function addAccessibilityTools(
 
   tools.fetchAccessibilityIssues = server.tool(
     "fetchAccessibilityIssues",
-    "Fetch accessibility issues from one source: scanId+scanRunId, buildId, workflowReportId, appReportId or reportUrl." +
+    "Fetch a web or app accessibility report's issues. Remove the saved false positives it marks before reporting any." +
       NEEDS_A11Y_SCAN_ID,
     {
       scanId: z
@@ -2263,4 +2327,41 @@ export default function addAccessibilityTools(
   );
 
   return tools;
+}
+
+/**
+ * The fix workflow, for a server that lists the accessibility tools: a prompt the user starts
+ * on purpose, filled in with what they asked to check and to fix.
+ */
+export function addAccessibilityFixWorkflow(server: McpServer): void {
+  server.registerPrompt(
+    FIX_WORKFLOW_NAME,
+    {
+      title: FIX_WORKFLOW_TITLE,
+      description:
+        "Find, fix and verify accessibility issues in this codebase with BrowserStack.",
+      argsSchema: {
+        target: z
+          .string()
+          .optional()
+          .describe(
+            "What to check: a page URL, a local dev URL, or a BrowserStack report link.",
+          ),
+        scope: z
+          .string()
+          .optional()
+          .describe(
+            "What to fix: e.g. critical issues only, one component, or files changed on this branch.",
+          ),
+      },
+    },
+    ({ target, scope }) => ({
+      messages: [
+        {
+          role: "user",
+          content: { type: "text", text: fixWorkflowText({ target, scope }) },
+        },
+      ],
+    }),
+  );
 }

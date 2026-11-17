@@ -5,6 +5,7 @@ import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { BrowserStackConfig } from "../../lib/types.js";
 import { getTMBaseURL } from "../../lib/tm-base-url.js";
 import { wrapUntrusted } from "../../lib/untrusted-content.js";
+import { CallerError } from "../../lib/error.js";
 
 /**
  * Schema for adding a test result to a test run.
@@ -64,7 +65,7 @@ export async function addTestResult(
 
     const data = response.data;
     if (!data.success) {
-      throw new Error(
+      throw new CallerError(
         `API returned unsuccessful response: ${wrapUntrusted("API response", JSON.stringify(data))}`,
       );
     }

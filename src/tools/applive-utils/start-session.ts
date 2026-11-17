@@ -11,6 +11,7 @@ import { pickVersion } from "./version-utils.js";
 import { DeviceEntry } from "./types.js";
 import { BrowserStackConfig } from "../../lib/types.js";
 import envConfig from "../../config.js";
+import { CallerError } from "../../lib/error.js";
 
 interface StartSessionArgs {
   appPath?: string;
@@ -56,7 +57,7 @@ export async function startSession(
   // 2) Filter by OS
   const osMatches = all.filter((d) => d.os === desiredPlatform);
   if (!osMatches.length) {
-    throw new Error(`No devices for OS "${desiredPlatform}"`);
+    throw new CallerError(`No devices for OS "${desiredPlatform}"`);
   }
 
   // 3) Select by name
@@ -69,7 +70,7 @@ export async function startSession(
   // 5) Final candidates for version
   const final = nameMatches.filter((d) => d.os_version === version);
   if (!final.length) {
-    throw new Error(
+    throw new CallerError(
       `No devices for version "${version}" on ${desiredPlatform}`,
     );
   }
@@ -90,7 +91,7 @@ export async function startSession(
     logger.info(`Using provided BrowserStack app URL: ${app_url}`);
   } else {
     if (!appPath) {
-      throw new Error(
+      throw new CallerError(
         "appPath is required when browserstackAppUrl is not provided",
       );
     }

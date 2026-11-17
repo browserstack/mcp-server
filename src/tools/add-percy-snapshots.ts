@@ -2,6 +2,7 @@ import { storedPercyResults } from "../lib/inmemory-store.js";
 import { updateFileAndStep } from "./percy-snapshot-utils/utils.js";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { percyWebSetupInstructions } from "../tools/sdk-utils/percy-web/handler.js";
+import { CallerError } from "../lib/error.js";
 
 export async function updateTestsWithPercyCommands(args: {
   index: number;
@@ -9,7 +10,7 @@ export async function updateTestsWithPercyCommands(args: {
   const { index } = args;
   const stored = storedPercyResults.get();
   if (!stored || !stored.testFiles) {
-    throw new Error(
+    throw new CallerError(
       `No test files found in memory. Please call listTestFiles first.`,
     );
   }
@@ -18,7 +19,7 @@ export async function updateTestsWithPercyCommands(args: {
   const filePaths = Object.keys(fileStatusMap);
 
   if (index < 0 || index >= filePaths.length) {
-    throw new Error(
+    throw new CallerError(
       `Invalid index: ${index}. There are ${filePaths.length} files available.`,
     );
   }

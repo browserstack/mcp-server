@@ -16,6 +16,7 @@ import logger from "../../logger.js";
 import { projectIdentifierToId } from "./TCG-utils/api.js";
 import { BrowserStackConfig } from "../../lib/types.js";
 import { getTMBaseURL } from "../../lib/tm-base-url.js";
+import { markCallerFault } from "../../lib/upstream-status.js";
 
 export async function createTestCasesFromFile(
   args: CreateTestCasesFromFileArgs,
@@ -41,6 +42,7 @@ export async function createTestCasesFromFile(
 
   const documentObj = signedUrlMap.get(args.documentId);
   if (!documentObj) {
+    markCallerFault();
     return {
       content: [
         {

@@ -116,6 +116,7 @@ import {
   withNotes,
   type ScanArgs,
 } from "./accessiblity-utils/scan-rerun.js";
+import { CallerError } from "../lib/error.js";
 
 export { EXPERT_QUERY_MAX_CHARS };
 
@@ -1020,7 +1021,10 @@ async function fetchAccessibilityIssues(
         if (bare && searchError instanceof ScanNotInListError) {
           return buildIdNotFound(thBuildId, searchError);
         }
-        throw new Error(
+        // Only a list that was searched and held nothing is the caller's link; a list
+        // that could not be read is not.
+        const Kind = searchError instanceof CallerError ? CallerError : Error;
+        throw new Kind(
           `${why}, and searching the scan list found nothing either: ${
             searchError instanceof Error
               ? searchError.message
@@ -1586,7 +1590,7 @@ async function createAuthConfig(
 
   if (args.type === "form") {
     if (!validateFormAuthArgs(args)) {
-      throw new Error(
+      throw new CallerError(
         "Form authentication requires usernameSelector, passwordSelector, and submitSelector",
       );
     }

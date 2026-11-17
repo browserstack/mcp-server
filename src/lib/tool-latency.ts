@@ -5,6 +5,7 @@ import { accountRegion } from "./account-region.js";
 import { withAccountRegion } from "./region-context.js";
 import { assertUsAccount } from "./regional-host.js";
 import { BrowserStackConfig } from "./types.js";
+import { markCallerFault } from "./upstream-status.js";
 
 const WRAPPED = Symbol.for("browserstack.mcp.latencyWrapped");
 const REGION_BOUND = Symbol.for("browserstack.mcp.regionBound");
@@ -45,6 +46,7 @@ export function limitToUsAccounts(
       try {
         assertUsAccount(product);
       } catch (error) {
+        markCallerFault();
         return {
           content: [{ type: "text", text: (error as Error).message }],
           isError: true,

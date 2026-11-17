@@ -6,6 +6,7 @@ import { getBrowserStackAuth } from "../../lib/get-auth.js";
 import { BrowserStackConfig } from "../../lib/types.js";
 import { getTMBaseURL } from "../../lib/tm-base-url.js";
 import { wrapUntrusted } from "../../lib/untrusted-content.js";
+import { markCallerFault } from "../../lib/upstream-status.js";
 
 /**
  * Schema for fetching a single sub-test-plan by identifier under a parent test
@@ -115,6 +116,7 @@ export async function getSubTestPlan(
     });
 
     if (!planResp.data?.success) {
+      markCallerFault();
       return {
         content: [
           {

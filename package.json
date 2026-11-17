@@ -1,6 +1,6 @@
 {
   "name": "@browserstack/mcp-server",
-  "version": "2.6.7",
+  "version": "2.6.9",
   "description": "BrowserStack's Official MCP Server",
   "mcpName": "io.github.browserstack/mcp-server",
   "main": "dist/index.js",
@@ -37,7 +37,7 @@
     "automation"
   ],
   "engines": {
-    "node": ">=20.9.0"
+    "node": ">=22.23.5"
   },
   "author": "",
   "license": "AGPL-3.0-only",

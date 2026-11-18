@@ -1,5 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { wrapUntrusted } from "../../src/lib/untrusted-content.js";
+import {
+  wrapUntrusted,
+  stableUntrusted,
+} from "../../src/lib/untrusted-content.js";
 
 describe("wrapUntrusted", () => {
   it("labels the source and instructs the model to treat it as data only", () => {
@@ -26,5 +29,28 @@ describe("wrapUntrusted", () => {
     expect(nonceA).toBeTruthy();
     expect(nonceB).toBeTruthy();
     expect(nonceA).not.toBe(nonceB);
+  });
+});
+
+describe("stableUntrusted", () => {
+  it("makes two wraps of the same content compare equal", () => {
+    const a = wrapUntrusted("API response", "project not found");
+    const b = wrapUntrusted("API response", "project not found");
+    expect(a).not.toBe(b);
+    expect(stableUntrusted(a)).toBe(stableUntrusted(b));
+  });
+
+  it("normalizes both the open and close marker nonces", () => {
+    const out = stableUntrusted(wrapUntrusted("rca", "x"));
+    expect(out).toContain("«UNTRUSTED rca <nonce>»");
+    expect(out).toContain("«END UNTRUSTED <nonce>»");
+    expect(out).not.toMatch(/[0-9a-f]{12}»/);
+  });
+
+  it("stays linear-time on adversarial marker-like input", () => {
+    const evil = "«".repeat(20000) + "a".repeat(20000);
+    const start = performance.now();
+    stableUntrusted(evil);
+    expect(performance.now() - start).toBeLessThan(100);
   });
 });

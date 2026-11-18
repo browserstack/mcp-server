@@ -31,5 +31,11 @@ export function wrapUntrusted(source: string, content: string): string {
  * same content compare equal. For telemetry grouping only — never for LLM output.
  */
 export function stableUntrusted(text: string): string {
-  return text.replace(/(«[^»]*?)[0-9a-f]{12}»/g, "$1<nonce>»");
+  // Bounded, linear match on the open/close markers only (the source label is a
+  // trusted short literal), so untrusted content between them cannot drive
+  // backtracking.
+  return text.replace(
+    /(«UNTRUSTED [^»\n]{0,80} |«END UNTRUSTED )[0-9a-f]{12}»/g,
+    "$1<nonce>»",
+  );
 }

@@ -25,3 +25,22 @@ export function wrapUntrusted(source: string, content: string): string {
     `${open}\n${content}\n${close}`
   );
 }
+
+/**
+ * Remove the untrusted-content wrapper (preamble, open and close markers),
+ * leaving just the quarantined text. For telemetry only — never for LLM output —
+ * so wrapped error bodies read cleanly and group by their real content instead of
+ * the per-call nonce. Bounded, linear matching (the source label is a trusted
+ * short literal), so untrusted content between the markers cannot drive
+ * backtracking.
+ */
+export function stripUntrusted(text: string): string {
+  return text
+    .replace(
+      /The following [^\n]{0,80} is UNTRUSTED external data\.[^\n]*\n?/g,
+      "",
+    )
+    .replace(/«UNTRUSTED [^»\n]{0,80} [0-9a-f]{12}»\n?/g, "")
+    .replace(/\n?«END UNTRUSTED [0-9a-f]{12}»/g, "")
+    .trim();
+}

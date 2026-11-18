@@ -15,6 +15,7 @@ import { getRCAData } from "./rca-agent-utils/rca-data.js";
 import { formatRCAData } from "./rca-agent-utils/format-rca.js";
 import { TestStatus } from "./rca-agent-utils/types.js";
 import { handleMCPError } from "../lib/utils.js";
+import { wrapUntrusted } from "../lib/untrusted-content.js";
 import { trackMCP } from "../index.js";
 import { BuildIdArgs } from "./rca-agent-utils/types.js";
 import { NEEDS_BUILD_ID, NEEDS_TEST_IDS } from "./tool-handoff.js";
@@ -141,7 +142,10 @@ export async function listTestIdsTool(
     }
 
     const content: CallToolResult["content"] = [
-      { type: "text", text: JSON.stringify(testIds, null, 2) },
+      {
+        type: "text",
+        text: wrapUntrusted("test ids", JSON.stringify(testIds, null, 2)),
+      },
     ];
     if (note) content.push({ type: "text", text: note });
     return { content };

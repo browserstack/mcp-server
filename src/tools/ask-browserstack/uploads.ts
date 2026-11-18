@@ -91,7 +91,11 @@ export function readUploadFile(
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    if (message.startsWith("File not found")) {
+    // The validator refuses anything that does not resolve to a file inside the
+    // upload folder with one uniform message (so it cannot be used to probe
+    // paths elsewhere). List the folder's actual files instead, which only ever
+    // names files the caller may attach.
+    if (message.includes("must be an existing file inside")) {
       throw new UploadError(notFound(name, baseDir));
     }
     throw new UploadError(message);

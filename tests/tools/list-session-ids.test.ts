@@ -1,3 +1,4 @@
+import { unwrapUntrusted } from "../fixtures/unwrap";
 import { describe, it, expect, vi, beforeEach, Mock } from "vitest";
 import { SessionType } from "../../src/lib/constants";
 import { apiClient } from "../../src/lib/apiClient";
@@ -231,7 +232,7 @@ describe("listSessionIdsTool", () => {
     );
 
     expect(result.isError).toBeFalsy();
-    const parsed = JSON.parse(result.content[0].text as string);
+    const parsed = JSON.parse(unwrapUntrusted(result.content[0].text as string));
     expect(parsed[0].sessionId).toBe("sess-aaa");
     expect(resolveHashedBuildId).not.toHaveBeenCalled();
   });
@@ -264,7 +265,7 @@ describe("listSessionIdsTool", () => {
       }),
     );
     // Session list stays in content[0] (JSON-parseable); the note follows.
-    const parsed = JSON.parse(result.content[0].text as string);
+    const parsed = JSON.parse(unwrapUntrusted(result.content[0].text as string));
     expect(parsed[0].sessionId).toBe("sess-aaa");
     expect(result.content[1].text).toContain(
       `Resolved TRA build ${OBS_UUID} to hashed build id ${HASHED_BUILD}`,
@@ -302,7 +303,7 @@ describe("listSessionIdsTool", () => {
     expect((apiClient.get as Mock).mock.calls[2][0].url).toContain(
       `/builds/${HASHED_BUILD}/sessions.json`,
     );
-    expect(JSON.parse(result.content[0].text as string)[0].sessionId).toBe(
+    expect(JSON.parse(unwrapUntrusted(result.content[0].text as string))[0].sessionId).toBe(
       "sess-aaa",
     );
     expect(result.content[1].text).toContain(
@@ -361,7 +362,7 @@ describe("listSessionIdsTool", () => {
     expect((apiClient.get as Mock).mock.calls[1][0].url).toContain(
       `/app-automate/builds/${HASHED_BUILD}/sessions.json`,
     );
-    expect(JSON.parse(result.content[0].text as string)[0].sessionId).toBe("sess-aaa");
+    expect(JSON.parse(unwrapUntrusted(result.content[0].text as string))[0].sessionId).toBe("sess-aaa");
     expect(result.content[1].text).toContain('use sessionType "app-automate"');
     expect(resolveHashedBuildId).not.toHaveBeenCalled();
   });

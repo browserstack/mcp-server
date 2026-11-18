@@ -6,6 +6,7 @@ import {
   userView,
 } from "../../src/tools/ask-browserstack/result-audience.js";
 import type { AskResult } from "../../src/tools/ask-browserstack/types.js";
+import { unwrapUntrusted } from "../fixtures/unwrap";
 
 const CONV = "run-" + "a".repeat(32);
 const PERM = "wf-" + "b".repeat(32);
@@ -55,7 +56,7 @@ describe("the user-facing block", () => {
       },
     });
     const view = userView(r);
-    expect(view.answer).toBe("16 gaps found.");
+    expect(unwrapUntrusted(view.answer as string)).toBe("16 gaps found.");
     expect(view.run).toEqual({
       title: "Test case maintenance",
       stage: "review",
@@ -156,5 +157,15 @@ describe("the tool result", () => {
       answer: "done",
     } as unknown as AskResult;
     expect(toAudienceResult(r).content).toHaveLength(1);
+  });
+});
+
+describe("wrapping untrusted backend text", () => {
+  it("wraps the raw atlas_response in the assistant-only block", () => {
+    const internal = internalView(result({ status: "running" }));
+    expect(typeof internal?.atlas_response).toBe("string");
+    expect(unwrapUntrusted(internal?.atlas_response as string)).toBe(
+      JSON.stringify({ conversation_id: CONV }),
+    );
   });
 });

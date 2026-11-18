@@ -1,3 +1,4 @@
+import { unwrapUntrusted } from "../fixtures/unwrap";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { ErrorCode, McpError } from "@modelcontextprotocol/sdk/types.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -459,7 +460,7 @@ describe("askBrowserStackAI, end to end through the server factory", () => {
 
       // 4. the result
       expect(payload.ok).toBe(true);
-      expect(payload.answer).toBe("Created folder 12.");
+      expect(unwrapUntrusted(payload.answer)).toBe("Created folder 12.");
       // Atlas's trail wins, carrying the applied bit; ours is kept beside it.
       expect(payload.approvals_source).toBe("atlas");
       expect(payload.approvals).toEqual([
@@ -2080,7 +2081,7 @@ describe("the client works against both server generations", () => {
     expect(decisions[0]).toMatchObject({ perm_id: PERM_A, decision: "allow" });
     // The run finished ON THE STREAM, and that result is what the caller gets.
     expect(payload.status).toBe("ok");
-    expect(payload.answer).toBe("created it");
+    expect(unwrapUntrusted(payload.answer)).toBe("created it");
   }, 10_000);
 
   it("takes the continuation from the reply when the server sends one", async () => {
@@ -2096,6 +2097,6 @@ describe("the client works against both server generations", () => {
     const { payload } = await call(server.getTools());
 
     expect(payload.status).toBe("ok");
-    expect(payload.answer).toBe("done");
+    expect(unwrapUntrusted(payload.answer)).toBe("done");
   }, 10_000);
 });

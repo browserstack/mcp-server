@@ -1616,6 +1616,16 @@ describe('updateTestCase — upstream error messages', () => {
       response: { status, data },
     });
 
+  // The untrusted backend body is wrapped by errorText; return the content
+  // between the markers (asserting the open/close nonce matches).
+  const UNTRUSTED =
+    /«UNTRUSTED API response ([0-9a-f]{12})»\n([\s\S]*)\n«END UNTRUSTED \1»/;
+  const wrappedBody = (text: string): string => {
+    const m = text.match(UNTRUSTED);
+    if (!m) throw new Error(`expected wrapped untrusted body, got: ${text}`);
+    return m[2];
+  };
+
   beforeAll(async () => {
     const actual = await vi.importActual<
       typeof import('../../src/tools/testmanagement-utils/update-testcase')
@@ -1640,7 +1650,8 @@ describe('updateTestCase — upstream error messages', () => {
 
     expect(result.isError).toBe(true);
     const text = (result.content[0] as any).text as string;
-    expect(text).toBe('Failed to update test case (HTTP 422): Priority is not valid for this project.');
+    expect(text).toContain('Failed to update test case (HTTP 422): ');
+    expect(wrappedBody(text)).toBe('Priority is not valid for this project');
     expect(text).not.toContain('[object Object]');
   });
 
@@ -1665,8 +1676,9 @@ describe('updateTestCase — upstream error messages', () => {
     const result = await updateTestCaseReal(args, mockConfig as any);
 
     const text = (result.content[0] as any).text as string;
-    expect(text).toBe(
-      'Failed to update test case (HTTP 400): {"detail":{"hint":"priority must be one of: low, medium, high"}}.',
+    expect(text).toContain('Failed to update test case (HTTP 400): ');
+    expect(wrappedBody(text)).toBe(
+      '{"detail":{"hint":"priority must be one of: low, medium, high"}}',
     );
   });
 
@@ -1676,7 +1688,9 @@ describe('updateTestCase — upstream error messages', () => {
     const result = await updateTestCaseReal(args, mockConfig as any);
 
     const text = (result.content[0] as any).text as string;
-    expect(text).toBe('Failed to update test case (HTTP 401): Unauthorized. Check the BrowserStack credentials in use.');
+    expect(text).toContain('Failed to update test case (HTTP 401): ');
+    expect(wrappedBody(text)).toBe('Unauthorized');
+    expect(text).toContain('Check the BrowserStack credentials in use.');
   });
 
   it('falls back to the error message when there is no response', async () => {

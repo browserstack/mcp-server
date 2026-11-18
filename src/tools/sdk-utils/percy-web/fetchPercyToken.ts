@@ -2,6 +2,7 @@ import { createHash } from "crypto";
 import { PercyIntegrationTypeEnum } from "../common/types.js";
 import { CallerError } from "../../../lib/error.js";
 import { trackedFetch } from "../../../lib/upstream-status.js";
+import globalConfig from "../../../config.js";
 
 const tokenCache = new Map<string, string>();
 
@@ -54,6 +55,12 @@ export async function fetchPercyToken(
   authorization: string,
   options: { type?: PercyIntegrationTypeEnum } = {},
 ): Promise<string> {
+  // Hosted mode serves many accounts from one process: never hold a token across
+  // calls there. Local (single-account) runs keep the cache, keyed on credentials.
+  if (globalConfig.REMOTE_MCP) {
+    return fetchTokenFromAPI(projectName, authorization, options);
+  }
+
   const key = tokenCacheKey(projectName, authorization, options.type);
   const cached = tokenCache.get(key);
   if (cached) {

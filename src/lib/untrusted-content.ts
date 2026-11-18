@@ -25,3 +25,11 @@ export function wrapUntrusted(source: string, content: string): string {
     `${open}\n${content}\n${close}`
   );
 }
+
+/**
+ * Replace the per-call wrapper nonce with a constant so two wrapped copies of the
+ * same content compare equal. For telemetry grouping only — never for LLM output.
+ */
+export function stableUntrusted(text: string): string {
+  return text.replace(/(«[^»]*?)[0-9a-f]{12}»/g, "$1<nonce>»");
+}

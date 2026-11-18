@@ -276,7 +276,10 @@ export async function fetchSelfHealSelectorTool(
             text:
               banner +
               "Self-heal selectors fetched successfully (sessionId log-parse mode):\n" +
-              wrapUntrusted("self-heal selectors", JSON.stringify(selectors, null, 2)) +
+              wrapUntrusted(
+                "self-heal selectors",
+                JSON.stringify(selectors, null, 2),
+              ) +
               (testCodeContext
                 ? "\n\nThe following test code was found for this session. " +
                   "Use it to understand the test intent and make more accurate " +
@@ -327,7 +330,10 @@ export async function fetchSelfHealSelectorTool(
             "pass `healed_selectors[]` to `prepareSelfHealingPlan` so the " +
             "caller can apply the edits with its own file-editing " +
             "tools (this server never writes files).\n" +
-            wrapUntrusted("self-healing report", JSON.stringify(report, null, 2)) +
+            wrapUntrusted(
+              "self-healing report",
+              JSON.stringify(report, null, 2),
+            ) +
             (testCodeContext
               ? "\n\nThe following test code was found for sessions in this build. " +
                 "Use it to understand the test intent, locate the exact files " +
@@ -494,7 +500,10 @@ export async function prepareSelfHealingPlanTool(
             "No applicable locator pairs found in the provided sessions. " +
             "Every entry was missing values or had identical original/healed " +
             "locators.\n" +
-            wrapUntrusted("skipped locator pairs", JSON.stringify({ skipped }, null, 2)),
+            wrapUntrusted(
+              "skipped locator pairs",
+              JSON.stringify({ skipped }, null, 2),
+            ),
         },
       ],
     };

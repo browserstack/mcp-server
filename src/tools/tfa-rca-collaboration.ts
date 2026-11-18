@@ -96,7 +96,10 @@ export async function triggerRcaReportTool(
     content: [
       {
         type: "text",
-        text: wrapUntrusted("RCA report glimpse", JSON.stringify(glimpse, null, 2)),
+        text: wrapUntrusted(
+          "RCA report glimpse",
+          JSON.stringify(glimpse, null, 2),
+        ),
       },
     ],
   };
@@ -111,7 +114,10 @@ export async function getBuildFailureThemesTool(
     content: [
       {
         type: "text",
-        text: wrapUntrusted("build failure themes", JSON.stringify(result, null, 2)),
+        text: wrapUntrusted(
+          "build failure themes",
+          JSON.stringify(result, null, 2),
+        ),
       },
     ],
   };
@@ -126,7 +132,10 @@ export async function listTestsInFailureThemeTool(
     content: [
       {
         type: "text",
-        text: wrapUntrusted("failure theme tests", JSON.stringify(result, null, 2)),
+        text: wrapUntrusted(
+          "failure theme tests",
+          JSON.stringify(result, null, 2),
+        ),
       },
     ],
   };

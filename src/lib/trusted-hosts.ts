@@ -1,7 +1,7 @@
 import type { AxiosRequestConfig } from "axios";
 
 const TRUSTED_ASSET_HOST_PATTERN =
-  /(^|\.)browserstack\.com$|\.s3([.-][a-z0-9-]+)*\.amazonaws\.com$|\.backblazeb2\.com$/;
+  /(^|\.)browserstack\.com$|\.s3([.-][a-z0-9]+)*\.amazonaws\.com$|\.backblazeb2\.com$/;
 
 export function isTrustedAssetUrl(value: string): boolean {
   try {
@@ -12,6 +12,21 @@ export function isTrustedAssetUrl(value: string): boolean {
   } catch {
     return false;
   }
+}
+
+export class RedirectRefusedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "RedirectRefusedError";
+  }
+}
+
+export function isRedirectRefused(error: unknown): boolean {
+  return (
+    error instanceof RedirectRefusedError ||
+    (error as { cause?: unknown })?.cause instanceof RedirectRefusedError ||
+    (error as { name?: unknown })?.name === "RedirectRefusedError"
+  );
 }
 
 export function trustedRedirectGuard(
@@ -28,7 +43,7 @@ export function trustedRedirectGuard(
       redirectOptions.href ??
       `${redirectOptions.protocol}//${redirectOptions.host}${redirectOptions.path ?? ""}`;
     if (!isTrustedAssetUrl(target)) {
-      throw new Error(
+      throw new RedirectRefusedError(
         `Refusing to follow ${label} redirect to an untrusted host`,
       );
     }

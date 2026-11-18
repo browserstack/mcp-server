@@ -5,6 +5,7 @@ import {
 } from "../../src/tools/automate-utils/fetch-screenshots";
 import { SessionType } from "../../src/lib/constants";
 import { apiClient } from "../../src/lib/apiClient";
+import { RedirectRefusedError } from "../../src/lib/trusted-hosts";
 
 vi.mock("../../src/lib/apiClient", () => ({
   apiClient: { get: vi.fn() },
@@ -171,7 +172,10 @@ describe("fetchAutomationScreenshots", () => {
   const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a]);
 
   it("returns the last five screenshots with detected mime types", async () => {
-    const urls = Array.from({ length: 6 }, (_, i) => `${S3}/screenshot-${i}.jpeg`);
+    const urls = Array.from(
+      { length: 6 },
+      (_, i) => `${S3}/screenshot-${i}.jpeg`,
+    );
     const logs = urls
       .map((u, i) => `2026-10-13 9:00:0${i}:000 DEBUG ${u}`)
       .concat(requestedOnlyLogs.split("\n").slice(0, 2))
@@ -201,5 +205,32 @@ describe("fetchAutomationScreenshots", () => {
       "image/jpeg",
       "image/png",
     ]);
+  });
+
+  it("skips a screenshot whose download is refused for redirecting off trusted hosts", async () => {
+    const good = `${S3}/good.png`;
+    const bad = `${S3}/bad.png`;
+    const logs = [
+      `2026-10-13 9:00:00:000 DEBUG ${good}`,
+      `2026-10-13 9:00:01:000 DEBUG ${bad}`,
+    ].join("\n");
+
+    (apiClient.get as Mock).mockImplementation(async ({ url }) => {
+      if (url.endsWith("/logs")) {
+        return { ok: true, status: 200, data: logs };
+      }
+      if (url === bad) {
+        throw new RedirectRefusedError("nope");
+      }
+      return { ok: true, status: 200, data: png };
+    });
+
+    const result = await fetchAutomationScreenshots(
+      S,
+      SessionType.Automate,
+      mockConfig,
+    );
+
+    expect(result.map((s) => s.url)).toEqual([good]);
   });
 });

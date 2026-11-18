@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "version": "1.46",
-  "build_id": "69f67856_2026-11-04T06:39:09Z",
+  "build_id": "06326134_2026-11-18T07:08:47Z",
   "tm": {
     "routing_terms": [
       "team",
@@ -2007,7 +2007,8 @@
         "intent": "Restore archived test cases back into their folders — the undo for a bulk archive.",
         "returns": [
           "success",
-          "folders"
+          "folders",
+          "folders_renamed"
         ],
         "paginated": true,
         "responses": {
@@ -2034,7 +2035,7 @@
           "This is the un-archive, not a read. It takes ARCHIVED case ids: list them with the archived test cases call first, because a live case id here simply resolves to nothing.",
           "The scope is forced to the archive before your selection is resolved, so `q` and `folder_id` are accepted and then ignored. `select_all: true` therefore means the WHOLE archive, not the filtered subset you may think you asked for.",
           "Plan-gated: on a workspace that is not a paid plan this returns HTTP 200 with `{success:false, error:\"...\"}` and does nothing. Check `success`, not the status code.",
-          "The 200 body is `{success:true, folders:{...}}` — folder case counts, NOT the restored test cases. Nothing in the response names what was restored; re-read the folders to confirm.",
+          "The 200 body is `{success:true, folders:{...}, folders_renamed:[...]}` — folder case counts, NOT the restored test cases. Nothing in the response names what was restored; re-read the folders to confirm. `folders_renamed` is an array of objects returned by the product for folders it had to rename on restore, and is empty when none were.",
           "An empty selection is a bare 400 `{success:false}` with no message — that is what you get when `ids` is empty, or when `select_all` is true but `q` matched nothing.",
           "Above 300 selected cases the work is handed to a background job and you get 200 `{success:true, async:true, unique_id:\"<uuid>\"}` with NO `test_cases` — treat that body as an acknowledgement, not a result, and re-read afterwards.",
           "Concurrent bulk ops on the same cases are refused: 400 `{success:false, message:\"TestCases in progress with another operation\"}`. Retry rather than reading it as bad input."
@@ -2306,7 +2307,7 @@
         "intent": "Change which test cases a run covers — bulk-add cases to it, or bulk-remove them, optionally per configuration",
         "guidance": [
           "Everything goes inside a `test_run` object, and exactly one of add_test_cases / remove_test_cases may be present and non-empty — both, or neither, is a 400.",
-          "Always asynchronous. A 202 {success, async, unique_id} means only that the job was queued; nothing has changed yet. There is no status endpoint for unique_id over HTTP (completion is announced on a websocket channel), so confirm by re-reading the run's test cases.",
+          "Always asynchronous. A 202 {success, async, unique_id} means only that the job was queued; nothing has changed yet. There is no status endpoint for unique_id over HTTP (completion is announced on a websocket channel), so confirm by re-reading the run's test cases. The 202 may also carry `status_url`, a relative path the caller cannot poll through this capability; it is absent when job status is not available.",
           "Removing a case DISCARDS its recorded results unless you send preserve_existing_results: true. Runs keep no version history, so those results cannot be restored — ask before removing cases from a run that has been executed.",
           "At most 300 distinct test_case_ids per request, counted across all entries; a duplicate id within or across entries is a 400. Split larger changes into batches.",
           "Only the shape is validated before the 202 — an id that does not exist, or is not shared with this project, fails inside the worker and is not reported back on this response.",
@@ -2316,11 +2317,12 @@
         "returns": [
           "success",
           "async",
-          "unique_id"
+          "unique_id",
+          "status_url"
         ],
         "responses": {
           "202": {
-            "description": "Bulk change accepted and queued. Body is {success: true, async: true, unique_id} — the run is unchanged at this point.",
+            "description": "Bulk change accepted and queued. Body is {success: true, async: true, unique_id}, plus status_url when job status is available — the run is unchanged at this point.",
             "schema": {
               "type": "object",
               "properties": {
@@ -2332,6 +2334,10 @@
                 },
                 "unique_id": {
                   "type": "string"
+                },
+                "status_url": {
+                  "type": "string",
+                  "description": "Relative path of the job's status resource. Present only when job status is available; not pollable through this capability."
                 }
               }
             }
@@ -25004,9 +25010,9 @@
           "Both one-off and scheduled reports are listed by default; is_scheduled=true narrows to scheduled ones, and nothing narrows to one-off ones.",
           "scheduled_report_count and total_report_count describe the WHOLE filtered result set, not the page you are holding — use them to answer 'how many?' without paging, but remember any report_type / q / is_scheduled filter you sent is already baked into both numbers.",
           "Each row's `id` is the SC-NNN identifier, and that is what the v2 single-report read and the v2 download take. It is NOT the integer report id the v1 report capabilities (report detail, report sections, drilldown, send-email-now) require: SC-NNN is a per-group sequence number, so stripping the prefix gives the wrong id. Get the integer from the v1 schedules listing, which returns `id` and `identifier` side by side on the same records.",
-          "Rows carry the report's CONFIGURATION only — type, timeframe, filters, schedule, recipients. No figures, no report data. Reading the numbers a report contains is a separate call.",
+          "Rows carry the report's CONFIGURATION only — type, scope, filters, schedule, recipients. No figures, no report data. Reading the numbers a report contains is a separate call.",
           "`latest_attachment` is derived from the newest generated file in the whole PROJECT, not from this report — a row can advertise an attachment produced by a different report. Treat it as 'something was generated here recently', not as this report's output.",
-          "`dynamic_filters` is always null on every row, even for reports created with dynamic filters; only `report_filters` echoes back what was configured.",
+          "`scope` is null on a row whose stored selection no scope can express (a cross-project selection, for example), and `filters` is null when the report carries filters this API cannot express. The old report_timeframe, report_filters, report_creation_mode, custom_date_range and dynamic_filters keys are not returned.",
           "Cross-project reports appear under every project they cover, so the same SC-NNN can show up in more than one project's listing."
         ],
         "returns": [
@@ -25021,9 +25027,6 @@
           "report_type",
           "title",
           "description",
-          "report_timeframe",
-          "report_creation_mode",
-          "custom_date_range",
           "frequency",
           "frequency_details",
           "next_run_at",
@@ -25031,9 +25034,9 @@
           "created_at",
           "owner",
           "mail_to",
-          "report_filters",
-          "dynamic_filters",
-          "latest_attachment"
+          "latest_attachment",
+          "scope",
+          "filters"
         ],
         "paginated": true,
         "max_page_size": 300,
@@ -25089,24 +25092,57 @@
             "description": "What the report reports on, as a DISPLAY NAME - the set is closed and matched exactly, spaces and capitals included. Only these six can be created here. Other report types exist in the product and appear on reports created elsewhere - Test Plan Detailed Report, User Workload Report, Defects Summary, Defects Detailed Report - but every one of them is refused by this create. Never substitute a neighbour: an activity question is 'Test Case Activity', not 'Test Run Summary'."
           },
           {
-            "name": "report_timeframe",
+            "name": "scope",
+            "type": "object",
             "required": true,
-            "values": [
-              "last_one_day",
-              "last_one_week",
-              "last_one_month",
-              "last_three_months",
-              "custom",
-              "specific_test_runs",
-              "specific_test_plans",
-              "specific_sessions"
-            ],
-            "description": "What the report covers: either a rolling window, or a mode that says the scope comes from report_filters (specific_test_runs / specific_test_plans / specific_sessions). 'custom' pairs with custom_date_range. Two further values exist in the stored data and can be seen on reports created elsewhere - a requirements scope and a specific-test-cases scope - but neither is accepted by this create, and both are refused by body validation before any report-specific message is reached."
+            "description": "What the report covers. Required - a create without it is refused with a 400. `by` picks the kind: creation_time (a time window), test_runs, test_plans, sessions, test_cases (each takes `ids`) or project (takes no other key). Which `by` is valid depends on report_type: creation_time is not valid for Requirement Traceability Report; Requirement Traceability Report takes only test_runs, test_cases or project; test_plans is only for Test Plan Summary; sessions is only for Exploratory Session Summary. Keys outside the chosen `by` are refused by name.",
+            "fields": [
+              {
+                "name": "by",
+                "type": "string",
+                "required": true,
+                "values": [
+                  "creation_time",
+                  "test_runs",
+                  "test_plans",
+                  "sessions",
+                  "test_cases",
+                  "project"
+                ],
+                "description": "The kind of scope."
+              },
+              {
+                "name": "period",
+                "type": "string",
+                "values": [
+                  "last_one_day",
+                  "last_one_week",
+                  "last_one_month",
+                  "last_three_months"
+                ],
+                "description": "Rolling window, for by creation_time. Send this OR from and to, not both."
+              },
+              {
+                "name": "from",
+                "type": "string",
+                "description": "Window start as YYYY-MM-DD, for by creation_time. Needs `to`; cannot be after `to` or after today (UTC)."
+              },
+              {
+                "name": "to",
+                "type": "string",
+                "description": "Window end as YYYY-MM-DD, for by creation_time. Needs `from`."
+              },
+              {
+                "name": "ids",
+                "type": "array",
+                "description": "Non-empty list of identifiers, for the entity values of by: TR-NNN for test_runs, TP-NNN or STP-NNN for test_plans, session ids for sessions, test-case identifiers for test_cases. Every identifier is resolved before anything is saved; an unknown one is refused with its index."
+              }
+            ]
           },
           {
-            "name": "report_filters",
-            "required": true,
-            "description": "Required - a create without this key is refused by body validation before anything else is checked, even when the report needs no scoping. Send an empty object for a rolling-window report. When you do scope it, this is a STRICT ALLOW-LIST of exactly four keys - test_runs, test_plans, session_ids, projects. Any other key, including a typo or an advanced-filter name such as status, priority, assignee, requirements, folder or per-case custom fields, is refused by name. Nothing is silently dropped."
+            "name": "filters",
+            "type": "object",
+            "description": "Optional. Only an empty object is accepted; any key inside it is refused as not supported. Omit it or send {}."
           },
           {
             "name": "mail_to",
@@ -25127,25 +25163,15 @@
           {
             "name": "title",
             "description": "Display name. Genuinely optional: omit it and the server fills in the report type followed by today's date, which is easy to mistake later for a report someone else made. Titles are not unique, and this is the field the list search matches on."
-          },
-          {
-            "name": "report_creation_mode",
-            "type": "string",
-            "required": true,
-            "values": [
-              "custom_report",
-              "system_generated"
-            ],
-            "description": "Whether the report is one the caller defines or one the product generates. REQUIRED — the request schema rejects a body without it, so a create that omits it fails before anything is stored. It was missing from this contract entirely, which made the capability impossible to call successfully from here."
           }
         ],
         "intent": "Set up a new report over a project's test data — either a one-off you will download, or a recurring daily/weekly/monthly schedule that emails chosen people; this saves the report's definition (type, window, scope, recipients) and hands back its SC-NNN identifier, it does not produce any figures",
         "guidance": [
-          "`report_creation_mode` is required and takes `custom_report` or `system_generated`. Sending `system_generated` with a traceability report type is treated specially by the server, so use `custom_report` unless you specifically want the generated form.",
-          "This returns a report DEFINITION, not report content. The created body is the saved configuration echoed back - identifier, type, timeframe, filters, schedule, recipients - and contains no counts, rows or figures at all. Never present it as the report's findings.",
+          "The report_timeframe, report_filters, report_creation_mode, custom_date_range and dynamic_filters keys are NOT accepted: sending any of them is refused with a 400. The window or selection goes in `scope` (a rolling window or date range as scope.period or scope.from and scope.to; entity selections as scope.ids), and every report is stored as a custom report.",
+          "This returns a report DEFINITION, not report content. The created body is the saved configuration echoed back - identifier, type, scope, filters, schedule, recipients - and contains no counts, rows or figures at all. Never present it as the report's findings.",
           "Getting the content afterwards is a separate, ASYNCHRONOUS step: request a download for the new report identifier and the server answers with a job id and a status URL, having queued the generation; then poll the matching download-status read until status flips from 'processing' to 'ready' and a file URL appears (pdf or csv only). Nothing in this create waits for that.",
           "The alternative route to content is the v1 report reads (report detail and its section/widget reads), but those take the INTEGER report id and this API never exposes it - the public identifier is a per-group sequence, so you cannot derive it. Resolve it through the v1 schedules listing, which carries both ids on the same record.",
-          "Six fields are required, not three: report_type, report_timeframe and report_creation_mode, plus report_filters, mail_to and frequency. The last three are required even when they carry nothing meaningful, and omitting any of them is refused up front by body validation with a message naming the missing property. An empty object for report_filters, empty lists for both parts of mail_to, and 'once' for frequency are all accepted and are exactly what an unscheduled, unmailed report needs.",
+          "Four fields are required: report_type, scope, mail_to and frequency. mail_to and frequency are required even when they carry nothing meaningful, and omitting any of them is refused up front with a message naming the missing property. Empty lists for both parts of mail_to and 'once' for frequency are accepted and are exactly what an unscheduled, unmailed report needs; filters is optional and only {} is accepted.",
           "Scheduling needs frequency AND frequency_details together, with frequency one of daily/weekly/monthly. Send frequency alone, or frequency 'once', and you get an unscheduled one-off back with no warning - check the scheduled flag and the next-run time in the response before telling anyone a schedule exists.",
           "Reading a report back always shows a frequency of 'once' when no schedule is stored - that is a stand-in for an empty value, not evidence that a one-time run was scheduled. The scheduled flag and the next-run time are the fields that actually distinguish the two.",
           "Recipients are wired up only for a recurring report: recipients on a one-off are accepted and then ignored, so nobody is emailed. When you do send them, include BOTH the in-group users and the external addresses (empty lists are fine, and there is a cap of 50 external addresses) - a missing inner key fails after the record is written, and the server deletes the half-built report and answers with an unprocessable-entity error.",
@@ -25164,9 +25190,6 @@
           "report_type",
           "title",
           "description",
-          "report_timeframe",
-          "report_creation_mode",
-          "custom_date_range",
           "frequency",
           "frequency_details",
           "next_run_at",
@@ -25174,9 +25197,9 @@
           "created_at",
           "owner",
           "mail_to",
-          "report_filters",
-          "dynamic_filters",
-          "latest_attachment"
+          "latest_attachment",
+          "scope",
+          "filters"
         ],
         "responses": {
           "201": {
@@ -25231,8 +25254,8 @@
           "This returns the report's CONFIGURATION, never its data — there is no report_data, no counts and no rows in the response. For the numbers inside a report, either fetch the generated file (request a download for this SC-NNN, then poll the download status until it is ready) or use the v1 report detail / section reads, which take the INTEGER report id this API never exposes; the v1 schedules listing is where SC-NNN and that integer appear together.",
           "Every miss is the same 404 'Report not found': an identifier that does not exist, one from another group, and one that exists but belongs to a different project. A 404 therefore does not mean the report is gone — retry under the project that actually owns it, and for a cross-project report any of its projects will serve it.",
           "`latest_attachment` is NOT this report's attachment. It is the newest generated file anywhere in the project, so it can belong to a different report, and it reports ready:true whenever it is present. Its file_type is a MIME type such as application/pdf, not the 'pdf'/'csv' the spec advertises. Only a download job you started yourself tells you about this report's file.",
-          "`dynamic_filters` is hard-coded to null on this read even when the report was created with them; only report_filters reflects configured scope.",
-          "report_filters echoes public identifiers rather than the internal ids stored (TR-NNN, TP-NNN, assignee emails). Two caveats: a sub-plan filter comes back as TP-NNN because the sub-plan marker is not kept, and if the upstream identifier lookup fails the values degrade to prefix+raw-id which may not be a real identifier.",
+          "`scope` echoes the report's coverage as public identifiers (TR-NNN, TP-NNN), in the same form create accepts. It is null when the stored report cannot be expressed as a scope: a cross-project selection, every selected entity since deleted, or a failed identifier lookup. Entities that were deleted individually are omitted from `scope.ids`. `filters` is {} for a report with no filters and null when it carries filters this API cannot express.",
+          "The report_timeframe, report_filters, report_creation_mode, custom_date_range and dynamic_filters keys are not returned; read the report's window or selection from `scope`.",
           "`frequency` reads 'once' for an unscheduled report — that is a substitution for a stored null, not something the report was created with. Trust `is_scheduled` and `next_run_at` for whether anything will actually fire.",
           "`project_ids` lists every project a cross-project report covers, and `project_id` is only the owning one."
         ],
@@ -25245,9 +25268,6 @@
           "report_type",
           "title",
           "description",
-          "report_timeframe",
-          "report_creation_mode",
-          "custom_date_range",
           "frequency",
           "frequency_details",
           "next_run_at",
@@ -25255,9 +25275,9 @@
           "created_at",
           "owner",
           "mail_to",
-          "report_filters",
-          "dynamic_filters",
-          "latest_attachment"
+          "latest_attachment",
+          "scope",
+          "filters"
         ],
         "responses": {
           "200": {
@@ -34216,22 +34236,6 @@
             "type": "string",
             "nullable": true
           },
-          "report_timeframe": {
-            "type": "string",
-            "description": "Rolling window or scope mode, e.g. last_one_week, custom, specific_test_runs."
-          },
-          "report_creation_mode": {
-            "type": "string",
-            "values": [
-              "custom_report",
-              "system_generated"
-            ]
-          },
-          "custom_date_range": {
-            "type": "string",
-            "nullable": true,
-            "description": "Two space-separated YYYY-MM-DD dates; set only for the custom timeframe."
-          },
           "frequency": {
             "type": "string",
             "values": [
@@ -34270,19 +34274,52 @@
             "type": "object",
             "description": "users (email + full_name objects) and external_mails (plain addresses). Populated only for scheduled reports."
           },
-          "report_filters": {
-            "type": "object",
-            "description": "Configured scope echoed back as public identifiers (TR-NNN, TP-NNN, assignee emails). Sub-plans collapse to TP-NNN; values fall back to prefix+internal id if the lookup fails."
-          },
-          "dynamic_filters": {
-            "type": "object",
-            "nullable": true,
-            "description": "Always null on this surface, whatever was sent at create time."
-          },
           "latest_attachment": {
             "type": "object",
             "nullable": true,
             "description": "Newest generated file in the PROJECT, not necessarily this report's: generated_at, file_type (a MIME type such as application/pdf) and ready, which is true whenever the object is present."
+          },
+          "scope": {
+            "type": "object",
+            "nullable": true,
+            "description": "What the report covers, in the same form create accepts: {by, period}, {by, from, to}, {by, ids} or {by: project}. Null when the stored report cannot be expressed as a scope, for example a cross-project selection.",
+            "properties": {
+              "by": {
+                "type": "string",
+                "values": [
+                  "creation_time",
+                  "test_runs",
+                  "test_plans",
+                  "sessions",
+                  "test_cases",
+                  "project"
+                ]
+              },
+              "period": {
+                "type": "string",
+                "description": "Rolling window; present only when by is creation_time and no explicit range was set."
+              },
+              "from": {
+                "type": "string",
+                "description": "Start date, YYYY-MM-DD; present only for an explicit creation_time range."
+              },
+              "to": {
+                "type": "string",
+                "description": "End date, YYYY-MM-DD; present only for an explicit creation_time range."
+              },
+              "ids": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Public identifiers of the selected entities (TR-NNN, TP-NNN, test-case identifiers, or session ids); present for the entity values of by."
+              }
+            }
+          },
+          "filters": {
+            "type": "object",
+            "nullable": true,
+            "description": "An empty object when the report carries no filters; null when the stored report has filters it cannot express."
           }
         }
       },
@@ -48715,7 +48752,7 @@
         }
       },
       "BulkRetrieveTestCasesResponse": {
-        "description": "Bulk un-archive acknowledgement: folder case counts after the restore, not the restored test cases. Above the async threshold the same 200 instead carries {success, async:true, unique_id}.",
+        "description": "Bulk un-archive acknowledgement: folder case counts after the restore (plus any renamed folders), not the restored test cases. Above the async threshold the same 200 instead carries {success, async:true, unique_id}.",
         "schema": {
           "type": "object",
           "required": [
@@ -48729,6 +48766,13 @@
             "folders": {
               "type": "object",
               "description": "Per-folder case counts after the restore."
+            },
+            "folders_renamed": {
+              "type": "array",
+              "items": {
+                "type": "object"
+              },
+              "description": "Array of objects returned by the product, one per restored folder it had to rename; an empty array when none were."
             },
             "error": {
               "type": "string",
@@ -51447,6 +51491,6 @@
         ]
       }
     },
-    "version": "1.42"
+    "version": "1.43"
   }
 }

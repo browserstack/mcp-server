@@ -1890,6 +1890,46 @@ describe("askBrowserStackAI, against the injected seam", () => {
     });
   });
 
+  it("ends an a11y answer, and only an a11y answer, with the fix workflow pointer", async () => {
+    const answered = (product: string) => {
+      const mcp = new McpServer({ name: "t", version: "0" });
+      const tools = addAskBrowserStackAITool(mcp, {
+        agentUrl: () => "https://atlas.example/agent",
+        mintToken: async () => MINTED,
+        credentialsFor: () => ({ username: "u", accessKey: "k" }),
+        deferredTransport: (async () => ({
+          status: 200,
+          body: { status: "ok", answer: "Fix the contrast first." },
+        })) as never,
+      });
+      return tools.askBrowserStackAI.handler({ product, query: "what to fix first?" }, {} as any);
+    };
+    const POINTER = "first call fetchAccessibilityIssues with fixWorkflow: true";
+
+    const a11y = await answered("a11y");
+    expect(a11y.content.at(-1).text).toContain(POINTER);
+    const tm = await answered("tm");
+    expect(JSON.stringify(tm.content)).not.toContain(POINTER);
+  });
+
+  it("does not add the pointer to a failed a11y call", async () => {
+    const mcp = new McpServer({ name: "t", version: "0" });
+    const tools = addAskBrowserStackAITool(mcp, {
+      agentUrl: () => "https://atlas.example/agent",
+      mintToken: async () => MINTED,
+      credentialsFor: () => ({ username: "u", accessKey: "k" }),
+      deferredTransport: (async () => {
+        throw new Error("boom");
+      }) as never,
+    });
+
+    const result = await tools.askBrowserStackAI.handler(
+      { product: "a11y", query: "what to fix first?" },
+      {} as any,
+    );
+    expect(JSON.stringify(result.content)).not.toContain("fixWorkflow");
+  });
+
   it("reports a transport failure with nothing left to clean up", async () => {
     // Under A2 this test existed because a thrown transport could strand a bound port,
     // and the assertion was that the listener still closed. A1 binds NOTHING — no port,

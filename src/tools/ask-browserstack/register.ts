@@ -24,6 +24,7 @@
  * itself because a headless client returns `cancel`, which is a deny.
  */
 
+import { FIX_WORKFLOW_POINTER } from "../accessiblity-utils/fix-workflow.js";
 import {
   McpServer,
   RegisteredTool,
@@ -957,6 +958,27 @@ export function addAskBrowserStackAITool(
       // iteration ending, and Atlas drops the run when the response completes.
     },
   );
+
+  // An a11y answer is advice; when the user wants the issues fixed in code, point the agent
+  // at the fix workflow. Wrapped here so every one of the handler's return paths gets it.
+  const askHandler = tools.askBrowserStackAI.handler as unknown as (
+    args: { product?: string },
+    extra: unknown,
+  ) => Promise<CallToolResult>;
+  tools.askBrowserStackAI.handler = (async (
+    args: { product?: string },
+    extra: unknown,
+  ) => {
+    const result = await askHandler(args, extra);
+    if (args?.product !== "a11y" || result.isError) return result;
+    return {
+      ...result,
+      content: [
+        ...(result.content ?? []),
+        { type: "text", text: FIX_WORKFLOW_POINTER },
+      ],
+    };
+  }) as unknown as typeof tools.askBrowserStackAI.handler;
 
   return tools;
 }

@@ -1301,7 +1301,8 @@ describe("questions about a report beyond its issues", () => {
     );
 
     expect(body).toContain(`${ASK} (Website Scanner scan scan-42, run run-7)`);
-    expect(body).toContain("do not work out the plan yourself");
+    // Fixing the issues in code is the fix workflow's job, not BrowserStack AI's.
+    expect(body).toContain("first call fetchAccessibilityIssues with fixWorkflow: true");
     expect(body).toContain("If askBrowserStackAI says it is not enabled for this account, tell the user");
   });
 
@@ -1311,6 +1312,7 @@ describe("questions about a report beyond its issues", () => {
     );
 
     expect(body).not.toContain("askBrowserStackAI");
+    expect(body).not.toContain("fixWorkflow");
   });
 
   it("startAccessibilityScan sends them to BrowserStack AI too", async () => {

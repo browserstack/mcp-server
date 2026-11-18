@@ -3,6 +3,8 @@ import { z } from "zod";
 import {
   FIX_WORKFLOW_NAME,
   FIX_WORKFLOW_TITLE,
+  FIX_WORKFLOW_POINTER,
+  fixWorkflowForAgent,
   fixWorkflowText,
 } from "./accessiblity-utils/fix-workflow.js";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
@@ -174,7 +176,8 @@ async function initializeReportFetcher(
  * which names what to use instead so an agent stops reaching for it.
  */
 const ACCESSIBILITY_EXPERT_DEPRECATED =
-  "Note: accessibilityExpert is deprecated and will be removed in a future release. To list or filter a report's issues, for example those failing a WCAG criterion, use fetchAccessibilityIssues and answer from its result; to scan a page, use startAccessibilityScan. For advice on a report, such as how to raise its score or which issues to fix first, call askBrowserStackAI with product a11y and give the user its answer. For a general WCAG or ARIA question, call askBrowserStackAI with product a11y too. If askBrowserStackAI says it is not enabled for this account, answer from the report's issues.";
+  "Note: accessibilityExpert is deprecated and will be removed in a future release. To list or filter a report's issues, for example those failing a WCAG criterion, use fetchAccessibilityIssues and answer from its result; to scan a page, use startAccessibilityScan. For advice on a report, such as how to raise its score or which issues to fix first, call askBrowserStackAI with product a11y and give the user its answer. For a general WCAG or ARIA question, call askBrowserStackAI with product a11y too. If askBrowserStackAI says it is not enabled for this account, answer from the report's issues. " +
+  FIX_WORKFLOW_POINTER;
 
 async function executeAccessibilityRAG(
   args: { query: string },
@@ -221,6 +224,7 @@ interface FetchIssuesArgs {
   pageUrl?: string;
   compareWith?: string;
   exportTaskId?: string;
+  fixWorkflow?: boolean;
 }
 
 /** A source named by its ids, or a dashboard link still to be resolved to them. */
@@ -265,9 +269,21 @@ async function executeFetchAccessibilityIssues(
       undefined,
       config,
     );
+    const namesReport = Boolean(
+      args.scanId ||
+      args.scanRunId ||
+      args.buildId ||
+      args.workflowReportId ||
+      args.appReportId ||
+      args.reportUrl,
+    );
+    // The workflow alone: the agent wants to fix issues and has no report yet.
+    if (args.fixWorkflow && !namesReport) {
+      return createSuccessResponse([fixWorkflowForAgent()]);
+    }
     const source = issueSourceFrom(args);
     if (typeof source === "string") return createErrorResponse(source);
-    return await fetchAccessibilityIssues(
+    const result = await fetchAccessibilityIssues(
       source,
       config,
       args.cursor,
@@ -278,6 +294,13 @@ async function executeFetchAccessibilityIssues(
         exportTaskId: args.exportTaskId,
       },
     );
+    if (args.fixWorkflow && !result.isError) {
+      result.content = [
+        ...(result.content ?? []),
+        { type: "text", text: fixWorkflowForAgent() },
+      ];
+    }
+    return result;
   } catch (error) {
     return handleMCPError("fetchAccessibilityIssues", server, config, error);
   }
@@ -571,7 +594,7 @@ function scoreNote(score: ReportScore | undefined): string[] {
  * agent works out for itself from one page of issues.
  */
 function askAiNote(source: IssueSource): string {
-  return `For anything about this report beyond listing its issues, such as a plan to fix them or raise the score, what to fix first, or why it scored as it did, call askBrowserStackAI with product a11y, the user's question and this report (${describeSource(source)}), and give the user its answer. BrowserStack AI answers from the whole report, so do not work out the plan yourself. If askBrowserStackAI says it is not enabled for this account, tell the user, then answer from the issues and score above.`;
+  return `${FIX_WORKFLOW_POINTER} For advice about this report beyond listing its issues, such as how to raise the score, what to fix first, or why it scored as it did, call askBrowserStackAI with product a11y, the user's question and this report (${describeSource(source)}), and give the user its answer. BrowserStack AI answers from the whole report. If askBrowserStackAI says it is not enabled for this account, tell the user, then answer from the issues and score above.`;
 }
 
 const WEB_ISSUES_NOTE =
@@ -826,6 +849,7 @@ async function appBuildMessages(
     ...excludedIssuesNote(null, 0, report.hidden_issues),
     APP_ISSUES_SHAPE,
     `Issues: ${wrapUntrusted("accessibility scan results", JSON.stringify({ issues: records, rules: report.rules, screens: report.screens }, null, 2))}`,
+    ...(cursor === 0 ? [FIX_WORKFLOW_POINTER] : []),
     closingMessage(next_page, report.remaining, source, stillProcessing),
   ];
 }
@@ -895,6 +919,7 @@ async function appReportMessages(
     ...excludedIssuesNote(null, 0, report.hidden_issues),
     APP_ISSUES_SHAPE,
     `Issues: ${wrapUntrusted("accessibility scan results", JSON.stringify({ issues: records, rules: report.rules, screens: report.screens }, null, 2))}`,
+    ...(cursor === 0 ? [FIX_WORKFLOW_POINTER] : []),
     closingMessage(next_page, report.remaining, source, stillProcessing),
   ];
 }
@@ -2308,6 +2333,12 @@ export default function addAccessibilityTools(
         .string()
         .optional()
         .describe("Continue a CSV export that is still being generated."),
+      fixWorkflow: z
+        .boolean()
+        .optional()
+        .describe(
+          "true: the steps to follow before editing code to fix accessibility issues (not for advice). Alone: only the steps.",
+        ),
     },
     {
       title: "Fetch Accessibility Issues",

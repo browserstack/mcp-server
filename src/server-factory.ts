@@ -12,6 +12,7 @@ import addBrowserLiveTools from "./tools/live.js";
 import addAccessibilityTools, {
   addAccessibilityFixWorkflow,
 } from "./tools/accessibility.js";
+import { FIX_WORKFLOW_INSTRUCTION } from "./tools/accessiblity-utils/fix-workflow.js";
 import addTestManagementTools from "./tools/testmanagement.js";
 import addAppAutomationTools from "./tools/appautomate.js";
 import addFailureLogsTools from "./tools/get-failure-logs.js";
@@ -70,6 +71,9 @@ export class BrowserStackMcpServer {
         instructions: [
           nodeUpgradeNotice(),
           feedbackListed() ? FEEDBACK_INSTRUCTION : undefined,
+          // Claude Code shows tools by name only until it searches for them, but always
+          // shows these instructions, so this line is how its agent finds the fix workflow.
+          FIX_WORKFLOW_INSTRUCTION,
         ]
           .filter(Boolean)
           .join("\n"),

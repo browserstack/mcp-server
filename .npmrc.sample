@@ -1,8 +1,7 @@
-# Sample npm configuration for this repo.
-# Copy to .npmrc (git-ignored) locally; CI (mcp-ci.yml) copies it before install.
-ignore-scripts=true       # do not run dependency lifecycle scripts on install
-strict-ssl=true           # require TLS for the registry (npm default; pinned explicitly)
-save-exact=true           # pin exact versions when adding dependencies
-engine-strict=true        # fail install on a Node version outside package.json "engines"
-legacy-peer-deps=false    # npm 7+ peer-dependency resolution (npm default; pinned explicitly)
-audit-level=high          # npm audit exits non-zero on high/critical (report still lists all)
+# Copy to .npmrc (git-ignored); CI applies it before install.
+ignore-scripts=true
+strict-ssl=true
+save-exact=true
+engine-strict=true
+legacy-peer-deps=false
+audit-level=high

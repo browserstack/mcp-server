@@ -109,7 +109,9 @@ import {
   localScanNotRerunNote,
   otherPageNote,
   rescanHint,
+  savedScopeLine,
   savedSettingDifferences,
+  scopeKind,
   uncheckedSettings,
   unusedLoginAndTunnel,
   withNotes,
@@ -1449,6 +1451,21 @@ function planDowngradeNote(asked: ScanSettings, applied: ScanSettings): string {
 }
 
 /**
+ * A scope asked for that the run does not show, so the issues are not taken for the part of
+ * the page asked for when they are the whole page's, or may be.
+ */
+function scopeNote(asked: ScanSettings, applied: ScanSettings): string {
+  if (!asked.scanScope) return "";
+  if (applied.scanScope === null) {
+    return "A scanScope was asked for, but this scan ran on the whole page, so the issues found are the whole page's.";
+  }
+  if (applied.scanScope === undefined) {
+    return `Only part of the page was asked for (${scopeKind(asked.scanScope)}); the run's settings do not say whether the scan kept to it.`;
+  }
+  return "";
+}
+
+/**
  * What the scan ran with, read back from the run, since an unset setting takes the API's
  * default and the plan can turn advanced rules off. When it cannot be read, only what was
  * asked for is said: a guessed default would be stated as fact.
@@ -1472,6 +1489,9 @@ function scanSettingsNote(
       settings.experimentalRules !== undefined
         ? `experimental rules ${onOff(settings.experimentalRules)}`
         : "",
+      settings.scanScope
+        ? `part of the page only (${scopeKind(settings.scanScope)})`
+        : "",
     ]
       .filter(Boolean)
       .join(", ");
@@ -1479,6 +1499,7 @@ function scanSettingsNote(
     return [
       `Scan settings, as the scan ran: ${describe(applied)}.`,
       planDowngradeNote(asked, applied),
+      scopeNote(asked, applied),
     ]
       .filter(Boolean)
       .join(" ");
@@ -1543,6 +1564,7 @@ function startNewScan(
       needsReview: args.needsReview,
       advancedRules: args.advancedRules,
       experimentalRules: args.experimentalRules,
+      scanScope: args.scanScope,
     },
     args.localIdentifier,
   );
@@ -1677,6 +1699,21 @@ function renameReason(
   return `A scan named "${name}" already exists on this account`;
 }
 
+/** The error a page's scan log gives when the scan's scanScope matches nothing on it. */
+const SCOPE_NOT_FOUND = "PART_OF_PAGE_SCOPE_NOT_FOUND";
+
+/**
+ * What to do when the page was not scanned because its scanScope matched nothing on it. A
+ * re-run keeps the scan's saved scope, so the whole page takes a new scan.
+ */
+function scopeNotFoundHint(details: ScanFailureDetails): string[] {
+  return details.pages.some((page) => page.reason.includes(SCOPE_NOT_FOUND))
+    ? [
+        "Nothing on the page matched the scan's scanScope, so the page was not scanned. Check the selector against the page, or start a new scan without scanScope and without scanId to scan the whole page.",
+      ]
+    : [];
+}
+
 /**
  * A failed run, with the reason the API gives for it: the run's own and each page's. It used
  * to say only "The dashboard says why", which left an agent nothing to tell the user.
@@ -1693,6 +1730,7 @@ function createScanFailureResponse(
     [
       `❌ Accessibility scan "${name}" failed with status: ${status}. Scan ID: ${scanId} and Scan Run ID: ${scanRunId}.`,
       ...failureReasons(details),
+      ...scopeNotFoundHint(details),
       scanDashboardNote(dashboardLink, scanId),
     ].join("\n"),
   );
@@ -1984,6 +2022,7 @@ async function rerunAccessibilityScan(
         `Scan ${scanId} was not re-run: a re-run uses the scan's saved settings, and ${one ? "this one differs" : "these differ"} from what was passed:`,
         ...differences.map((difference) => `- ${difference}`),
         `To re-run it with its saved settings, call startAccessibilityScan again with scanId "${scanId}" and without ${one ? "that setting" : "those settings"}. To scan with the settings passed, call it without scanId: that starts a new scan, whose runs can't be compared with this scan's.`,
+        ...savedScopeLine(saved),
         ...nameLine,
       ].join("\n"),
     ]);
@@ -2005,6 +2044,7 @@ async function rerunAccessibilityScan(
     ...(saved.localTestingEnabled
       ? [localRerunNote(args.localIdentifier)]
       : []),
+    ...savedScopeLine(saved),
     ...(unchecked.length
       ? [
           `${unchecked.join(", ")} could not be checked against the scan's saved settings, which the API does not give back; the run uses the saved ones.`,
@@ -2118,6 +2158,15 @@ export default function addAccessibilityTools(
         .optional()
         .describe(
           "Run experimental rules (default true; off if the plan lacks them).",
+        ),
+      scanScope: z
+        .object({
+          type: z.enum(["css", "xpath"]),
+          value: z.string().trim().min(1).max(1000),
+        })
+        .optional()
+        .describe(
+          'Scan only the first element this CSS selector or XPath matches, e.g. {"type":"css","value":"main"}.',
         ),
     },
     {

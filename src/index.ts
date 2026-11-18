@@ -33,7 +33,7 @@ async function main() {
 
   const transport = new StdioServerTransport();
 
-  const mcpServer = new BrowserStackMcpServer({
+  const mcpServer = await BrowserStackMcpServer.create({
     "browserstack-username": username,
     "browserstack-access-key": accessKey,
   });

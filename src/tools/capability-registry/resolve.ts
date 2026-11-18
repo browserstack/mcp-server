@@ -117,7 +117,7 @@ async function multipartBody(
     if (param.type === "file") {
       const path = String(value);
       const blob = await openAsBlob(path);
-      form.append(param.name, blob, basename(path));
+      form.append(param.form_name ?? param.name, blob, basename(path));
     } else {
       form.append(param.name, String(value));
     }

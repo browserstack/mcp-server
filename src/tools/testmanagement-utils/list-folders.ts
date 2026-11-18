@@ -5,6 +5,7 @@ import { formatAxiosError } from "../../lib/error.js";
 import { getBrowserStackAuth } from "../../lib/get-auth.js";
 import { BrowserStackConfig } from "../../lib/types.js";
 import { getTMBaseURL } from "../../lib/tm-base-url.js";
+import { wrapUntrusted } from "../../lib/untrusted-content.js";
 
 /**
  * Schema for listing folders in a BrowserStack Test Management project.
@@ -96,11 +97,14 @@ export async function listFolders(
       content: [
         {
           type: "text",
-          text: `Found ${count} folder(s) in project ${args.project_identifier}:\n\n${summary}`,
+          text: `Found ${count} folder(s) in project ${args.project_identifier}:\n\n${wrapUntrusted("folder list", summary)}`,
         },
         {
           type: "text",
-          text: JSON.stringify(folders, null, 2),
+          text: wrapUntrusted(
+            "folders (structured data)",
+            JSON.stringify(folders, null, 2),
+          ),
         },
       ],
     };

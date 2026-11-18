@@ -70,6 +70,8 @@ export interface RCAResponse {
 }
 
 export interface BuildIdArgs {
-  browserStackProjectName: string;
-  browserStackBuildName: string;
+  browserStackProjectName?: string;
+  browserStackBuildName?: string;
+  buildNumber?: number;
+  buildUrl?: string;
 }

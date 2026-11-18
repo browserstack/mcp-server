@@ -5,6 +5,8 @@ import { formatAxiosError } from "../../lib/error.js";
 import { getBrowserStackAuth } from "../../lib/get-auth.js";
 import { BrowserStackConfig } from "../../lib/types.js";
 import { getTMBaseURL } from "../../lib/tm-base-url.js";
+import { wrapUntrusted } from "../../lib/untrusted-content.js";
+import { markCallerFault } from "../../lib/upstream-status.js";
 
 /**
  * Schema for listing test plans in a BrowserStack Test Management project.
@@ -59,11 +61,12 @@ export async function listTestPlans(
 
     const data = resp.data;
     if (!data.success) {
+      markCallerFault();
       return {
         content: [
           {
             type: "text",
-            text: `Failed to list test plans: ${JSON.stringify(data)}`,
+            text: `Failed to list test plans: ${wrapUntrusted("API response", JSON.stringify(data))}`,
           },
         ],
         isError: true,
@@ -96,9 +99,15 @@ export async function listTestPlans(
       content: [
         {
           type: "text",
-          text: `Found ${count} test plan(s) in project ${args.project_identifier}:\n\n${summary}`,
+          text: `Found ${count} test plan(s) in project ${args.project_identifier}:\n\n${wrapUntrusted("test plan list", summary)}`,
         },
-        { type: "text", text: JSON.stringify(plans, null, 2) },
+        {
+          type: "text",
+          text: wrapUntrusted(
+            "test plans (structured data)",
+            JSON.stringify(plans, null, 2),
+          ),
+        },
       ],
     };
   } catch (err) {

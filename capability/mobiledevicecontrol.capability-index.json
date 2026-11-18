@@ -6,6 +6,7 @@
   "title": "Mobile Device Control",
   "summary": "Mobile device control: run a real Android or iOS device and drive the app on it step by step. The account side lists the devices this account can use, including private ones, uploads and lists app builds, reports parallel-session capacity, and keeps each session's record \u2014 status, shareable link and video \u2014 after the device is released. The session side starts a device with an installed build and drives it: find elements and read their text, position and attributes, tap them, type, swipe, screenshot, press keys, rotate, switch between the native app and a web view, move between the native app and a web view, and launch or close apps. Apps are RUN here \u2014 unlike Test Management, which authors cases, and Test Reporting, which records results pushed in from a runner. Browsers are not here \u2014 those are device control, which drives a page rather than an installed app \u2014 and neither is App Live: it has no API an agent can drive, so agent sessions run here, on real devices, and consume the account's device minutes. A build must exist before a session starts; it is uploaded here from a public link, or from a file on the user's own machine when the server runs there. App Live keeps a separate store, so an app uploaded for manual App Live testing is not available to sessions here. Media for camera injection must come from elsewhere. The default Appium server is 1.x and rejects every `mobile:` command; ask for 2.19.0.",
   "routing_terms": [
+   "android",
    "app automate",
    "app build",
    "app for automation",
@@ -21,14 +22,17 @@
    "getprop",
    "hardware button",
    "home button",
+   "ios",
    "keyboard",
    "keyboard open",
    "launch app",
    "local build",
+   "mobile",
    "mobile app",
    "mobile device control",
    "os build",
    "parallel sessions",
+   "phone",
    "plan",
    "private device",
    "public link",
@@ -38,6 +42,7 @@
    "scroll",
    "session video",
    "swipe",
+   "tablet",
    "tap",
    "upload apk",
    "upload app",
@@ -382,14 +387,20 @@
        "-ios predicate string",
        "-ios class chain"
       ],
-      "example": "accessibility id"
+      "example": "accessibility id",
+      "aliases": [
+       "strategy"
+      ]
      },
      {
       "name": "value",
       "type": "string",
       "required": true,
       "description": "The selector itself, interpreted according to using.",
-      "example": "cart-button"
+      "example": "cart-button",
+      "aliases": [
+       "selector"
+      ]
      }
     ],
     "returns": [
@@ -1008,6 +1019,17 @@
      "device_limit",
      "realMobile"
     ],
+    "narrowable": {
+     "fields": [
+      "device",
+      "os",
+      "os_version",
+      "device_tier",
+      "device_limit",
+      "realMobile"
+     ],
+     "note": "The endpoint takes no filtering parameters, so this narrowing is applied to the response after the call. `where` on os and device, or `distinct` on device, answers the usual question in a few rows."
+    },
     "responses": {
      "200": {
       "description": "Every device the account can use.",
@@ -1171,6 +1193,18 @@
      "uploaded_at",
      "shareable_id"
     ],
+    "narrowable": {
+     "fields": [
+      "app_name",
+      "app_version",
+      "app_url",
+      "app_id",
+      "custom_id",
+      "uploaded_at",
+      "shareable_id"
+     ],
+     "note": "The endpoint takes no filtering parameters, so this narrowing is applied after the call. `where` on custom_id or app_name finds one build; `limit: 1` takes the newest."
+    },
     "responses": {
      "200": {
       "description": "Recently uploaded builds, newest first.",
@@ -1214,6 +1248,18 @@
      "uploaded_at",
      "shareable_id"
     ],
+    "narrowable": {
+     "fields": [
+      "app_name",
+      "app_version",
+      "app_url",
+      "app_id",
+      "custom_id",
+      "uploaded_at",
+      "shareable_id"
+     ],
+     "note": "The endpoint takes no filtering parameters, so this narrowing is applied after the call. `where` on custom_id or app_name finds one build; `limit: 1` takes the newest."
+    },
     "responses": {
      "200": {
       "description": "The team's recently uploaded builds.",
@@ -1310,6 +1356,29 @@
      "hashed_id",
      "name"
     ],
+    "narrowable": {
+     "record": true,
+     "path": "automation_session",
+     "fields": [
+      "status",
+      "reason",
+      "device",
+      "os",
+      "os_version",
+      "duration",
+      "browser_url",
+      "public_url",
+      "video_url",
+      "build_name",
+      "project_name",
+      "created_at",
+      "app_details",
+      "browserstack_status",
+      "hashed_id",
+      "name"
+     ],
+     "note": "The record comes back whole and is large; `fields` keeps only the ones named, so `fields: [\"browser_url\"]` after create_session returns just the link. `where`, `distinct` and `limit` do not apply to one record."
+    },
     "responses": {
      "200": {
       "description": "The session record.",
@@ -2063,6 +2132,9 @@
       "name": "args",
       "type": "array",
       "required": true,
+      "values": [
+       []
+      ],
       "description": "Always empty.",
       "example": []
      }
@@ -2748,6 +2820,9 @@
       "name": "args",
       "type": "array",
       "required": true,
+      "values": [
+       []
+      ],
       "description": "Always empty.",
       "example": []
      }
@@ -2803,6 +2878,9 @@
       "name": "args",
       "type": "array",
       "required": true,
+      "values": [
+       []
+      ],
       "description": "Always empty.",
       "example": []
      }
@@ -2858,6 +2936,9 @@
       "name": "args",
       "type": "array",
       "required": true,
+      "values": [
+       []
+      ],
       "description": "Always empty.",
       "example": []
      }
@@ -2977,19 +3058,32 @@
        "-ios predicate string",
        "-ios class chain"
       ],
-      "example": "accessibility id"
+      "example": "accessibility id",
+      "aliases": [
+       "strategy"
+      ]
      },
      {
       "name": "value",
       "type": "string",
       "required": true,
       "description": "The selector itself, interpreted according to using.",
-      "example": "cart-button"
+      "example": "cart-button",
+      "aliases": [
+       "selector"
+      ]
      }
     ],
     "returns": [
      "value"
     ],
+    "narrowable": {
+     "path": "value",
+     "fields": [
+      "element-6066-11e4-a52e-4f735466cecf"
+     ],
+     "note": "Each row is one element reference and has a single field; `limit` is the useful part, to take the first match or the first few."
+    },
     "responses": {
      "200": {
       "description": "Every matching element, possibly none.",
@@ -3122,7 +3216,10 @@
       "type": "string",
       "required": true,
       "description": "The attribute to read, as named in the UI tree.",
-      "example": "content-desc"
+      "example": "content-desc",
+      "aliases": [
+       "attribute"
+      ]
      }
     ],
     "returns": [

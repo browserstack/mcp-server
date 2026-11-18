@@ -2,8 +2,8 @@ import { getBrowserStackAuth } from "../../lib/get-auth.js";
 import { BrowserStackConfig } from "../../lib/types.js";
 import { apiClient } from "../../lib/apiClient.js";
 import logger from "../../logger.js";
-
-const OBSERVABILITY_API_BASE = "https://api-automation.browserstack.com/ext/v1";
+import { getRegionalHost } from "../../lib/regional-host.js";
+import { CallerError } from "../../lib/error.js";
 
 export interface TestCodeEntry {
   testRunId: number;
@@ -98,13 +98,13 @@ export async function fetchTestCodeBySession(
   config: BrowserStackConfig,
 ): Promise<SessionTestCode> {
   if (!sessionId) {
-    throw new Error("sessionId is required to fetch test code");
+    throw new CallerError("sessionId is required to fetch test code");
   }
 
   const authString = getBrowserStackAuth(config);
   const auth = Buffer.from(authString).toString("base64");
 
-  const url = `${OBSERVABILITY_API_BASE}/sessions/${encodeURIComponent(sessionId)}/testCode`;
+  const url = `${getRegionalHost("automationApi")}/ext/v1/sessions/${encodeURIComponent(sessionId)}/testCode`;
 
   try {
     const response = await apiClient.get<TestCodeApiResponse | TestCodeEntry[]>(

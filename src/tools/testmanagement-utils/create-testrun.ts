@@ -5,6 +5,8 @@ import { formatAxiosError } from "../../lib/error.js";
 import { getBrowserStackAuth } from "../../lib/get-auth.js";
 import { BrowserStackConfig } from "../../lib/types.js";
 import { getTMBaseURL } from "../../lib/tm-base-url.js";
+import { wrapUntrusted } from "../../lib/untrusted-content.js";
+import { markCallerFault } from "../../lib/upstream-status.js";
 
 /**
  * Schema for creating a test run.
@@ -86,9 +88,16 @@ export async function createTestRun(
 
     const data = response.data;
     if (!data.success) {
-      throw new Error(
-        `API returned unsuccessful response: ${JSON.stringify(data)}`,
-      );
+      markCallerFault();
+      return {
+        content: [
+          {
+            type: "text",
+            text: `API returned unsuccessful response: ${wrapUntrusted("API response", JSON.stringify(data))}`,
+          },
+        ],
+        isError: true,
+      };
     }
 
     // Assume data.test_run contains created run info
@@ -99,7 +108,13 @@ export async function createTestRun(
     return {
       content: [
         { type: "text", text: summary },
-        { type: "text", text: JSON.stringify(created, null, 2) },
+        {
+          type: "text",
+          text: wrapUntrusted(
+            "test run (structured data)",
+            JSON.stringify(created, null, 2),
+          ),
+        },
       ],
     };
   } catch (err) {

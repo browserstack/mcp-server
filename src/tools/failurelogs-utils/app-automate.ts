@@ -7,14 +7,29 @@ import {
 import { BrowserStackConfig } from "../../lib/types.js";
 import { apiClient } from "../../lib/apiClient.js";
 import { wrapUntrusted } from "../../lib/untrusted-content.js";
+import { getRegionalHost } from "../../lib/regional-host.js";
+
+/** The session has no such log here (404). Opt-in, so the caller can try elsewhere. */
+export class LogsNotFoundError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "LogsNotFoundError";
+  }
+}
+
+export interface AppLogOptions {
+  /** Throw LogsNotFoundError on 404 instead of returning the "not available" text. */
+  throwOnNotFound?: boolean;
+}
 
 // DEVICE LOGS
 export async function retrieveDeviceLogs(
   sessionId: string,
   buildId: string,
   config: BrowserStackConfig,
+  options: AppLogOptions = {},
 ): Promise<string> {
-  const url = `https://api.browserstack.com/app-automate/builds/${buildId}/sessions/${sessionId}/devicelogs`;
+  const url = `${getRegionalHost("appAutomateApi")}/app-automate/builds/${buildId}/sessions/${sessionId}/devicelogs`;
   const authString = getBrowserStackAuth(config);
   const auth = Buffer.from(authString).toString("base64");
 
@@ -29,7 +44,12 @@ export async function retrieveDeviceLogs(
   });
 
   const validationError = validateLogResponse(response, "device logs");
-  if (validationError) return validationError.message!;
+  if (validationError) {
+    if (response.status === 404 && options.throwOnNotFound) {
+      throw new LogsNotFoundError(validationError.message!);
+    }
+    return validationError.message!;
+  }
 
   const logText =
     typeof response.data === "string"
@@ -46,8 +66,9 @@ export async function retrieveAppiumLogs(
   sessionId: string,
   buildId: string,
   config: BrowserStackConfig,
+  options: AppLogOptions = {},
 ): Promise<string> {
-  const url = `https://api.browserstack.com/app-automate/builds/${buildId}/sessions/${sessionId}/appiumlogs`;
+  const url = `${getRegionalHost("appAutomateApi")}/app-automate/builds/${buildId}/sessions/${sessionId}/appiumlogs`;
   const authString = getBrowserStackAuth(config);
   const auth = Buffer.from(authString).toString("base64");
 
@@ -62,7 +83,12 @@ export async function retrieveAppiumLogs(
   });
 
   const validationError = validateLogResponse(response, "Appium logs");
-  if (validationError) return validationError.message!;
+  if (validationError) {
+    if (response.status === 404 && options.throwOnNotFound) {
+      throw new LogsNotFoundError(validationError.message!);
+    }
+    return validationError.message!;
+  }
 
   const logText =
     typeof response.data === "string"
@@ -79,8 +105,9 @@ export async function retrieveCrashLogs(
   sessionId: string,
   buildId: string,
   config: BrowserStackConfig,
+  options: AppLogOptions = {},
 ): Promise<string> {
-  const url = `https://api.browserstack.com/app-automate/builds/${buildId}/sessions/${sessionId}/crashlogs`;
+  const url = `${getRegionalHost("appAutomateApi")}/app-automate/builds/${buildId}/sessions/${sessionId}/crashlogs`;
   const authString = getBrowserStackAuth(config);
   const auth = Buffer.from(authString).toString("base64");
 
@@ -95,7 +122,12 @@ export async function retrieveCrashLogs(
   });
 
   const validationError = validateLogResponse(response, "crash logs");
-  if (validationError) return validationError.message!;
+  if (validationError) {
+    if (response.status === 404 && options.throwOnNotFound) {
+      throw new LogsNotFoundError(validationError.message!);
+    }
+    return validationError.message!;
+  }
 
   const logText =
     typeof response.data === "string"

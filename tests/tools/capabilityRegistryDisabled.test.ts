@@ -223,7 +223,7 @@ describe("the shipped tm index", () => {
   /**
    * The published surface is the capabilities that PASSED live probing. Everything that did
    * not — blocked, drifted, unverified, and the destructive tier — is withheld while the
-   * product team works through it, so 47 of 245 are off and 198 remain. download_report is
+   * product team works through it, so 46 of 245 are off and 199 remain. download_report is
    * withheld too: it answers with a job channel the API cannot resolve, so it can never
    * deliver the file it is named for.
    *
@@ -231,12 +231,11 @@ describe("the shipped tm index", () => {
    * test is that the flag in the shipped artifact is spelled correctly and actually takes
    * effect, not to restate the roster, which is expected to shrink as defects are fixed.
    */
-  const WITHHELD_COUNT = 47;
-  const PUBLISHED_COUNT = 198;
+  const WITHHELD_COUNT = 46;
+  const PUBLISHED_COUNT = 199;
   const FILE_BEARING = [
     "import_dataset_csv",
     "upload_ai_attachments",
-    "upload_generic_attachments",
     "link_attachments_to_test_case",
   ];
 
@@ -263,7 +262,7 @@ describe("the shipped tm index", () => {
    * that actually ships, because the two can disagree: a flag spelled wrongly in the index
    * costs nothing at load and silently publishes the capability.
    */
-  it("loads with those four absent from every surface", () => {
+  it("loads with those three absent from every surface", () => {
     const registry = CapabilityRegistry.fromFile(FILE);
     const tm = registry.index.products.tm;
 

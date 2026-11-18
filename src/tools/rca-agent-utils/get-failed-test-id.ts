@@ -1,3 +1,4 @@
+import { HttpError } from "../../lib/error.js";
 import logger from "../../logger.js";
 import { getAutomationBaseUrl } from "./constants.js";
 import {
@@ -7,6 +8,7 @@ import {
   TestDetails,
   TestFailureSignature,
 } from "./types.js";
+import { trackedFetch } from "../../lib/upstream-status.js";
 
 // Keeps the response payload lean — never full stack traces.
 const ERROR_SUMMARY_MAX = 200;
@@ -14,14 +16,26 @@ const ERROR_SUMMARY_MAX = 200;
 // Safety bound on pagination; hitting it is logged, never silent.
 const MAX_PAGES = 100;
 
+async function fetchWithRetry(
+  url: string,
+  init: RequestInit,
+): Promise<Response> {
+  try {
+    return await trackedFetch(url, init);
+  } catch {
+    return await trackedFetch(url, init);
+  }
+}
+
 export async function getTestIds(
   buildId: string,
   authString: string,
   status?: TestStatus,
   includeFailureDetail = false,
+  host: string = getAutomationBaseUrl(),
 ): Promise<FailedTestInfo[]> {
   // No `status` → returns ALL tests; a `status` narrows the query.
-  const baseUrl = `${getAutomationBaseUrl()}/ext/v1/builds/${buildId}/testRuns`;
+  const baseUrl = `${host}/ext/v1/builds/${buildId}/testRuns`;
   let url = status ? `${baseUrl}?test_statuses=${status}` : baseUrl;
   let allTests: FailedTestInfo[] = [];
   let requestNumber = 0;
@@ -34,7 +48,7 @@ export async function getTestIds(
     while (true) {
       requestNumber++;
 
-      const response = await fetch(url, {
+      const response = await fetchWithRetry(url, {
         headers: {
           Authorization: authHeader,
           "Content-Type": "application/json",
@@ -42,8 +56,9 @@ export async function getTestIds(
       });
 
       if (!response.ok) {
-        throw new Error(
+        throw new HttpError(
           `Failed to fetch test runs: ${response.status} ${response.statusText}`,
+          response.status,
         );
       }
 

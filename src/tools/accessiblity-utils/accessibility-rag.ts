@@ -8,6 +8,7 @@ export interface RAGChunk {
 
 import { getBrowserStackAuth } from "../../lib/get-auth.js";
 import { BrowserStackConfig } from "../../lib/types.js";
+import { getRegionalHost } from "../../lib/regional-host.js";
 
 export interface AccessibilityRAGResponse {
   content: Array<{
@@ -20,7 +21,7 @@ export async function queryAccessibilityRAG(
   userQuery: string,
   config: BrowserStackConfig,
 ): Promise<any> {
-  const url = "https://accessibility.browserstack.com/api/tcg-proxy/search";
+  const url = `${getRegionalHost("accessibilityDashboard")}/api/tcg-proxy/search`;
 
   const authString = getBrowserStackAuth(config);
   const auth = Buffer.from(authString).toString("base64");
@@ -47,6 +48,8 @@ export async function queryAccessibilityRAG(
 
   const responseData = response.data as any;
 
+  // The RAG endpoint answered 2xx and reported failure in its body: "Query is too long" is
+  // the caller's, "Something went wrong" is not. Untagged until the message says which.
   if (!responseData.success) {
     throw new Error("Something went wrong: " + responseData.message);
   }

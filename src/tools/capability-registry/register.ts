@@ -24,8 +24,9 @@ import { z } from "zod";
 
 import logger from "../../logger.js";
 import { MCPEventExtras, trackMCP } from "../../lib/instrumentation.js";
+import { RegionProbeError } from "../../lib/error.js";
 import { BrowserStackConfig } from "../../lib/types.js";
-import { GroupedArguments } from "./bind.js";
+import { GroupedArguments, replacedFixed, withoutFixed } from "./bind.js";
 import { indexPaths, isEnabled, resolveBaseUrl } from "./config.js";
 import { redact } from "./redact.js";
 import { Credentials, Transport, fetchTransport } from "./egress.js";
@@ -43,6 +44,7 @@ import { isEnabled as askIsEnabled } from "../ask-browserstack/config.js";
 import { PRODUCTS as ASK_PRODUCTS } from "../ask-browserstack/types.js";
 import { decodedLength, detachImage, noteImage } from "./media.js";
 import { maybeCompressBase64 } from "../../lib/image.js";
+import { answerContent } from "./answer.js";
 import {
   ambiguousProducts,
   productAnchors,
@@ -50,6 +52,7 @@ import {
   searchCapabilities,
   singular,
   terms,
+  unreadable,
   vocabularyOf,
 } from "./search.js";
 import { Mode, guidanceLines } from "./types.js";
@@ -364,7 +367,11 @@ export function addCapabilityRegistryTools(
       const listingToken = query
         ? signRouting(
             ambiguity.products.length > 1
-              ? { verdict: "clash", terms: ambiguity.terms }
+              ? {
+                  verdict: "clash",
+                  terms: ambiguity.terms,
+                  products: ambiguity.products,
+                }
               : ambiguity.unknown
                 ? { verdict: "blank" }
                 : { verdict: "settled", product: ambiguity.settled },
@@ -680,6 +687,8 @@ export function addCapabilityRegistryTools(
           { product },
         );
       }
+      /** The product was taken on the caller's word, for a quote the index cannot read. */
+      let routingUnverified = false;
       if (!isBrowseQuery(query)) {
         // JUDGE THE USER'S WORDS, NOT THE AGENT'S REWRITE.
         //
@@ -706,10 +715,25 @@ export function addCapabilityRegistryTools(
         // A clash the routing step already reported is only cleared by the user's own
         // words: the token shows the question was put, `user_words` says what came back.
         // Neither works alone — a token on its own is just proof of having been refused.
+        // AN ANSWER THE INDEX CANNOT READ. Its vocabulary is English and so is the
+        // tokenizer, so a user who answered the question in German or Japanese quoted
+        // words that anchor nothing here and was refused for it — the user's own choice
+        // rejected, which is the one outcome a gate that exists to ask the user must not
+        // produce. The token proves the clash was put and names the products it was
+        // between; the quote is in a script the index could never have matched; so the
+        // caller's product is taken at its word, and the row says so, which is what
+        // keeps this path countable. A quote the index CAN read is still judged.
+        const unverifiable =
+          routed?.verdict === "clash" &&
+          (routed.products ?? []).includes(product) &&
+          anchor.products.length === 0 &&
+          unreadable(user_words);
+        routingUnverified = unverifiable;
         const answered =
-          routed?.verdict !== "settled" &&
-          anchor.products.length === 1 &&
-          anchor.products[0] === product;
+          (routed?.verdict !== "settled" &&
+            anchor.products.length === 1 &&
+            anchor.products[0] === product) ||
+          unverifiable;
         // One product anchored, and it is the one being searched: the user settled it.
         // A routing step that already settled on this product counts the same way — it
         // read the user's whole request, which is more than the fragment quoted here.
@@ -753,7 +777,11 @@ export function addCapabilityRegistryTools(
         ) {
           const token = signRouting(
             ambiguity.products.length > 1
-              ? { verdict: "clash", terms: ambiguity.terms }
+              ? {
+                  verdict: "clash",
+                  terms: ambiguity.terms,
+                  products: ambiguity.products,
+                }
               : mismatch
                 ? { verdict: "settled", product: ambiguity.settled }
                 : { verdict: "blank" },
@@ -871,6 +899,7 @@ export function addCapabilityRegistryTools(
         truncated: rest.truncated,
         weak_match: weak,
         coverage: Math.round(rest.coverage * 100) / 100,
+        ...(routingUnverified ? { routing_unverified: true } : {}),
       });
       return ok({
         ...(agentMatches.length
@@ -1068,6 +1097,13 @@ export function addCapabilityRegistryTools(
           // product is in that state today.
           ...(capability.name ? {} : { method, path }),
           ...contract,
+          // A FIXED PARAMETER IS NOT THE CALLER'S TO SEND. Where the contract allows a
+          // required parameter exactly one value, bind fills it in, so the view drops it:
+          // a caller who never sees `script` cannot leave it out or paraphrase it, which
+          // were the two commonest refusals on the device-control surface. The same view
+          // strips `form_name`, the multipart field a file travels under: plumbing, not
+          // something the caller supplies.
+          ...withoutFixed(capability),
           ...(responses ? { responses } : {}),
         });
       } catch (error) {
@@ -1313,7 +1349,20 @@ export function addCapabilityRegistryTools(
         const narrowed = result.ok
           ? narrowResponse(capability, result.http_response.body, input.select)
           : undefined;
+        // A REPLACED VALUE IS SAID OUT LOUD. `bind` overwrites a fixed parameter the caller
+        // sent its own value for; the answer names it, so a 200 is not read as "my
+        // version ran".
+        const replaced = replacedFixed(capability, args);
         const answer = {
+          ...(replaced.length > 0
+            ? {
+                note:
+                  `${replaced.map((name) => `\`${name}\``).join(", ")} ` +
+                  `${replaced.length > 1 ? "were" : "was"} replaced by the server's own ` +
+                  "value, which is the only one this capability can run; the value you " +
+                  "sent did not run. The contract withholds these parameters for that reason.",
+              }
+            : {}),
           ...(narrowed
             ? {
                 ...result,
@@ -1392,9 +1441,10 @@ export function addCapabilityRegistryTools(
               }
             : {}),
         });
-        return image
-          ? { content: [{ type: "text", text: JSON.stringify(text) }, image] }
-          : ok(text);
+        // THE PRODUCT'S BODY IS DATA, NOT INSTRUCTIONS. It goes back in its own block
+        // inside the untrusted-content boundary; the server's own fields stay plain JSON.
+        const content = answerContent(text);
+        return { content: image ? [...content, image] : content };
       } catch (error) {
         if (error instanceof InvocationError)
           return refuse(
@@ -1402,18 +1452,34 @@ export function addCapabilityRegistryTools(
             invocationReason(error.message, error),
             error.message,
             undefined,
-            identity,
+            {
+              ...identity,
+              ...(error.authKind ? { auth_failure_kind: error.authKind } : {}),
+            },
           );
-        logger.error(
-          "invokeCapability failed: %s",
-          error instanceof Error ? error.message : String(error),
-        );
+        // The Test Management host probe found no host for the account. The caller gets
+        // the same text the direct tools show, with each host's answer; telemetry gets
+        // the US host's status, which is what decides whose fault it is.
+        if (error instanceof RegionProbeError)
+          return refuse(
+            "invokeCapability",
+            "region_probe_failed",
+            error.message,
+            undefined,
+            { ...identity, probe_status: error.usStatus },
+          );
+        const detail = error instanceof Error ? error.message : String(error);
+        // No %s: the remote server's logger does not interpolate, and this line was
+        // reaching production as the literal placeholder.
+        logger.error(`invokeCapability failed: ${detail}`);
+        // The caller still gets the fixed text; the row keeps what actually happened,
+        // through the same redaction as every other message.
         return refuse(
           "invokeCapability",
           "unexpected_error",
           "that capability could not be invoked",
           undefined,
-          identity,
+          { ...identity, error_message: redact(detail) },
         );
       }
     },

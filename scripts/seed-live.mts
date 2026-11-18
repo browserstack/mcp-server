@@ -31,6 +31,7 @@ import { fileURLToPath } from "node:url";
 
 import { BrowserStackMcpServer } from "../src/server-factory.js";
 import { fetchTransport, authHeaders } from "../src/tools/capability-registry/egress.js";
+import { readAnswer } from "../src/tools/capability-registry/answer.js";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const POOL = `${ROOT}tests/live/.id-pool.json`;
@@ -142,7 +143,7 @@ async function call(
     { name, product: "tm", ...args },
     {} as any,
   );
-  const payload = JSON.parse(result.content[0].text);
+  const payload = readAnswer(result);
   const status = payload.http_response?.status ?? 0;
   if (status === 0 && attempt < 3) {
     await new Promise((r) => setTimeout(r, 400 * attempt));

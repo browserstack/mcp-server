@@ -8,7 +8,10 @@ import {
   sessionsListUrl,
 } from "../../src/tools/automate-utils/list-session-ids";
 import { listSessionIdsTool } from "../../src/tools/automate";
-import { resolveHashedBuildId } from "../../src/tools/automate-utils/resolve-hashed-build-id";
+import {
+  NoSessionsError,
+  resolveHashedBuildId,
+} from "../../src/tools/automate-utils/resolve-hashed-build-id";
 
 vi.mock("../../src/lib/apiClient", () => ({
   apiClient: {
@@ -264,13 +267,14 @@ describe("listSessionIdsTool", () => {
     const parsed = JSON.parse(result.content[0].text as string);
     expect(parsed[0].sessionId).toBe("sess-aaa");
     expect(result.content[1].text).toContain(
-      `Resolved observability build ${OBS_UUID} to hashed build id ${HASHED_BUILD}`,
+      `Resolved TRA build ${OBS_UUID} to hashed build id ${HASHED_BUILD}`,
     );
   });
 
   it("falls back to resolution when a 40-hex id is an observability id, not a hashed id", async () => {
     const OBS_HEX = "419836ad9989011f736793ef058e802bac257be3";
     (apiClient.get as Mock)
+      .mockResolvedValueOnce({ ok: false, status: 404, statusText: "Not Found", data: {} })
       .mockResolvedValueOnce({ ok: false, status: 404, statusText: "Not Found", data: {} })
       .mockResolvedValueOnce({ ok: true, status: 200, data: samplePayload });
     (resolveHashedBuildId as Mock).mockResolvedValue({
@@ -293,45 +297,97 @@ describe("listSessionIdsTool", () => {
       `/builds/${OBS_HEX}/sessions.json`,
     );
     expect((apiClient.get as Mock).mock.calls[1][0].url).toContain(
+      `/app-automate/builds/${OBS_HEX}/sessions.json`,
+    );
+    expect((apiClient.get as Mock).mock.calls[2][0].url).toContain(
       `/builds/${HASHED_BUILD}/sessions.json`,
     );
     expect(JSON.parse(result.content[0].text as string)[0].sessionId).toBe(
       "sess-aaa",
     );
     expect(result.content[1].text).toContain(
-      `Resolved observability build ${OBS_HEX} to hashed build id ${HASHED_BUILD}`,
+      `Resolved TRA build ${OBS_HEX} to hashed build id ${HASHED_BUILD}`,
     );
   });
 
-  it("rethrows the original 404 when a 40-hex id resolves to nothing", async () => {
+  it("names every product it tried when a 40-hex id is unknown everywhere", async () => {
     (apiClient.get as Mock).mockResolvedValue({
       ok: false,
       status: 404,
       statusText: "Not Found",
       data: {},
     });
-    (resolveHashedBuildId as Mock).mockRejectedValue(new Error("No BrowserStack sessions found"));
+    (resolveHashedBuildId as Mock).mockRejectedValue(new Error("404"));
 
     await expect(
       listSessionIdsTool(
         { sessionType: SessionType.Automate, buildId: "deadbeef".repeat(5) },
         mockConfig,
       ),
-    ).rejects.toThrow(/No automate build found/);
-    expect(apiClient.get).toHaveBeenCalledTimes(1);
+    ).rejects.toThrow(/No Automate, App Automate or TRA build has id/);
+    expect(apiClient.get).toHaveBeenCalledTimes(2);
+  });
+
+  it("surfaces a TRA server error instead of calling the id unknown", async () => {
+    const { HttpError } = await import("../../src/lib/error");
+    (apiClient.get as Mock).mockResolvedValue({
+      ok: false,
+      status: 404,
+      statusText: "Not Found",
+      data: {},
+    });
+    (resolveHashedBuildId as Mock).mockRejectedValue(
+      new HttpError("Failed to fetch test runs: 503 Service Unavailable", 503),
+    );
+
+    await expect(
+      listSessionIdsTool(
+        { sessionType: SessionType.Automate, buildId: "deadbeef".repeat(5) },
+        mockConfig,
+      ),
+    ).rejects.toThrow(/503 Service Unavailable/);
+  });
+
+  it("switches product when the hashed build ran on the other one", async () => {
+    (apiClient.get as Mock)
+      .mockResolvedValueOnce({ ok: false, status: 404, statusText: "Not Found", data: {} })
+      .mockResolvedValueOnce({ ok: true, status: 200, data: samplePayload });
+
+    const result = await listSessionIdsTool(
+      { sessionType: SessionType.Automate, buildId: HASHED_BUILD },
+      mockConfig,
+    );
+
+    expect((apiClient.get as Mock).mock.calls[1][0].url).toContain(
+      `/app-automate/builds/${HASHED_BUILD}/sessions.json`,
+    );
+    expect(JSON.parse(result.content[0].text as string)[0].sessionId).toBe("sess-aaa");
+    expect(result.content[1].text).toContain('use sessionType "app-automate"');
+    expect(resolveHashedBuildId).not.toHaveBeenCalled();
+  });
+
+  it("routes a base-36 TRA id straight to resolution", async () => {
+    const TRA_ID = "zz00000000000000000000000000000000000003";
+    (resolveHashedBuildId as Mock).mockRejectedValue(new NoSessionsError(TRA_ID));
+
+    await expect(
+      listSessionIdsTool(
+        { sessionType: SessionType.Automate, buildId: TRA_ID },
+        mockConfig,
+      ),
+    ).rejects.toThrow(/has no BrowserStack sessions: its results were uploaded/);
+    expect(apiClient.get).not.toHaveBeenCalled();
   });
 
   it("surfaces the resolver error for a UUID with no sessions", async () => {
-    (resolveHashedBuildId as Mock).mockRejectedValue(
-      new Error("No BrowserStack sessions found for observability build"),
-    );
+    (resolveHashedBuildId as Mock).mockRejectedValue(new NoSessionsError(OBS_UUID));
 
     await expect(
       listSessionIdsTool(
         { sessionType: SessionType.Automate, buildId: OBS_UUID },
         mockConfig,
       ),
-    ).rejects.toThrow(/No BrowserStack sessions found/);
+    ).rejects.toThrow(/has no BrowserStack sessions/);
     expect(apiClient.get).not.toHaveBeenCalled();
   });
 

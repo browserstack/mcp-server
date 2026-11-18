@@ -1,5 +1,9 @@
 import { AxiosError } from "axios";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import {
+  markCallerFault,
+  recordRegionProbeFailure,
+} from "./upstream-status.js";
 
 const MAX_ERROR_TEXT = 500;
 const BODY_FIELDS = ["message", "error", "errors"] as const;
@@ -78,4 +82,55 @@ export function formatAxiosError(
     content: [{ type: "text", text: errorText(err, defaultText) }],
     isError: true,
   };
+}
+
+/**
+ * The caller's input or account set-up was rejected: a missing or unsupported argument,
+ * an id that names nothing, a file that is not there. Telemetry attributes the call to
+ * the caller, and keeps doing so when a catch block rewraps the error. `name` stays
+ * "Error" so the text shown to the user is unchanged.
+ */
+export class CallerError extends Error {
+  constructor(message: string) {
+    super(message);
+    markCallerFault();
+  }
+}
+
+/**
+ * The Test Management region probe found no host that accepted the account. The
+ * message is what the user sees (unchanged); `results` keeps each host's answer so
+ * telemetry can attribute the failure by what the US host did rather than by the last
+ * host tried: a 402 is an account without the product, anything else is the probe itself.
+ */
+export class RegionProbeError extends Error {
+  constructor(
+    message: string,
+    readonly results: ReadonlyArray<{ host: string; status: number }>,
+  ) {
+    super(message);
+    this.name = "RegionProbeError";
+    recordRegionProbeFailure(this.usStatus);
+  }
+
+  /** What the first (US) host answered; 0 when the connection was never answered. */
+  get usStatus(): number {
+    return this.results[0]?.status ?? 0;
+  }
+}
+
+/** A failed HTTP request, keeping the status for callers to branch on. */
+export class HttpError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+    this.name = "HttpError";
+  }
+}
+
+export function isNotFoundError(error: unknown): boolean {
+  if (error instanceof HttpError) return error.status === 404;
+  return error instanceof AxiosError && error.response?.status === 404;
 }

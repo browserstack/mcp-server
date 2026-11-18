@@ -5,6 +5,8 @@ import { formatAxiosError } from "../../lib/error.js";
 import { getBrowserStackAuth } from "../../lib/get-auth.js";
 import { BrowserStackConfig } from "../../lib/types.js";
 import { getTMBaseURL } from "../../lib/tm-base-url.js";
+import { wrapUntrusted } from "../../lib/untrusted-content.js";
+import { markCallerFault } from "../../lib/upstream-status.js";
 
 /**
  * Schema for listing test runs with optional filters.
@@ -54,11 +56,12 @@ export async function listTestRuns(
 
     const data = resp.data;
     if (!data.success) {
+      markCallerFault();
       return {
         content: [
           {
             type: "text",
-            text: `Failed to list test runs: ${JSON.stringify(data)}`,
+            text: `Failed to list test runs: ${wrapUntrusted("API response", JSON.stringify(data))}`,
           },
         ],
         isError: true,
@@ -73,8 +76,17 @@ export async function listTestRuns(
 
     return {
       content: [
-        { type: "text", text: `Found ${count} test run(s):\n\n${summary}` },
-        { type: "text", text: JSON.stringify(runs, null, 2) },
+        {
+          type: "text",
+          text: `Found ${count} test run(s):\n\n${wrapUntrusted("test run list", summary)}`,
+        },
+        {
+          type: "text",
+          text: wrapUntrusted(
+            "test runs (structured data)",
+            JSON.stringify(runs, null, 2),
+          ),
+        },
       ],
     };
   } catch (err) {

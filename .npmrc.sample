@@ -1,0 +1,8 @@
+# Sample npm configuration for this repo.
+# Copy to .npmrc (git-ignored) locally, or sync it in CI, to apply these defaults.
+ignore-scripts=true
+strict-ssl=true
+save-exact=true
+engine-strict=true
+legacy-peer-deps=false
+audit-level=high

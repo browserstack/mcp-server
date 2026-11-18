@@ -22,11 +22,19 @@ export class RedirectRefusedError extends Error {
 }
 
 export function isRedirectRefused(error: unknown): boolean {
-  return (
-    error instanceof RedirectRefusedError ||
-    (error as { cause?: unknown })?.cause instanceof RedirectRefusedError ||
-    (error as { name?: unknown })?.name === "RedirectRefusedError"
-  );
+  // axios and the redirect library wrap the guard's error, so it arrives a few
+  // levels down the cause chain (AxiosError -> redirection failure -> this).
+  let current: unknown = error;
+  for (let depth = 0; current != null && depth < 10; depth++) {
+    if (
+      current instanceof RedirectRefusedError ||
+      (current as { name?: unknown })?.name === "RedirectRefusedError"
+    ) {
+      return true;
+    }
+    current = (current as { cause?: unknown })?.cause;
+  }
+  return false;
 }
 
 export function trustedRedirectGuard(

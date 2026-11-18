@@ -220,7 +220,17 @@ describe("fetchAutomationScreenshots", () => {
         return { ok: true, status: 200, data: logs };
       }
       if (url === bad) {
-        throw new RedirectRefusedError("nope");
+        // Mirror how axios + the redirect library surface the guard's error:
+        // wrapped two levels down the cause chain.
+        const refusal = new RedirectRefusedError("nope");
+        const frFailure = Object.assign(new Error("redirect failed"), {
+          code: "ERR_FR_REDIRECTION_FAILURE",
+          cause: refusal,
+        });
+        throw Object.assign(new Error("Request failed"), {
+          name: "AxiosError",
+          cause: frFailure,
+        });
       }
       return { ok: true, status: 200, data: png };
     });

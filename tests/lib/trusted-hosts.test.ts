@@ -89,4 +89,25 @@ describe("isRedirectRefused", () => {
     expect(isRedirectRefused({ name: "RedirectRefusedError" })).toBe(true);
     expect(isRedirectRefused(new Error("other"))).toBe(false);
   });
+
+  it("unwraps the axios + redirect-library wrapping (cause nested two levels deep)", () => {
+    const refusal = new RedirectRefusedError("nope");
+    const frFailure = Object.assign(new Error("redirect failed"), {
+      code: "ERR_FR_REDIRECTION_FAILURE",
+      cause: refusal,
+    });
+    const axiosError = Object.assign(new Error("Request failed"), {
+      name: "AxiosError",
+      cause: frFailure,
+    });
+    expect(isRedirectRefused(axiosError)).toBe(true);
+  });
+
+  it("does not loop forever on a cyclic cause chain", () => {
+    const a = new Error("a") as Error & { cause?: unknown };
+    const b = new Error("b") as Error & { cause?: unknown };
+    a.cause = b;
+    b.cause = a;
+    expect(isRedirectRefused(a)).toBe(false);
+  });
 });

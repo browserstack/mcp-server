@@ -150,6 +150,9 @@ export function uncheckedSettings(args: ScanArgs, saved: SavedScan): string[] {
     args.needsReview !== undefined && settings.needsReview === undefined
       ? "needsReview"
       : "",
+    args.screenReader !== undefined && settings.screenReader === undefined
+      ? "screenReader"
+      : "",
   ].filter(Boolean);
 }
 

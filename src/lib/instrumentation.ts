@@ -7,7 +7,7 @@ const packageJson = require("../../package.json");
 import { apiClient } from "./apiClient.js";
 import globalConfig from "../config.js";
 import { redact } from "../tools/capability-registry/redact.js";
-import { stableUntrusted } from "./untrusted-content.js";
+import { stripUntrusted } from "./untrusted-content.js";
 import { isKnownProduct } from "../tools/capability-registry/config.js";
 import { accountRegion } from "./account-region.js";
 import { AxiosError } from "axios";
@@ -263,7 +263,7 @@ function errorTextOf(result: unknown): string | undefined {
     )
     .filter(Boolean)
     .join(" ");
-  return redact(stableUntrusted(text));
+  return redact(stripUntrusted(text));
 }
 
 function isErrorResult(result: unknown): boolean {

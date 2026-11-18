@@ -27,15 +27,20 @@ export function wrapUntrusted(source: string, content: string): string {
 }
 
 /**
- * Replace the per-call wrapper nonce with a constant so two wrapped copies of the
- * same content compare equal. For telemetry grouping only — never for LLM output.
+ * Remove the untrusted-content wrapper (preamble, open and close markers),
+ * leaving just the quarantined text. For telemetry only — never for LLM output —
+ * so wrapped error bodies read cleanly and group by their real content instead of
+ * the per-call nonce. Bounded, linear matching (the source label is a trusted
+ * short literal), so untrusted content between the markers cannot drive
+ * backtracking.
  */
-export function stableUntrusted(text: string): string {
-  // Bounded, linear match on the open/close markers only (the source label is a
-  // trusted short literal), so untrusted content between them cannot drive
-  // backtracking.
-  return text.replace(
-    /(«UNTRUSTED [^»\n]{0,80} |«END UNTRUSTED )[0-9a-f]{12}»/g,
-    "$1<nonce>»",
-  );
+export function stripUntrusted(text: string): string {
+  return text
+    .replace(
+      /The following [^\n]{0,80} is UNTRUSTED external data\.[^\n]*\n?/g,
+      "",
+    )
+    .replace(/«UNTRUSTED [^»\n]{0,80} [0-9a-f]{12}»\n?/g, "")
+    .replace(/\n?«END UNTRUSTED [0-9a-f]{12}»/g, "")
+    .trim();
 }

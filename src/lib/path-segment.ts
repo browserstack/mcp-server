@@ -1,3 +1,5 @@
+import { CallerError } from "./error.js";
+
 /**
  * Turn an id into a single URL path segment.
  *
@@ -15,7 +17,7 @@ export function encodePathSegment(value: string | number, name = "id"): string {
   const text = String(value);
   const trimmed = text.trim();
   if (trimmed === "" || trimmed === "." || trimmed === "..") {
-    throw new Error(
+    throw new CallerError(
       `'${name}' is not a usable path value: ${JSON.stringify(text)} would ` +
         `point the request at a different resource rather than identify one. ` +
         `Pass the id exactly as a read returned it.`,

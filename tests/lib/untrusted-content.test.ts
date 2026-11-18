@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   wrapUntrusted,
-  stableUntrusted,
+  stripUntrusted,
 } from "../../src/lib/untrusted-content.js";
 
 describe("wrapUntrusted", () => {
@@ -32,25 +32,35 @@ describe("wrapUntrusted", () => {
   });
 });
 
-describe("stableUntrusted", () => {
+describe("stripUntrusted", () => {
+  it("leaves only the quarantined content (no preamble or markers)", () => {
+    const out = stripUntrusted(
+      wrapUntrusted("API response", "project not found"),
+    );
+    expect(out).toBe("project not found");
+  });
+
   it("makes two wraps of the same content compare equal", () => {
     const a = wrapUntrusted("API response", "project not found");
     const b = wrapUntrusted("API response", "project not found");
     expect(a).not.toBe(b);
-    expect(stableUntrusted(a)).toBe(stableUntrusted(b));
+    expect(stripUntrusted(a)).toBe(stripUntrusted(b));
   });
 
-  it("normalizes both the open and close marker nonces", () => {
-    const out = stableUntrusted(wrapUntrusted("rca", "x"));
-    expect(out).toContain("«UNTRUSTED rca <nonce>»");
-    expect(out).toContain("«END UNTRUSTED <nonce>»");
-    expect(out).not.toMatch(/[0-9a-f]{12}»/);
+  it("strips a wrapper embedded in surrounding text", () => {
+    const text = `Failed to add test result to test run: ${wrapUntrusted(
+      "API response",
+      "quota exceeded",
+    )}.`;
+    expect(stripUntrusted(text)).toBe(
+      "Failed to add test result to test run: quota exceeded.",
+    );
   });
 
   it("stays linear-time on adversarial marker-like input", () => {
     const evil = "«".repeat(20000) + "a".repeat(20000);
     const start = performance.now();
-    stableUntrusted(evil);
+    stripUntrusted(evil);
     expect(performance.now() - start).toBeLessThan(100);
   });
 });

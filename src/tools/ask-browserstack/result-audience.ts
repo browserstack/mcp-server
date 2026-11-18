@@ -116,6 +116,14 @@ export function internalView(payload: AskResult): Json | undefined {
     internal.actions = p.actions.map((a) => pick(a, ["reply", "card_id"]));
   }
   if (Array.isArray(p.jobs)) internal.jobs = p.jobs;
+  if (internal.atlas_response !== undefined) {
+    internal.atlas_response = wrapUntrusted(
+      "BrowserStack AI raw response",
+      typeof internal.atlas_response === "string"
+        ? internal.atlas_response
+        : JSON.stringify(internal.atlas_response),
+    );
+  }
   return Object.keys(internal).length ? internal : undefined;
 }
 

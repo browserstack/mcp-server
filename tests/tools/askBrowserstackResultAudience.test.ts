@@ -159,3 +159,13 @@ describe("the tool result", () => {
     expect(toAudienceResult(r).content).toHaveLength(1);
   });
 });
+
+describe("wrapping untrusted backend text", () => {
+  it("wraps the raw atlas_response in the assistant-only block", () => {
+    const internal = internalView(result({ status: "running" }));
+    expect(typeof internal?.atlas_response).toBe("string");
+    expect(unwrapUntrusted(internal?.atlas_response as string)).toBe(
+      JSON.stringify({ conversation_id: CONV }),
+    );
+  });
+});

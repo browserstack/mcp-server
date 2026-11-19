@@ -163,6 +163,15 @@ export const FIX_WORKFLOW_POINTER =
   "To fix accessibility issues in the user's code (not just list them), first call fetchAccessibilityIssues with fixWorkflow: true and follow the workflow it returns.";
 
 /**
+ * What a report's first page says when `fixWorkflow: true` came with the report. The workflow
+ * itself (~11 KB) is left off: a large first page plus the workflow passes the size at which
+ * clients save a result to a file instead of showing it, and the workflow, coming last, is
+ * what a client that cuts long results drops.
+ */
+export const FIX_WORKFLOW_WITH_REPORT =
+  "The fix workflow is not included with a report's issues, to keep this answer small enough to show. Before editing code, call fetchAccessibilityIssues with only fixWorkflow: true (no report) and follow the workflow it returns.";
+
+/**
  * One line for the server instructions. The last sentence keeps questions such as "how do I
  * fix contrast issues?" from loading the workflow.
  */

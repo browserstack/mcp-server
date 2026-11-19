@@ -1912,6 +1912,39 @@ describe("askBrowserStackAI, against the injected seam", () => {
     expect(JSON.stringify(tm.content)).not.toContain(POINTER);
   });
 
+  // Only a finished answer gets it: on a reply that says "ask the user, then call again" the
+  // pointer would be a competing next step.
+  it.each<[string, number, Record<string, unknown>, string]>([
+    [
+      "a run waiting for approval",
+      200,
+      {
+        ok: false,
+        status: "needs_approval",
+        run_id: "run-" + "b".repeat(32),
+        asks: [{ perm_id: "perm-1", description: "Hide 3 issues", product: "a11y", mode: "ask-always" }],
+      },
+      "needs_approval",
+    ],
+    ["a run a human declined", 200, { status: "blocked", answer: "Not done.", needs_approval: ["Hide 3 issues"] }, "blocked"],
+    ["an account without Ask AI", 403, { detail: "agent is not enabled for this account" }, "error"],
+  ])("does not add the pointer to %s", async (_label, status, body, expected) => {
+    const mcp = new McpServer({ name: "t", version: "0" });
+    const tools = addAskBrowserStackAITool(mcp, {
+      agentUrl: () => "https://atlas.example/agent",
+      mintToken: async () => MINTED,
+      credentialsFor: () => ({ username: "u", accessKey: "k" }),
+      deferredTransport: (async () => ({ status, body })) as never,
+    });
+
+    const result = await tools.askBrowserStackAI.handler(
+      { product: "a11y", query: "hide the contrast issues" },
+      {} as any,
+    );
+    expect(JSON.parse(result.content[0].text).status).toBe(expected);
+    expect(JSON.stringify(result.content)).not.toContain("fixWorkflow");
+  });
+
   it("does not add the pointer to a failed a11y call", async () => {
     const mcp = new McpServer({ name: "t", version: "0" });
     const tools = addAskBrowserStackAITool(mcp, {

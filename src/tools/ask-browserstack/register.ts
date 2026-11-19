@@ -970,7 +970,7 @@ export function addAskBrowserStackAITool(
     extra: unknown,
   ) => {
     const result = await askHandler(args, extra);
-    if (args?.product !== "a11y" || result.isError) return result;
+    if (args?.product !== "a11y" || !isFinishedAnswer(result)) return result;
     return {
       ...result,
       content: [
@@ -981,6 +981,22 @@ export function addAskBrowserStackAITool(
   }) as unknown as typeof tools.askBrowserStackAI.handler;
 
   return tools;
+}
+
+/**
+ * A finished answer (`status: "ok"`), as opposed to a run waiting on the user (approval, an
+ * upload, questions), a refusal, or a failure. Only a finished answer gets the fix-workflow
+ * pointer: on a reply that says "ask the user, then call again" it is a competing next step.
+ */
+function isFinishedAnswer(result: CallToolResult): boolean {
+  if (result.isError) return false;
+  const first = result.content?.[0];
+  if (first?.type !== "text") return false;
+  try {
+    return JSON.parse(first.text)?.status === "ok";
+  } catch {
+    return false;
+  }
 }
 
 /** The tool-adder the server factory calls. */

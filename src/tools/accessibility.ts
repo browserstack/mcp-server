@@ -4,6 +4,7 @@ import {
   FIX_WORKFLOW_NAME,
   FIX_WORKFLOW_TITLE,
   FIX_WORKFLOW_POINTER,
+  FIX_WORKFLOW_WITH_REPORT,
   fixWorkflowForAgent,
   fixWorkflowText,
 } from "./accessiblity-utils/fix-workflow.js";
@@ -294,10 +295,12 @@ async function executeFetchAccessibilityIssues(
         exportTaskId: args.exportTaskId,
       },
     );
-    if (args.fixWorkflow && !result.isError) {
+    // With a report, only a line that points at the workflow, and only on the first page: the
+    // workflow itself on top of a large first page is past what clients show inline.
+    if (args.fixWorkflow && !result.isError && !args.cursor) {
       result.content = [
         ...(result.content ?? []),
-        { type: "text", text: fixWorkflowForAgent() },
+        { type: "text", text: FIX_WORKFLOW_WITH_REPORT },
       ];
     }
     return result;

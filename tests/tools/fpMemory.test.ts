@@ -19,6 +19,7 @@ vi.mock("../../src/logger.js", () => ({
 import {
   FP_APPLY_NOTE,
   FP_FILING_GUIDE,
+  LATER_CHARACTERS,
   READ_CAPABILITY,
   SUBMIT_CAPABILITY,
   memoryForReport,
@@ -158,6 +159,9 @@ describe("applyMemory", () => {
       lead: [],
       notes: [],
       closing: [],
+      later: [],
+      laterMarked: 0,
+      laterUnlisted: 0,
     });
   });
 
@@ -328,5 +332,109 @@ describe("the capabilities an answer names", () => {
       "userStatement",
       "verdict",
     ]);
+  });
+});
+
+describe("applyMemory on a report's first page", () => {
+  // Agents that stopped at the first page, or read the CSV, reported false positives that
+  // were only on later pages as real, and said none were saved.
+  const later = [
+    { cursor: 120, records: [issue("landmark-one-main")] },
+    { cursor: 240, records: [issue("role-required"), issue("region")] },
+  ];
+
+  it("lists the marked issues on later pages, with the cursor of their page", () => {
+    const view = applyMemory(
+      memory([entry(1)]),
+      [issue("color-contrast")],
+      undefined,
+      later,
+    );
+    expect(view.marked).toBe(0);
+    expect(view.laterMarked).toBe(1);
+    expect(view.lead[0]).toContain(
+      "Saved false positives apply to this report: 1 issue on later pages",
+    );
+    expect(view.lead[0]).toContain("is marked saved_fp_entries");
+    expect(view.later).toHaveLength(1);
+    const text = view.later[0];
+    const listed = JSON.parse(
+      text.slice(text.indexOf("[{"), text.lastIndexOf("}]") + 2),
+    );
+    expect(listed).toEqual([
+      {
+        ...issue("role-required"),
+        saved_fp_entries: ["fp_1"],
+        page_cursor: 240,
+      },
+    ]);
+    // The entries come with it, so the agent can apply them without reading that page.
+    expect(view.notes.join("\n")).toContain('"id":"fp_1"');
+  });
+
+  it("says both counts when this page and later pages have marked issues", () => {
+    const view = applyMemory(
+      memory([entry(1)]),
+      [issue("role-required"), issue("color-contrast")],
+      undefined,
+      later,
+    );
+    expect(view.lead[0]).toContain(
+      "1 of the 2 issues below and 1 issue on later pages",
+    );
+    expect(view.lead[0]).toContain("are marked saved_fp_entries");
+  });
+
+  it("counts by rule and page the later issues too many to list", () => {
+    // A broad entry can cover most of a report: listing them all made the first page
+    // 139,000 characters, over clients' limit on a tool's result.
+    const html = `<button class="${"x".repeat(400)}">`;
+    const many = [
+      {
+        cursor: 300,
+        records: Array.from({ length: 80 }, () => ({
+          ...issue("role-required"),
+          HTML_snippet: html,
+        })),
+      },
+      {
+        cursor: 900,
+        records: Array.from({ length: 40 }, () => ({
+          ...issue("role-required"),
+          HTML_snippet: html,
+        })),
+      },
+    ];
+    const view = applyMemory(
+      memory([entry(1)]),
+      [issue("color-contrast")],
+      undefined,
+      many,
+    );
+    expect(view.laterMarked).toBe(120);
+    expect(view.laterUnlisted).toBeGreaterThan(0);
+    const text = view.later.join("\n");
+    expect(view.later[0].length).toBeLessThan(LATER_CHARACTERS + 1_000);
+    // Listed short: the snippet is cut, not the row left out.
+    expect(text).not.toContain("x".repeat(200));
+    expect(text).toContain(
+      `${view.laterUnlisted} more marked issues on later pages are too many to list here`,
+    );
+    expect(text).toContain("on the page at cursor 900");
+    expect(view.lead[0]).toContain(
+      `${120 - view.laterUnlisted} listed after this page's issues and the rest counted there`,
+    );
+  });
+
+  it("adds nothing when no later issue is covered", () => {
+    const view = applyMemory(
+      memory([entry(1)], "aria-hidden-focus"),
+      [issue("color-contrast")],
+      undefined,
+      later,
+    );
+    expect(view.laterMarked).toBe(0);
+    expect(view.later).toEqual([]);
+    expect(view.lead).toEqual([]);
   });
 });

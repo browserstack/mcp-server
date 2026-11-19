@@ -27,6 +27,14 @@ const MEMORY_PAGE_SIZE = 200;
 export const MEMORY_CHARACTERS = 24_000;
 const SNIPPET_CHARACTERS = 200;
 
+/**
+ * How much of a first page the marked issues of later pages may take, listed short. Past
+ * it they are counted by rule and page instead: a broad entry can cover most of a report,
+ * and the first page must still fit a client's limit on a tool's result.
+ */
+export const LATER_CHARACTERS = 10_000;
+const LATER_SNIPPET_CHARACTERS = 120;
+
 export interface FpEntry {
   id: string;
   site: string;
@@ -188,6 +196,83 @@ export interface MemoryView<T> {
   notes: string[];
   /** After the issues: how to report what is left. */
   closing: string[];
+  /** After the issues: the marked issues on later pages, with the cursor of their page. */
+  later: string[];
+  /** How many issues on later pages are marked. */
+  laterMarked: number;
+  /** Of those, how many are only counted, not listed: their pages have to be read. */
+  laterUnlisted: number;
+}
+
+/** A later page's marked issue as the first page lists it: enough to match and to find. */
+function laterRow(
+  record: IssueLike & { saved_fp_entries?: string[] },
+  cursor: number,
+): Record<string, unknown> {
+  const { issue_type, severity, component, HTML_snippet, needs_review } =
+    record as IssueLike & Record<string, unknown>;
+  const html =
+    typeof HTML_snippet === "string" &&
+    HTML_snippet.length > LATER_SNIPPET_CHARACTERS
+      ? `${HTML_snippet.slice(0, LATER_SNIPPET_CHARACTERS)}…`
+      : HTML_snippet;
+  return Object.fromEntries(
+    Object.entries({
+      issue_type,
+      severity,
+      component,
+      html,
+      affected_page: record.affected_page,
+      needs_review,
+      saved_fp_entries: record.saved_fp_entries,
+      page_cursor: cursor,
+    }).filter(([, value]) => value !== undefined),
+  );
+}
+
+/** The later pages' marked issues: listed while they fit, the rest counted by rule and page. */
+function laterSection(
+  rows: Record<string, unknown>[],
+  budget: number,
+): { text: string[]; unlisted: number } {
+  if (rows.length === 0) return { text: [], unlisted: 0 };
+  const listed: Record<string, unknown>[] = [];
+  let length = 2;
+  for (const row of rows) {
+    const add = JSON.stringify(row).length + 1;
+    if (length + add > budget) break;
+    listed.push(row);
+    length += add;
+  }
+  const rest = rows.slice(listed.length);
+  const where = new Map<string, Map<number, number>>();
+  for (const row of rest) {
+    const byPage = where.get(String(row.issue_type)) ?? new Map();
+    const cursor = Number(row.page_cursor);
+    byPage.set(cursor, (byPage.get(cursor) ?? 0) + 1);
+    where.set(String(row.issue_type), byPage);
+  }
+  const counted = [...where]
+    .map(
+      ([rule, pages]) =>
+        `${rule}: ${[...pages].map(([cursor, n]) => `${n} on the page at cursor ${cursor}`).join(", ")}`,
+    )
+    .join("; ");
+  return {
+    text: [
+      ...(listed.length
+        ? [
+            `Issues on later pages that saved false positives may cover${rest.length ? ` (the first ${listed.length} of ${rows.length})` : ""}. They are in the report's totals and in the CSV; remove the ones their entries cover, as for this page's: ${wrapUntrusted("accessibility scan results on later pages", JSON.stringify(listed))}`,
+          ]
+        : []),
+      ...(rest.length
+        ? [
+            `${rest.length} ${listed.length ? "more " : ""}marked issues on later pages are too many to list here: ${counted}. Read those pages with their cursors (their issues come marked there) and remove the ones the entries cover; the CSV does not mark them.`,
+          ]
+        : []),
+    ],
+    unlisted: rest.length,
+  };
 }
 
 function hostOf(page: string | undefined): string | undefined {
@@ -204,30 +289,43 @@ function hostOf(page: string | undefined): string | undefined {
  * cover are marked with their entry ids, the answer opens by saying they are to be removed
  * before anything is reported, and it closes by saying how to report what is left. Only
  * the entries of these issues' rules and sites (or saved for all sites) are shown.
- * `page` is the page every issue is on, when the answer is about one.
+ * `page` is the page every issue is on, when the answer is about one. `laterPages` are the
+ * report's pages after this one, on its first page: an agent that stopped there, or read
+ * the CSV (which has no memory), reported the false positives on them as real, so the ones
+ * marked there are listed on the first page with the cursor of their page.
  */
 export function applyMemory<T extends IssueLike>(
   memory: FpMemory | undefined,
   records: T[],
   page?: string,
+  laterPages: { cursor: number; records: T[] }[] = [],
+  laterBudget = LATER_CHARACTERS,
 ): MemoryView<T> {
-  if (!memory) return { records, marked: 0, lead: [], notes: [], closing: [] };
+  const none = { later: [], laterMarked: 0, laterUnlisted: 0 };
+  if (!memory)
+    return { records, marked: 0, lead: [], notes: [], closing: [], ...none };
   const byRule = new Map(memory.rules.map((rule) => [rule.ruleCode, rule]));
   const used = new Map<string, Set<string>>();
-  let marked = 0;
-  const annotated = records.map((record) => {
+  const mark = (record: T): T & { saved_fp_entries?: string[] } => {
     const host = hostOf(record.affected_page ?? page);
     const ids = (byRule.get(record.issue_type)?.entries ?? [])
       .filter((entry) => entry.global || (host && entry.site === host))
       .map((entry) => entry.id);
     if (ids.length === 0) return record;
-    marked++;
     const seen = used.get(record.issue_type) ?? new Set<string>();
     ids.forEach((id) => seen.add(id));
     used.set(record.issue_type, seen);
     return { ...record, saved_fp_entries: ids };
-  });
-  if (marked === 0) {
+  };
+  const annotated = records.map(mark);
+  const marked = annotated.filter((r) => r.saved_fp_entries).length;
+  const laterIssues = laterPages.flatMap(({ cursor, records: rows }) =>
+    rows
+      .map(mark)
+      .filter((r) => r.saved_fp_entries)
+      .map((r) => laterRow(r, cursor)),
+  );
+  if (marked === 0 && laterIssues.length === 0) {
     const unread = memory.nextCursor
       ? [
           `Not all saved false positives were read here. Before you tell the user an issue is real when they say it is a known false positive, read its rule's entries with the web_accessibility capability ${READ_CAPABILITY} (ruleCodes set to its rule; pass each page's nextCursor as cursor for the next).`,
@@ -239,6 +337,7 @@ export function applyMemory<T extends IssueLike>(
       lead: [],
       notes: [...unread, FP_FILING_GUIDE],
       closing: [],
+      ...none,
     };
   }
   const shown: FpMemory = {
@@ -253,12 +352,29 @@ export function applyMemory<T extends IssueLike>(
       }),
   };
   const { json, omitted } = memoryPayload(shown);
+  const laterMarked = laterIssues.length;
+  const later = laterSection(laterIssues, laterBudget);
+  const where = [
+    ...(marked ? [`${marked} of the ${records.length} issues below`] : []),
+    ...(laterMarked
+      ? [
+          `${laterMarked} ${laterMarked === 1 ? "issue" : "issues"} on later pages of this report (${
+            later.unlisted
+              ? `${laterMarked - later.unlisted} listed after this page's issues and the rest counted there by rule and page, each with the cursor of its page`
+              : "listed after this page's issues, each with the cursor of its page, so you do not need to read those pages or the CSV to remove them"
+          })`,
+        ]
+      : []),
+  ].join(" and ");
   return {
     records: annotated,
     marked,
+    laterMarked,
+    laterUnlisted: later.unlisted,
     lead: [
-      `⚠️ Saved false positives apply to this report: ${marked} of the ${records.length} issues below are marked saved_fp_entries, as this account's users already confirmed false positives of their rule on their site. Before you give the user any list, count or summary of issues, check each marked issue against its entries (memory and how to apply it are below) and remove the ones they cover. The user already confirmed these, so do not ask them to confirm again, and leave them out even when the user asks for the full list or all issues: their report is the issues that are left. Every count in this answer is from before that removal.`,
+      `⚠️ Saved false positives apply to this report: ${where} ${marked + laterMarked === 1 ? "is" : "are"} marked saved_fp_entries, as this account's users already confirmed false positives of their rule on their site. Before you give the user any list, count or summary of issues, check each marked issue against its entries (memory and how to apply it are below) and remove the ones they cover. The user already confirmed these, so do not ask them to confirm again, and leave them out even when the user asks for the full list or all issues: their report is the issues that are left. Every count in this answer is from before that removal.`,
     ],
+    later: later.text,
     notes: [
       FP_APPLY_NOTE,
       `False-positive memory: ${wrapUntrusted("saved false positives (user-written)", json)}`,

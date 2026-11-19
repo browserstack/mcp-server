@@ -51,6 +51,7 @@ import logger from "../logger.js";
 import { NEEDS_A11Y_CONFIG_ID, NEEDS_A11Y_SCAN_ID } from "./tool-handoff.js";
 import {
   applyMemory,
+  LATER_CHARACTERS,
   memoryForReport,
   type MemoryView,
 } from "./accessiblity-utils/fp-memory.js";
@@ -578,8 +579,19 @@ const WEB_ISSUES_NOTE =
   "Each issue names its rule (issue_type): the rule's name, description, WCAG criteria and usual fix are under rules, and an issue has its own how_to_fix only when it differs. An issue with needs_review is one the engine could not decide, so a person confirms it: the value is its review status, and until it is confirmed it is not a confirmed failure. An issue with no needs_review, whose rule is not a best practice (best_practice under rules), is a confirmed WCAG failure.";
 
 /** The CSV link, with what it is for: an answer gives a page of issues at a time. */
-function fullReportLine(reportLink: string): string {
-  return `The full list of issues is a CSV, valid for about 12 hours: download it when every issue is needed at once (this answer gives them a page at a time), from the following link: ${reportLink}`;
+function fullReportLine(
+  reportLink: string,
+  fp?: { marked: number; laterMarked: number; laterUnlisted: number },
+): string {
+  const line = `The full list of issues is a CSV, valid for about 12 hours: download it when every issue is needed at once (this answer gives them a page at a time), from the following link: ${reportLink}`;
+  // The CSV is the export as the scanner wrote it: agents that read it found no saved false
+  // positives in it and told the user there were none.
+  if (!fp || fp.marked + fp.laterMarked === 0) return line;
+  return `${line} The CSV still lists the issues saved as false positives and does not mark them: before you report anything from it, remove the issues this answer marks saved_fp_entries${
+    fp.laterUnlisted
+      ? `, and read the later pages this answer names for the ${fp.laterUnlisted} it only counts`
+      : ""
+  }.`;
 }
 
 /** How many new and resolved issues a comparison lists per page. */
@@ -1151,6 +1163,7 @@ async function fetchAccessibilityIssues(
       hidden_issues,
       page,
       error_pages = [],
+      later_pages,
     },
     score,
   ] = await Promise.all([
@@ -1167,56 +1180,104 @@ async function fetchAccessibilityIssues(
     (p) => p.status !== "redirect" && !errorPageUrls.has(samePage(p.pageUrl)),
   );
   // The memory for this page's rules comes with the issues, so it is applied whether or
-  // not the agent thinks to ask for it.
-  const fp = applyMemory(
-    await memoryForReport(setupAuth(config), Object.keys(rules ?? {}), pageUrl),
-    records,
-    pageUrl,
-  );
-  const beforeRemoval = fp.marked
-    ? ", before removing saved false positives"
-    : "";
+  // not the agent thinks to ask for it. The first page reads it for every rule in the
+  // report: an agent that stopped there, or read the CSV, missed the false positives that
+  // were only on later pages and reported them as real.
+  const ruleCodes = cursor
+    ? Object.keys(rules ?? {})
+    : (summary?.by_rule.map((r) => r.issue_type) ?? Object.keys(rules ?? {}));
+  const memory = await memoryForReport(setupAuth(config), ruleCodes, pageUrl);
+  const csvLink = reportLink;
 
-  return createSuccessResponse([
-    ...fp.lead,
-    ...preface,
-    ...processingNote(processing),
-    // What the run did not check, said on the first page with the whole report's counts.
-    ...(cursor
-      ? []
-      : [
-          ...errorPagesNote(
-            error_pages,
-            source.kind === "build" ? "run the tests again" : "scan again",
-          ),
-          ...(notScanned.length
-            ? [
-                `⚠️ ${pageReasons(notScanned, ["was not scanned, so its issues are not in this report", "were not scanned, so their issues are not in this report"])}`,
-              ]
-            : []),
-        ]),
-    // A page that did not load has no issues of its own to count.
-    ...(page && error_pages.length === 0 ? pageNote(page) : []),
-    `Retrieved ${page_length} accessibility issues (Total: ${total_issues}${beforeRemoval})`,
-    // The whole report's score and counts, said on its first page.
-    ...scoreNote(score),
-    ...(cursor ? [] : webSummaryNote(summary, total_issues)),
-    ...excludedIssuesNote(duplicate_issues, unlinked_duplicates, hidden_issues),
-    fullReportLine(reportLink),
-    WEB_ISSUES_NOTE,
-    ...fp.notes,
-    `Issues: ${wrapUntrusted("accessibility scan results", JSON.stringify({ issues: fp.records, rules }))}`,
-    ...fp.closing,
-    ...(cursor ? [] : [askAiNote(source)]),
-    closingMessage(
-      next_page,
-      remaining,
-      source,
-      stillProcessing,
-      pageArg,
-      error_pages.length > 0 || notScanned.length > 0,
+  return withinResultLimit((laterBudget) =>
+    webIssuesAnswer(
+      applyMemory(memory, records, pageUrl, later_pages, laterBudget),
     ),
-  ]);
+  );
+
+  function webIssuesAnswer(
+    fp: MemoryView<(typeof records)[number]>,
+  ): CallToolResult {
+    const beforeRemoval =
+      fp.marked + fp.laterMarked
+        ? ", before removing saved false positives"
+        : "";
+    return createSuccessResponse([
+      ...fp.lead,
+      ...preface,
+      ...processingNote(processing),
+      // What the run did not check, said on the first page with the whole report's counts.
+      ...(cursor
+        ? []
+        : [
+            ...errorPagesNote(
+              error_pages,
+              source.kind === "build" ? "run the tests again" : "scan again",
+            ),
+            ...(notScanned.length
+              ? [
+                  `⚠️ ${pageReasons(notScanned, ["was not scanned, so its issues are not in this report", "were not scanned, so their issues are not in this report"])}`,
+                ]
+              : []),
+          ]),
+      // A page that did not load has no issues of its own to count.
+      ...(page && error_pages.length === 0 ? pageNote(page) : []),
+      `Retrieved ${page_length} accessibility issues (Total: ${total_issues}${beforeRemoval})`,
+      // The whole report's score and counts, said on its first page.
+      ...scoreNote(score),
+      ...(cursor ? [] : webSummaryNote(summary, total_issues)),
+      ...excludedIssuesNote(
+        duplicate_issues,
+        unlinked_duplicates,
+        hidden_issues,
+      ),
+      fullReportLine(csvLink, fp),
+      WEB_ISSUES_NOTE,
+      ...fp.notes,
+      `Issues: ${wrapUntrusted("accessibility scan results", JSON.stringify({ issues: fp.records, rules }))}`,
+      ...fp.later,
+      ...fp.closing,
+      ...(cursor ? [] : [askAiNote(source)]),
+      closingMessage(
+        next_page,
+        remaining,
+        source,
+        stillProcessing,
+        pageArg,
+        error_pages.length > 0 || notScanned.length > 0,
+      ),
+    ]);
+  }
+}
+
+/**
+ * About where Claude Code stops showing a tool's result and saves it to a file instead: a
+ * first page of 56 KB was saved, and an agent with no file tool could not read it at all.
+ */
+const RESULT_CHARACTERS = 45_000;
+
+/**
+ * An answer whose first page lists later pages' saved false positives, listing fewer of
+ * them (and counting the rest by page) when the whole answer would pass that limit.
+ */
+function withinResultLimit(
+  respond: (laterBudget: number) => CallToolResult,
+): CallToolResult {
+  const length = (result: CallToolResult) =>
+    result.content.reduce(
+      (n, part) => n + (part.type === "text" ? part.text.length : 0),
+      0,
+    );
+  // Listing fewer adds the count of the rest, so shrink with a margin, a few times at most.
+  let budget = LATER_CHARACTERS;
+  let result = respond(budget);
+  for (let i = 0; i < 3 && budget > 0; i++) {
+    const over = length(result) - RESULT_CHARACTERS;
+    if (over <= 0) break;
+    budget = Math.max(0, budget - over - 1_000);
+    result = respond(budget);
+  }
+  return result;
 }
 
 /** What one page of a report holds, in the dashboard's page-view terms. */
@@ -1734,9 +1795,10 @@ function createScanSuccessResponse(
   ),
 ): CallToolResult {
   const cursor = report.next_page;
-  const beforeRemoval = fp.marked
-    ? " (before removing saved false positives)"
-    : "";
+  const beforeRemoval =
+    fp.marked + fp.laterMarked
+      ? " (before removing saved false positives)"
+      : "";
   const messages = [
     ...fp.lead,
     `Accessibility scan "${name}" completed. ${scanDashboardNote(dashboardLink, scanId)}`,
@@ -1744,7 +1806,7 @@ function createScanSuccessResponse(
     // The parser leaves an error page's rows out of the count; this says why.
     ...errorPagesNote(report.error_pages ?? [], "scan again"),
     scanSettingsNote(settings, applied),
-    fullReportLine(reportUrl),
+    fullReportLine(reportUrl, fp),
     `We found ${report.total_issues} issues${beforeRemoval}. Below are the details of the ${report.page_length} most critical issues.`,
     ...scoreNote(score),
     ...webSummaryNote(report.summary, report.total_issues),
@@ -1756,6 +1818,7 @@ function createScanSuccessResponse(
     WEB_ISSUES_NOTE,
     ...fp.notes,
     `Scan results: ${wrapUntrusted("accessibility scan results", JSON.stringify({ issues: fp.records, rules: report.rules }))}`,
+    ...fp.later,
     ...fp.closing,
     askAiNote({ kind: "scan", scanId, scanRunId }),
   ];
@@ -1864,29 +1927,34 @@ async function scanOutcome(
     parseAccessibilityReportFromCSV(reportLink),
     reportFetcher.score({ kind: "scan", scanId, scanRunId }),
   ]);
-  // Saved false positives for this page's rules are removed before the issues are shown,
-  // for a new scan and a re-run alike.
-  const fp = applyMemory(
-    await memoryForReport(
-      setupAuth(config),
+  // Saved false positives are removed before the issues are shown, for a new scan and a
+  // re-run alike: read for every rule in the report, as this is its first page.
+  const memory = await memoryForReport(
+    setupAuth(config),
+    report.summary?.by_rule.map((r) => r.issue_type) ??
       Object.keys(report.rules ?? {}),
-      scan.pageURL,
-    ),
-    report.records,
     scan.pageURL,
   );
   return [
-    createScanSuccessResponse(
-      scanName,
-      report,
-      scanId,
-      scanRunId,
-      reportLink,
-      dashboardLink,
-      settings,
-      applied,
-      score,
-      fp,
+    withinResultLimit((laterBudget) =>
+      createScanSuccessResponse(
+        scanName,
+        report,
+        scanId,
+        scanRunId,
+        reportLink,
+        dashboardLink,
+        settings,
+        applied,
+        score,
+        applyMemory(
+          memory,
+          report.records,
+          scan.pageURL,
+          report.later_pages,
+          laterBudget,
+        ),
+      ),
     ),
     "completed",
   ];

@@ -101,3 +101,43 @@ export function pageOf<T>(
     remaining,
   };
 }
+
+/**
+ * The pages after a report's first one, as calls with each next_page in turn return them,
+ * each with the cursor that fetches it: what the first page needs to say where later
+ * issues are. One pass over the rows. `extraLength` gives a fresh counter per page, as
+ * each call starts its own.
+ */
+export function laterPagesOf<T>(
+  all: T[],
+  first: { page_length: number; next_page: number | null },
+  {
+    maxCharacterLength = PAGE_CHARACTERS,
+    extraLength,
+  }: {
+    maxCharacterLength?: number;
+    extraLength?: () => (record: T) => number;
+  } = {},
+): { cursor: number; records: T[] }[] {
+  const pages: { cursor: number; records: T[] }[] = [];
+  let idx = first.page_length;
+  let cursor = first.next_page;
+  while (cursor !== null && idx < all.length) {
+    const more = extraLength?.();
+    const records: T[] = [];
+    let length = 0;
+    let extra = 0;
+    for (; idx < all.length; idx++) {
+      const recordLength = JSON.stringify(all[idx]).length;
+      const add = more?.(all[idx]) ?? 0;
+      const fits = length + extra + add + recordLength <= maxCharacterLength;
+      if (!fits && records.length > 0) break;
+      records.push(all[idx]);
+      length += recordLength;
+      extra += add;
+    }
+    pages.push({ cursor, records });
+    cursor = idx < all.length ? cursor + length : null;
+  }
+  return pages;
+}

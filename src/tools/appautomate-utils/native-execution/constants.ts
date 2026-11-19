@@ -55,13 +55,11 @@ export const RUN_APP_AUTOMATE_SCHEMA = {
     .optional()
     .default(false)
     .describe(
-      "Also run Screen Reader Automation (TalkBack/VoiceOver) for a Screen Reader report; turns accessibility on.",
+      "Also run Screen Reader Automation (TalkBack/VoiceOver); turns accessibility on.",
     ),
   screenReaderLinearNavigation: z
     .boolean()
     .optional()
     .default(false)
-    .describe(
-      "With screenReader: also swipe through each screen in reading order (linear navigation), up to 5 minutes.",
-    ),
+    .describe("With screenReader: swipe each screen in reading order."),
 };

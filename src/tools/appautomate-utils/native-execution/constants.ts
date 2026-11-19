@@ -50,4 +50,18 @@ export const RUN_APP_AUTOMATE_SCHEMA = {
     .describe(
       "App Accessibility checks on screens the tests touch (Android 11+, iOS 14+); suite must be built with BrowserStack's SDK.",
     ),
+  screenReader: z
+    .boolean()
+    .optional()
+    .default(false)
+    .describe(
+      "Also run Screen Reader Automation (TalkBack/VoiceOver) for a Screen Reader report; turns accessibility on.",
+    ),
+  screenReaderLinearNavigation: z
+    .boolean()
+    .optional()
+    .default(false)
+    .describe(
+      "With screenReader: also swipe through each screen in reading order (linear navigation), up to 5 minutes.",
+    ),
 };

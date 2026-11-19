@@ -3,6 +3,11 @@ import { afterEach, beforeEach, describe, expect, it, Mock, vi } from "vitest";
 vi.mock("../../src/lib/apiClient.js", () => ({
   apiClient: { get: vi.fn() },
 }));
+// Web builds are read from the Accessibility dashboard with a minted token; no auth server here.
+vi.mock("../../src/tools/capability-registry/egress.js", async (original) => ({
+  ...(await original<typeof import("../../src/tools/capability-registry/egress.js")>()),
+  authHeaders: vi.fn(async () => ({ Authorization: "Bearer test-token" })),
+}));
 
 import { apiClient } from "../../src/lib/apiClient.js";
 import { getAutomationBaseUrl } from "../../src/tools/rca-agent-utils/constants.js";
@@ -30,6 +35,15 @@ const ok = (data: unknown) => ({
   status: 200,
   data: { success: true, data },
 });
+/** The dashboard's build metadata answer: `metaData`, not `data`. */
+const meta = (metaData: unknown) => ({
+  ok: true,
+  status: 200,
+  data: { success: true, metaData, info: [] },
+});
+const WEB = "https://accessibility.browserstack.com/api";
+const BUILD_META = `${WEB}/projects/_/test_runs/_/meta?th_build_id=${BUILD_ID}`;
+const BUILD_OVERVIEW = `${WEB}/projects/_/test_runs/_/overview?th_build_id=${BUILD_ID}`;
 const failed = (status: number, error: unknown) => ({
   ok: false,
   status,
@@ -234,17 +248,14 @@ describe("AccessibilityReportFetcher.sourceFromReportUrl for Automate links", ()
   it("maps a session link to the accessibility build it ran in", async () => {
     get
       .mockResolvedValueOnce(testCode(BUILD_ID))
-      .mockResolvedValueOnce(ok({ id: BUILD_ID }));
+      .mockResolvedValueOnce(meta({ name: "Checkout", projectName: "Web" }));
 
     await expect(
       fetcher().sourceFromReportUrl(
         `${DASHBOARD}/${AUTOMATE_BUILD}/sessions/${SESSION}`,
       ),
     ).resolves.toEqual({ kind: "build", buildId: BUILD_ID });
-    expect(urls()).toEqual([
-      testCodeUrl,
-      `${API}/automated-tests/v1/builds/${BUILD_ID}`,
-    ]);
+    expect(urls()).toEqual([testCodeUrl, BUILD_META]);
   });
 
   it("maps a build link through one of its sessions", async () => {
@@ -255,7 +266,7 @@ describe("AccessibilityReportFetcher.sourceFromReportUrl for Automate links", ()
         data: [{ automation_session: { hashed_id: SESSION } }],
       })
       .mockResolvedValueOnce(testCode(BUILD_ID))
-      .mockResolvedValueOnce(ok({ id: BUILD_ID }));
+      .mockResolvedValueOnce(meta({ name: "Checkout", projectName: "Web" }));
 
     await expect(
       fetcher().sourceFromReportUrl(`${DASHBOARD}/${AUTOMATE_BUILD}`),
@@ -344,30 +355,31 @@ describe("AccessibilityReportFetcher.reportStatus", () => {
     expect(urls()).toEqual([`${API}/workflow-analyzer/v1/reports/123456`]);
   });
 
-  it("reads a build's status from its project's build list, as the build overview has none", async () => {
-    get
-      .mockResolvedValueOnce(ok({ id: BUILD_ID, projectName: "Checkout" }))
-      .mockResolvedValueOnce(
-        ok({
-          builds: [{ id: "newer", status: "running" }],
-          pagination: { has_next: true, next_page: "p2" },
-        }),
-      )
-      .mockResolvedValueOnce(
-        ok({
-          builds: [{ id: BUILD_ID, status: "finalizing" }],
-          pagination: { has_next: false },
-        }),
-      );
+  it("reads a build's status from its dashboard metadata", async () => {
+    get.mockResolvedValueOnce(meta({ status: "finalizing", projectName: "Checkout" }));
 
     await expect(
       fetcher().reportStatus({ kind: "build", buildId: BUILD_ID }),
     ).resolves.toBe("finalizing");
-    expect(urls()).toEqual([
-      `${API}/automated-tests/v1/builds/${BUILD_ID}`,
-      `${API}/automated-tests/v1/builds?project_name=Checkout&limit=100`,
-      `${API}/automated-tests/v1/builds?project_name=Checkout&limit=100&next_page=p2`,
-    ]);
+    expect(urls()).toEqual([BUILD_META]);
+  });
+
+  it("reads a completed build with no test cases as failed, as the dashboard's build list does", async () => {
+    get
+      .mockResolvedValueOnce(meta({ status: "completed" }))
+      .mockResolvedValueOnce(ok({ healthSummary: { total: 0, passed: 0, failed: 0 } }));
+
+    await expect(
+      fetcher().reportStatus({ kind: "build", buildId: BUILD_ID }),
+    ).resolves.toBe("failed");
+    expect(urls()).toEqual([BUILD_META, BUILD_OVERVIEW]);
+
+    get
+      .mockResolvedValueOnce(meta({ status: "completed" }))
+      .mockResolvedValueOnce(ok({ healthSummary: { total: 4 } }));
+    await expect(
+      fetcher().reportStatus({ kind: "build", buildId: BUILD_ID }),
+    ).resolves.toBe("completed");
   });
 
   it("returns nothing when the status cannot be read", async () => {
@@ -375,6 +387,51 @@ describe("AccessibilityReportFetcher.reportStatus", () => {
 
     await expect(
       fetcher().reportStatus({ kind: "build", buildId: BUILD_ID }),
+    ).resolves.toBeUndefined();
+  });
+});
+
+// The run the compare API would pick is matched by TestHub's own build name, which a list row
+// carries escaped as `normalisedName`; the displayed `name` can be an account's original name.
+describe("AccessibilityReportFetcher.previousWebBuild", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  const list = (testRuns: unknown[]) => ({
+    ok: true,
+    status: 200,
+    data: { success: true, info: { next: null }, testRuns },
+  });
+  const row = (thBuildId: string, name: string, normalisedName: string, buildNumber: number) => ({
+    thBuildId,
+    name,
+    normalisedName,
+    buildNumber,
+    createdAt: `2026-11-0${buildNumber}T00:00:00Z`,
+    status: "completed",
+  });
+
+  it("matches by TestHub's name, not the displayed one", async () => {
+    get.mockResolvedValueOnce(
+      list([
+        row(BUILD_ID, "Checkout (renamed)", "nightly", 3),
+        row("b2", "Checkout nightly", "other", 2),
+        row("b1", "Some original name", "nightly", 1),
+      ]),
+    );
+
+    await expect(
+      fetcher().previousWebBuild({ buildId: BUILD_ID, name: "Checkout (renamed)", projectName: "Web" }),
+    ).resolves.toMatchObject({ buildId: "b1", buildNumber: 1, status: "completed" });
+    expect(get.mock.calls[0][0].url).toBe(
+      `${WEB}/test_runs?project_name=Web&sort_by=id-desc&page_size=30&page=1`,
+    );
+  });
+
+  it("finds none before the build's own row is reached", async () => {
+    get.mockResolvedValueOnce(list([row("older", "x", "nightly", 1)]));
+
+    await expect(
+      fetcher().previousWebBuild({ buildId: BUILD_ID, name: "x", projectName: "Web" }),
     ).resolves.toBeUndefined();
   });
 });
@@ -649,7 +706,7 @@ describe("AccessibilityReportFetcher.score", () => {
 
   it.each<[string, IssueSource, string]>([
     ["a Website Scanner run", { kind: "scan", scanId: "1234", scanRunId: "30" }, `${API}/website-scanner/v1/scans/1234/scan_runs/30`],
-    ["an Automated Tests build", { kind: "build", buildId: BUILD_ID }, `${API}/automated-tests/v1/builds/${BUILD_ID}`],
+    ["an Automated Tests build", { kind: "build", buildId: BUILD_ID }, BUILD_OVERVIEW],
     ["a Workflow Analyzer report", { kind: "workflow", reportId: "278684" }, `${API}/workflow-analyzer/v1/reports/278684`],
   ])("reads %s's score from its summary", async (_name, source, url) => {
     get.mockResolvedValueOnce(ok({ scoreData: SCORE_DATA }));

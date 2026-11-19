@@ -7,6 +7,11 @@ import { beforeEach, describe, expect, it, Mock, vi } from "vitest";
 vi.mock("../../src/lib/apiClient.js", () => ({
   apiClient: { get: vi.fn() },
 }));
+// Web builds are looked up on the Accessibility dashboard with a minted token; no auth server here.
+vi.mock("../../src/tools/capability-registry/egress.js", async (original) => ({
+  ...(await original<typeof import("../../src/tools/capability-registry/egress.js")>()),
+  authHeaders: vi.fn(async () => ({ Authorization: "Bearer test-token" })),
+}));
 
 import { apiClient } from "../../src/lib/apiClient.js";
 import {

@@ -9,6 +9,11 @@ import { beforeEach, describe, expect, it, Mock, vi } from "vitest";
 vi.mock("../../src/lib/apiClient.js", () => ({
   apiClient: { get: vi.fn() },
 }));
+// Web builds are read from the Accessibility dashboard with a minted token; no auth server here.
+vi.mock("../../src/tools/capability-registry/egress.js", async (original) => ({
+  ...(await original<typeof import("../../src/tools/capability-registry/egress.js")>()),
+  authHeaders: vi.fn(async () => ({ Authorization: "Bearer test-token" })),
+}));
 vi.mock("../../src/lib/get-auth.js", () => ({
   getBrowserStackAuth: vi.fn().mockReturnValue("fake-user:fake-key"),
 }));
@@ -111,16 +116,34 @@ let compareReply: (params: URLSearchParams) => Reply | Promise<Reply>;
 function route({ url }: { url: string }): Reply | Promise<Reply> {
   const u = new URL(url);
   if (url.startsWith(COMPARE)) return compareReply(u.searchParams);
-  const overview = u.pathname.match(/\/automated-tests\/v1\/builds\/([a-z0-9]{40})$/)?.[1];
-  const build = BUILDS.find((b) => b.id === overview);
+  // The dashboard's build report routes: metadata and overview, picked by th_build_id alone.
+  // A build the list shows as `failed` completed with no test cases: its metadata says
+  // `completed` and its overview counts no test cases.
+  const view = u.pathname.match(/^\/api\/projects\/[^/]+\/test_runs\/[^/]+\/(meta|overview)$/)?.[1];
+  const build = view && BUILDS.find((b) => b.id === u.searchParams.get("th_build_id"));
   if (build) {
-    return ok({ id: build.id, name: build.name, projectName: PROJECT, buildNumber: build.number, time: undated.has(build.id) ? null : build.time });
+    const status = statusOf[build.id] ?? build.status;
+    if (view === "overview") return ok({ healthSummary: { total: status === "failed" ? 0 : 3 } });
+    return {
+      ok: true,
+      status: 200,
+      data: {
+        success: true,
+        metaData: { name: build.name, projectName: PROJECT, buildId: build.number, createdAt: undated.has(build.id) ? null : build.time, status: status === "failed" ? "completed" : status },
+      },
+    };
   }
-  if (u.pathname.endsWith("/automated-tests/v1/builds") && u.searchParams.get("project_name") === PROJECT) {
-    return ok({
-      builds: BUILDS.map((b) => ({ id: b.id, name: b.name, buildNumber: b.number, time: b.time, status: statusOf[b.id] ?? b.status })),
-      pagination: { has_next: false, next_page: null },
-    });
+  // The dashboard URL-decodes the project name a second time, as the controller does.
+  if (u.pathname === "/api/test_runs" && decodeURIComponent(u.searchParams.get("project_name") ?? "") === PROJECT) {
+    return {
+      ok: true,
+      status: 200,
+      data: {
+        success: true,
+        info: { next: null },
+        testRuns: BUILDS.map((b) => ({ thBuildId: b.id, name: b.name, normalisedName: encodeURIComponent(b.name), buildNumber: b.number, createdAt: b.time, status: statusOf[b.id] ?? b.status })),
+      },
+    };
   }
   if (u.pathname.endsWith("/automated-tests/v1/builds/issues")) {
     const start = u.searchParams.get("buildUuid");

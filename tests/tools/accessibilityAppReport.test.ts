@@ -6,6 +6,11 @@ import { afterEach, beforeEach, describe, expect, it, Mock, vi } from "vitest";
 vi.mock("../../src/lib/apiClient.js", () => ({
   apiClient: { get: vi.fn() },
 }));
+// Web builds are looked up on the Accessibility dashboard with a minted token; no auth server here.
+vi.mock("../../src/tools/capability-registry/egress.js", async (original) => ({
+  ...(await original<typeof import("../../src/tools/capability-registry/egress.js")>()),
+  authHeaders: vi.fn(async () => ({ Authorization: "Bearer test-token" })),
+}));
 
 import { apiClient } from "../../src/lib/apiClient.js";
 import {
@@ -19,10 +24,12 @@ import {
 } from "../../src/tools/accessiblity-utils/app-report-fetcher.js";
 
 const get = apiClient.get as Mock;
-const API = "https://api-accessibility.browserstack.com/api";
 const APP_API =
   "https://api-app-accessibility.browserstack.com/automate/api/v1";
 const DASHBOARD = "https://app-accessibility.browserstack.com";
+/** Where a web build is looked up: the Accessibility dashboard's build metadata. */
+const WEB_BUILD_META = (id: string) =>
+  `https://accessibility.browserstack.com/api/projects/_/test_runs/_/meta?th_build_id=${id}`;
 const BUILD_ID = "m3k8p2q7w1x5c9v4b6n0z2r8t3y7u1i5o9a4s2df";
 
 const ok = (body: Record<string, unknown>) => ({
@@ -239,13 +246,13 @@ describe("AccessibilityReportFetcher and App Accessibility builds", () => {
 
   it("keeps a build id the web API knows as an Automated Tests build", async () => {
     get.mockResolvedValueOnce(
-      ok({ data: { id: BUILD_ID, projectName: "Web" } }),
+      ok({ metaData: { name: "Checkout", projectName: "Web" } }),
     );
 
     await expect(
       fetcher().resolveBuild({ kind: "build", buildId: BUILD_ID }),
     ).resolves.toEqual({ kind: "build", buildId: BUILD_ID });
-    expect(urls()).toEqual([`${API}/automated-tests/v1/builds/${BUILD_ID}`]);
+    expect(urls()).toEqual([WEB_BUILD_META(BUILD_ID)]);
   });
 
   it("resolves a build id only the App Accessibility API knows to an app build", async () => {
@@ -257,7 +264,7 @@ describe("AccessibilityReportFetcher and App Accessibility builds", () => {
       fetcher().resolveBuild({ kind: "build", buildId: BUILD_ID }),
     ).resolves.toEqual({ kind: "appBuild", buildId: BUILD_ID });
     expect(urls()).toEqual([
-      `${API}/automated-tests/v1/builds/${BUILD_ID}`,
+      WEB_BUILD_META(BUILD_ID),
       `${APP_API}/build/${BUILD_ID}`,
     ]);
   });
@@ -520,12 +527,21 @@ describe("AccessibilityReportFetcher and App Accessibility builds", () => {
   const failed = (status: number) => ({ ok: false, status, data: {} });
 
   it("reports a failed web lookup as the failure, without asking the app API", async () => {
-    get.mockResolvedValueOnce(failed(401));
+    get.mockResolvedValueOnce(failed(500));
+
+    await expect(
+      fetcher().resolveBuild({ kind: "build", buildId: BUILD_ID }),
+    ).rejects.toThrow(/HTTP 500/);
+    expect(urls()).toEqual([WEB_BUILD_META(BUILD_ID)]);
+  });
+
+  it("mints a new token once when the dashboard rejects one (401), then reports the failure", async () => {
+    get.mockResolvedValueOnce(failed(401)).mockResolvedValueOnce(failed(401));
 
     await expect(
       fetcher().resolveBuild({ kind: "build", buildId: BUILD_ID }),
     ).rejects.toThrow(/HTTP 401/);
-    expect(urls()).toEqual([`${API}/automated-tests/v1/builds/${BUILD_ID}`]);
+    expect(urls()).toEqual([WEB_BUILD_META(BUILD_ID), WEB_BUILD_META(BUILD_ID)]);
   });
 
   it("reports a failed app lookup as the failure, not as an unknown build", async () => {

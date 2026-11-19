@@ -17,6 +17,10 @@ import { sessionsListUrl } from "../automate-utils/list-session-ids.js";
 import { getAutomationBaseUrl } from "../rca-agent-utils/constants.js";
 import { getRegionalHost } from "../../lib/regional-host.js";
 import { CallerError } from "../../lib/error.js";
+import { invalidateToken } from "../../lib/central-oauth.js";
+import { authHeaders as signedHeaders } from "../capability-registry/egress.js";
+import { resolveScope, resolveTokenUrl } from "../capability-registry/oauth.js";
+import type { AuthScheme } from "../capability-registry/types.js";
 
 export { MAX_APP_BUILD_LIST_PAGES } from "./app-report-fetcher.js";
 
@@ -55,6 +59,21 @@ export type ScanBuildSource = {
 
 const apiBase = () => `${getRegionalHost("accessibilityApi")}/api`;
 const dashboard = () => getRegionalHost("accessibilityDashboard");
+
+/**
+ * The dashboard's own routes take a Bearer token minted from the user's username and access
+ * key with the `ai_agent` scope, as the capability registry signs Web Accessibility's
+ * dashboard capabilities. The backend allows that token only on the routes it lists for it.
+ */
+const DASHBOARD_AUTH: AuthScheme = { type: "oauth2" };
+const DASHBOARD_PRODUCT = "web_accessibility";
+
+/**
+ * A build report route on the dashboard. The path's project and build segments are not read:
+ * `th_build_id` alone picks the build.
+ */
+const buildReportPath = (view: "meta" | "overview", buildId: string) =>
+  `/api/projects/_/test_runs/_/${view}?th_build_id=${encodeURIComponent(buildId)}`;
 
 /**
  * The API does not know a Website Scanner run by this build id, or not for this account:
@@ -125,7 +144,12 @@ const MAX_FOUND_SCAN_RUNS = 200;
 const MAX_SCAN_RUN_PAGES = 10;
 
 /** A build whose status is checked is one just run, so it sits at the top of its project's list. */
-const MAX_BUILD_LIST_PAGES = 3;
+/**
+ * Pages of a project's build list walked for one build. The dashboard lists 30 builds a page,
+ * so 10 pages reach as far back as three of the External API's pages of 100 did.
+ */
+const MAX_BUILD_LIST_PAGES = 10;
+const BUILD_LIST_PAGE_SIZE = 30;
 
 /**
  * The Workflow Analyzer report list holds the whole account's reports, newest first, with no
@@ -444,6 +468,14 @@ export class AccessibilityReportFetcher {
   private readonly app = new AppAccessibilityApi(() => this.authHeaders());
   /** Web builds whose overview was read, by id, so a status check need not read it again. */
   private readonly webBuilds = new Map<string, WebBuild>();
+  /** Web builds' dashboard metadata, by id: their name, project, number, start and status. */
+  private readonly buildMetas = new Map<string, any>();
+  /**
+   * The Bearer headers for the dashboard's routes, minted once per tool call (a fetcher serves
+   * one call). Without it a hosted server, which does not cache tokens across callers, would
+   * mint one for every request.
+   */
+  private dashboardAuth: Promise<Record<string, string>> | undefined;
 
   public setAuth(auth: { username: string; password: string }): void {
     this.auth = auth;
@@ -456,6 +488,75 @@ export class AccessibilityReportFetcher {
       Authorization:
         "Basic " + Buffer.from(`${username}:${password}`).toString("base64"),
     };
+  }
+
+  private dashboardCredentials(): { username: string; accessKey: string } {
+    if (!this.auth) throw new Error("BrowserStack credentials are not set");
+    return { username: this.auth.username, accessKey: this.auth.password };
+  }
+
+  /**
+   * GET one of the Accessibility dashboard's own routes. A token the dashboard rejects (401) is
+   * discarded and minted again once, as the capability registry does. A token that cannot be
+   * minted throws, so it never reads as the dashboard's answer about a report.
+   */
+  private async dashboardGet(
+    path: string,
+  ): Promise<{ ok: boolean; status: number; data: any }> {
+    const credentials = this.dashboardCredentials();
+    const send = async () => {
+      this.dashboardAuth ??= signedHeaders(
+        credentials,
+        DASHBOARD_AUTH,
+        DASHBOARD_PRODUCT,
+      );
+      let headers: Record<string, string>;
+      try {
+        headers = await this.dashboardAuth;
+      } catch (error) {
+        this.dashboardAuth = undefined;
+        throw error;
+      }
+      return apiClient.get({
+        url: `${dashboard()}${path}`,
+        headers,
+        raise_error: false,
+      });
+    };
+    let resp = await send();
+    if (resp.status === 401) {
+      invalidateToken(
+        resolveTokenUrl(DASHBOARD_PRODUCT, DASHBOARD_AUTH),
+        resolveScope(DASHBOARD_AUTH),
+        credentials,
+      );
+      this.dashboardAuth = undefined;
+      resp = await send();
+    }
+    return resp;
+  }
+
+  /**
+   * An Automated Tests build's dashboard metadata (`metaData`), or undefined when the
+   * dashboard does not know the build (404). Any other failure throws.
+   */
+  private async buildMeta(buildId: string): Promise<any | undefined> {
+    if (this.buildMetas.has(buildId)) return this.buildMetas.get(buildId);
+    const resp = await this.dashboardGet(buildReportPath("meta", buildId));
+    if (resp.status === 404) return undefined;
+    if (!resp.ok || !resp.data?.metaData) {
+      throw new Error(
+        `Could not look up build "${buildId}" in Automated Tests: HTTP ${resp.status}`,
+      );
+    }
+    this.buildMetas.set(buildId, resp.data.metaData);
+    return resp.data.metaData;
+  }
+
+  /** An Automated Tests build's dashboard overview (`data`), or undefined when it cannot be read. */
+  private async buildOverview(buildId: string): Promise<any | undefined> {
+    const resp = await this.dashboardGet(buildReportPath("overview", buildId));
+    return resp.ok ? resp.data?.data : undefined;
   }
 
   /**
@@ -553,19 +654,9 @@ export class AccessibilityReportFetcher {
     { orScanRun = false }: { orScanRun?: boolean } = {},
   ): Promise<IssueSource> {
     if (source.kind !== "build") return source;
-    // Only a 404 means the web API does not know the id: any other failure is not an
-    // answer about the build, and asking the app API next would hide it.
-    const resp = await apiClient.get({
-      url: `${apiBase()}/automated-tests/v1/builds/${encodeURIComponent(source.buildId)}`,
-      headers: this.authHeaders(),
-      raise_error: false,
-    });
-    if (!resp.ok && resp.status !== 404) {
-      throw new Error(
-        `Could not look up build "${source.buildId}" in Automated Tests: HTTP ${resp.status}`,
-      );
-    }
-    const web = resp.ok ? resp.data?.data : undefined;
+    // Only a 404 means the dashboard does not know the id as a web build: any other failure
+    // is not an answer about the build, and asking the app API next would hide it.
+    const web = await this.buildMeta(source.buildId);
     if (web) {
       this.rememberWebBuild(source.buildId, web);
       return source;
@@ -704,19 +795,17 @@ export class AccessibilityReportFetcher {
         `Automate session ${sessionId} is not linked to a BrowserStack SDK build (it was not run through the SDK, or belongs to another account), so it has no accessibility results`,
       );
     }
-    const build = await apiClient.get({
-      url: `${apiBase()}/automated-tests/v1/builds/${encodeURIComponent(buildId)}`,
-      headers: this.authHeaders(),
-      raise_error: false,
-    });
-    if (build.status === 404) {
-      throw new CallerError(
-        `This Automate run belongs to build ${buildId}, which has no accessibility results: accessibility testing was not on for it`,
+    let build: any;
+    try {
+      build = await this.buildMeta(buildId);
+    } catch (error) {
+      throw new Error(
+        `Could not read accessibility build ${buildId} of this Automate run: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
-    if (!build.ok) {
-      throw new Error(
-        `Could not read accessibility build ${buildId} of this Automate run: HTTP ${build.status}`,
+    if (!build) {
+      throw new CallerError(
+        `This Automate run belongs to build ${buildId}, which has no accessibility results: accessibility testing was not on for it`,
       );
     }
     return { kind: "build", buildId };
@@ -953,8 +1042,13 @@ export class AccessibilityReportFetcher {
         url = `${apiBase()}/website-scanner/v1/scans/${q(source.scanId)}/scan_runs/${q(source.scanRunId)}`;
         break;
       case "build":
-        url = `${apiBase()}/automated-tests/v1/builds/${q(source.buildId)}`;
-        break;
+        try {
+          return parseScore(
+            (await this.buildOverview(source.buildId))?.scoreData,
+          );
+        } catch {
+          return undefined;
+        }
       case "workflow":
         url = `${apiBase()}/workflow-analyzer/v1/reports/${q(source.reportId)}`;
         break;
@@ -1121,45 +1215,42 @@ export class AccessibilityReportFetcher {
     }
   }
 
+  /**
+   * A build's status as the dashboard's build list shows it: its metadata's status, except that
+   * a completed build with no test cases is `failed`, which the metadata does not say and its
+   * overview's test-case count does.
+   */
   private async buildStatus(buildId: string): Promise<string | undefined> {
-    const q = encodeURIComponent;
-    const project = (await this.webBuild(buildId))?.projectName;
-    if (!project) return undefined;
-    let nextPage: string | undefined;
-    for (let page = 0; page < MAX_BUILD_LIST_PAGES; page++) {
-      const data = await this.getData(
-        `${apiBase()}/automated-tests/v1/builds?project_name=${q(project)}&limit=100${
-          nextPage ? `&next_page=${q(nextPage)}` : ""
-        }`,
-      );
-      const row = data?.builds?.find((build: any) => build.id === buildId);
-      if (row) return row.status;
-      if (!data?.pagination?.has_next || !data.pagination.next_page) break;
-      nextPage = data.pagination.next_page;
-    }
-    return undefined;
+    const status: string | undefined = (await this.buildMeta(buildId))?.status;
+    if (status !== "completed") return status;
+    const total = (await this.buildOverview(buildId))?.healthSummary?.total;
+    return total !== undefined && Number(total) === 0 ? "failed" : status;
   }
 
-  private rememberWebBuild(buildId: string, overview: any): WebBuild {
+  /** A web build from its dashboard metadata, where `buildId` is the build's number. */
+  private rememberWebBuild(buildId: string, meta: any): WebBuild {
     const build: WebBuild = {
       buildId,
-      name: overview.name,
-      projectName: overview.projectName,
-      buildNumber: overview.buildNumber,
-      startedAt: overview.time,
+      name: meta.name,
+      projectName: meta.projectName,
+      buildNumber: meta.buildId,
+      startedAt: meta.createdAt,
     };
     this.webBuilds.set(buildId, build);
     return build;
   }
 
-  /** An Automated Tests build's name, project, number and start, from its overview. */
+  /** An Automated Tests build's name, project, number and start, from its dashboard metadata. */
   async webBuild(buildId: string): Promise<WebBuild | undefined> {
     const known = this.webBuilds.get(buildId);
     if (known) return known;
-    const overview = await this.getData(
-      `${apiBase()}/automated-tests/v1/builds/${encodeURIComponent(buildId)}`,
-    );
-    return overview ? this.rememberWebBuild(buildId, overview) : undefined;
+    let meta: any;
+    try {
+      meta = await this.buildMeta(buildId);
+    } catch {
+      return undefined;
+    }
+    return meta ? this.rememberWebBuild(buildId, meta) : undefined;
   }
 
   /**
@@ -1172,33 +1263,39 @@ export class AccessibilityReportFetcher {
   ): Promise<(WebBuild & { status: string }) | undefined> {
     if (!build.projectName) return undefined;
     const q = encodeURIComponent;
-    let passed = false;
-    let nextPage: string | undefined;
-    for (let page = 0; page < MAX_BUILD_LIST_PAGES; page++) {
-      const data = await this.getData(
-        `${apiBase()}/automated-tests/v1/builds?project_name=${q(build.projectName)}&limit=100${
-          nextPage ? `&next_page=${q(nextPage)}` : ""
-        }`,
+    // The build's name as the compare API matches it: TestHub's own name, which a list row
+    // carries escaped as `normalisedName`. A row's `name` is the displayed one, which for some
+    // accounts is the original name instead. Read off the build's own row once it is reached.
+    let sameName: ((row: any) => boolean) | undefined;
+    for (let page = 1; page <= MAX_BUILD_LIST_PAGES; page++) {
+      // Newest first by id, as the External API listed them. The dashboard URL-decodes the
+      // project name twice (Rails, then the controller), so it is encoded twice here, or a
+      // name with "+" or "%" would not match.
+      const resp = await this.dashboardGet(
+        `/api/test_runs?project_name=${q(q(build.projectName))}&sort_by=id-desc&page_size=${BUILD_LIST_PAGE_SIZE}&page=${page}`,
       );
-      for (const row of data?.builds ?? []) {
-        if (row.id === build.buildId) passed = true;
-        else if (
-          passed &&
-          row.name === build.name &&
+      if (!resp.ok) break;
+      for (const row of resp.data?.testRuns ?? []) {
+        if (row.thBuildId === build.buildId) {
+          const key = row.normalisedName;
+          sameName = key
+            ? (other) => other.normalisedName === key
+            : (other) => other.name === build.name;
+        } else if (
+          sameName?.(row) &&
           (row.status === "completed" || row.status === "failed")
         ) {
           return {
-            buildId: row.id,
+            buildId: row.thBuildId,
             name: row.name,
             projectName: build.projectName,
             buildNumber: row.buildNumber,
-            startedAt: row.time,
+            startedAt: row.createdAt,
             status: row.status,
           };
         }
       }
-      if (!data?.pagination?.has_next || !data.pagination.next_page) break;
-      nextPage = data.pagination.next_page;
+      if (!resp.data?.info?.next) break;
     }
     return undefined;
   }

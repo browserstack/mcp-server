@@ -152,14 +152,25 @@ const MAX_BUILD_LIST_PAGES = 10;
 const BUILD_LIST_PAGE_SIZE = 30;
 
 /**
- * The Workflow Analyzer report list holds the whole account's reports, newest first, with no
- * page or date: a report is found in its newest pages, at the list's largest page size, and
- * the pages of the earlier ones after it are read from their summaries, a batch at a time.
+ * The Workflow Analyzer report list holds the whole account's reports, newest first: a report
+ * is found in its newest pages, at the list's largest page size, and the pages of the earlier
+ * ones after it are read from their summaries, a batch at a time. A summary is a whole
+ * consolidation on the dashboard, so few are read: only reports that started before this one.
  */
 const MAX_WORKFLOW_LIST_PAGES = 3;
 const WORKFLOW_LIST_PAGE_SIZE = 99;
-const MAX_WORKFLOW_CANDIDATES = 30;
-const WORKFLOW_SUMMARY_BATCH = 10;
+const MAX_WORKFLOW_CANDIDATES = 10;
+const WORKFLOW_SUMMARY_BATCH = 4;
+
+/** A Workflow Analyzer report as its dashboard summary reads it. */
+interface WorkflowSummary {
+  status?: string;
+  /** When the report's scan started (ISO 8601). */
+  time?: string;
+  /** The pages with issues, as the summary lists them (at most 100 on a grouped report). */
+  pages: string[];
+  scoreData?: unknown;
+}
 
 /** An earlier Workflow Analyzer report: of the same page, or else of the same site. */
 export interface EarlierWorkflowReport {
@@ -470,6 +481,8 @@ export class AccessibilityReportFetcher {
   private readonly webBuilds = new Map<string, WebBuild>();
   /** Web builds' dashboard metadata, by id: their name, project, number, start and status. */
   private readonly buildMetas = new Map<string, any>();
+  /** Workflow Analyzer reports' dashboard summaries, by report id. */
+  private readonly workflowSummaries = new Map<string, WorkflowSummary>();
   /**
    * The Bearer headers for the dashboard's routes, minted once per tool call (a fetcher serves
    * one call). Without it a hosted server, which does not cache tokens across callers, would
@@ -551,6 +564,36 @@ export class AccessibilityReportFetcher {
     }
     this.buildMetas.set(buildId, resp.data.metaData);
     return resp.data.metaData;
+  }
+
+  /**
+   * A Workflow Analyzer report's dashboard summary (`tests#consolidate?view=summary`): status,
+   * start, the pages with issues and the score. Undefined when it cannot be read. Kept for the
+   * tool call, as status, score and start are often read together.
+   */
+  private async workflowSummary(
+    reportId: string,
+  ): Promise<WorkflowSummary | undefined> {
+    const known = this.workflowSummaries.get(reportId);
+    if (known) return known;
+    const resp = await this.dashboardGet(
+      `/api/tests/consolidate?ids=${encodeURIComponent(reportId)}&view=summary`,
+    );
+    const data = resp.ok ? resp.data?.data : undefined;
+    if (!data) return undefined;
+    const metas = data.meta_v2 ?? {};
+    const meta = metas[`workflowScan:${reportId}`] ?? Object.values(metas)[0];
+    const rows: { url?: unknown }[] = data.chartData?.issueCountByURL ?? [];
+    const summary: WorkflowSummary = {
+      status: meta?.status,
+      time: meta?.startTimestamp,
+      pages: rows
+        .map((row) => row?.url)
+        .filter((url): url is string => typeof url === "string"),
+      scoreData: data.scoreData,
+    };
+    this.workflowSummaries.set(reportId, summary);
+    return summary;
   }
 
   /** An Automated Tests build's dashboard overview (`data`), or undefined when it cannot be read. */
@@ -1050,8 +1093,13 @@ export class AccessibilityReportFetcher {
           return undefined;
         }
       case "workflow":
-        url = `${apiBase()}/workflow-analyzer/v1/reports/${q(source.reportId)}`;
-        break;
+        try {
+          return parseScore(
+            (await this.workflowSummary(source.reportId))?.scoreData,
+          );
+        } catch {
+          return undefined;
+        }
       default:
         return undefined;
     }
@@ -1083,11 +1131,7 @@ export class AccessibilityReportFetcher {
           // A run's status is read by its scan's ids, which a build id does not give.
           return undefined;
         case "workflow":
-          return (
-            await this.getData(
-              `${apiBase()}/workflow-analyzer/v1/reports/${q(source.reportId)}`,
-            )
-          )?.summary?.status;
+          return (await this.workflowSummary(source.reportId))?.status;
         case "build":
           return await this.buildStatus(source.buildId);
         case "appBuild":
@@ -1102,25 +1146,6 @@ export class AccessibilityReportFetcher {
     }
   }
 
-  /** A Workflow Analyzer report's start and the pages it scanned, from its summary. */
-  private async workflowReportPages(
-    reportId: string,
-  ): Promise<{ time?: string; pages: string[] } | undefined> {
-    const summary = (
-      await this.getData(
-        `${apiBase()}/workflow-analyzer/v1/reports/${encodeURIComponent(reportId)}`,
-      )
-    )?.summary;
-    if (!summary) return undefined;
-    const rows: { url?: unknown }[] = summary.issueCount?.issueCountByUrl ?? [];
-    return {
-      time: summary.time,
-      pages: rows
-        .map((row) => row?.url)
-        .filter((url): url is string => typeof url === "string"),
-    };
-  }
-
   /**
    * The newest Workflow Analyzer report before this one that scanned one of its pages, or
    * else one on its site; undefined when none is among the account's newest reports.
@@ -1128,31 +1153,37 @@ export class AccessibilityReportFetcher {
   async previousWorkflowReport(
     reportId: string,
   ): Promise<EarlierWorkflowReport | undefined> {
-    const own = await this.workflowReportPages(reportId);
+    const own = await this.workflowSummary(reportId);
     if (!own?.pages.length) return undefined;
-    // Newest first: the completed reports listed after this one are earlier.
+    // Newest first: the completed reports listed after this one are earlier. A summary is a
+    // whole consolidation, so only reports that started before this one are kept, from the
+    // list's own times, before any summary is read.
     const earlier: string[] = [];
-    let reached = false;
-    let nextPage: string | undefined;
+    let ownStart: number | undefined;
     for (
-      let page = 0;
-      page < MAX_WORKFLOW_LIST_PAGES &&
+      let page = 1;
+      page <= MAX_WORKFLOW_LIST_PAGES &&
       earlier.length < MAX_WORKFLOW_CANDIDATES;
       page++
     ) {
-      const data = await this.getData(
-        `${apiBase()}/workflow-analyzer/v1/reports?limit=${WORKFLOW_LIST_PAGE_SIZE}${
-          nextPage ? `&next_page=${encodeURIComponent(nextPage)}` : ""
-        }`,
+      const resp = await this.dashboardGet(
+        `/api/v1/reports?product=workflow-analyzer&page_size=${WORKFLOW_LIST_PAGE_SIZE}&page=${page}`,
       );
-      for (const row of data?.reports ?? []) {
-        if (String(row.id) === reportId) reached = true;
-        else if (reached && row.status === "completed") {
+      // An account with no reports is shown sample ones: they are not the user's.
+      if (!resp.ok || resp.data?.isColdStart) break;
+      for (const row of resp.data?.reports ?? []) {
+        const start = Date.parse(row.time ?? "");
+        if (String(row.id) === reportId) ownStart = start;
+        else if (
+          ownStart !== undefined &&
+          row.status === "completed" &&
+          !(start >= ownStart) &&
+          earlier.length < MAX_WORKFLOW_CANDIDATES
+        ) {
           earlier.push(String(row.id));
         }
       }
-      if (!data?.pagination?.hasNext || !data.pagination.nextPage) break;
-      nextPage = data.pagination.nextPage;
+      if (!resp.data?.info?.next) break;
     }
     const pages = new Set(own.pages.map(samePage));
     const sites = new Set(
@@ -1168,7 +1199,7 @@ export class AccessibilityReportFetcher {
     for (let i = 0; i < candidates.length; i += WORKFLOW_SUMMARY_BATCH) {
       const batch = candidates.slice(i, i + WORKFLOW_SUMMARY_BATCH);
       const summaries = await Promise.all(
-        batch.map((id) => this.workflowReportPages(id)),
+        batch.map((id) => this.workflowSummary(id)),
       );
       for (const [j, summary] of summaries.entries()) {
         if (!summary || started(summary.time) >= started(own.time)) continue;
@@ -1202,11 +1233,7 @@ export class AccessibilityReportFetcher {
             (run) => String(run.id) === source.scanRunId,
           )?.scanDate;
         case "workflow":
-          return (
-            await this.getData(
-              `${apiBase()}/workflow-analyzer/v1/reports/${encodeURIComponent(source.reportId)}`,
-            )
-          )?.summary?.time;
+          return (await this.workflowSummary(source.reportId))?.time;
         default:
           return undefined;
       }

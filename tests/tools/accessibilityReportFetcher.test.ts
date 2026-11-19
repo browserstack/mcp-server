@@ -346,13 +346,13 @@ describe("AccessibilityReportFetcher.reportStatus", () => {
     ]);
   });
 
-  it("reads a Workflow Analyzer report's status from its summary", async () => {
-    get.mockResolvedValueOnce(ok({ summary: { status: "completed" } }));
+  it("reads a Workflow Analyzer report's status from its dashboard summary", async () => {
+    get.mockResolvedValueOnce(ok({ meta_v2: { "workflowScan:123456": { status: "completed" } } }));
 
     await expect(
       fetcher().reportStatus({ kind: "workflow", reportId: "123456" }),
     ).resolves.toBe("completed");
-    expect(urls()).toEqual([`${API}/workflow-analyzer/v1/reports/123456`]);
+    expect(urls()).toEqual([`${WEB}/tests/consolidate?ids=123456&view=summary`]);
   });
 
   it("reads a build's status from its dashboard metadata", async () => {
@@ -433,6 +433,97 @@ describe("AccessibilityReportFetcher.previousWebBuild", () => {
     await expect(
       fetcher().previousWebBuild({ buildId: BUILD_ID, name: "x", projectName: "Web" }),
     ).resolves.toBeUndefined();
+  });
+});
+
+// The report before a Workflow Analyzer report: the newest earlier one that scanned one of its
+// pages. Each candidate's pages come from a whole consolidation, so only reports that started
+// before this one are read, at most 10, a few at a time; sample reports are never candidates.
+describe("AccessibilityReportFetcher.previousWorkflowReport", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  const summary = (id: string, time: string, urls: string[]) =>
+    ok({
+      meta_v2: { [`workflowScan:${id}`]: { status: "completed", startTimestamp: time } },
+      chartData: { issueCountByURL: urls.map((url) => ({ url, count: 1 })) },
+    });
+  const reports = (rows: unknown[], extra: Record<string, unknown> = {}) => ({
+    ok: true,
+    status: 200,
+    data: { reports: rows, info: { next: null }, isColdStart: false, ...extra },
+  });
+  const row = (id: number, time: string, status = "completed") => ({ id, time, status });
+  const route = (answers: Record<string, unknown>) =>
+    get.mockImplementation(async ({ url }: { url: string }) => {
+      const id = new URL(url).searchParams.get("ids");
+      if (id) return answers[id] ?? { ok: false, status: 404, data: {} };
+      return answers.list;
+    });
+
+  it("returns the newest earlier report of the same page, reading only earlier ones", async () => {
+    route({
+      "10": summary("10", "2026-11-10T00:00:00Z", ["https://shop.example/cart"]),
+      list: reports([
+        row(12, "2026-11-12T00:00:00Z"), // newer: never read
+        row(10, "2026-11-10T00:00:00Z"), // this report
+        row(9, "2026-11-09T00:00:00Z", "processing"), // not completed: skipped
+        row(8, "2026-11-08T00:00:00Z"),
+        row(7, "2026-11-07T00:00:00Z"),
+      ]),
+      "8": summary("8", "2026-11-08T00:00:00Z", ["https://shop.example/other"]),
+      "7": summary("7", "2026-11-07T00:00:00Z", ["https://shop.example/cart"]),
+    });
+
+    await expect(fetcher().previousWorkflowReport("10")).resolves.toMatchObject({
+      reportId: "7",
+      samePage: true,
+    });
+    const read = get.mock.calls.map(([o]) => new URL(o.url).searchParams.get("ids")).filter(Boolean);
+    expect(read).toEqual(["10", "8", "7"]);
+    expect(get.mock.calls[1][0].url).toBe(
+      `${WEB}/v1/reports?product=workflow-analyzer&page_size=99&page=1`,
+    );
+  });
+
+  it("falls back to an earlier report of the same site", async () => {
+    route({
+      "10": summary("10", "2026-11-10T00:00:00Z", ["https://shop.example/cart"]),
+      list: reports([row(10, "2026-11-10T00:00:00Z"), row(8, "2026-11-08T00:00:00Z")]),
+      "8": summary("8", "2026-11-08T00:00:00Z", ["https://shop.example/other"]),
+    });
+
+    await expect(fetcher().previousWorkflowReport("10")).resolves.toMatchObject({
+      reportId: "8",
+      samePage: false,
+    });
+  });
+
+  it("does not take sample reports an account with no reports is shown", async () => {
+    route({
+      "10": summary("10", "2026-11-10T00:00:00Z", ["https://shop.example/cart"]),
+      list: reports([row(10, "2026-11-10T00:00:00Z"), row(1, "2026-01-01T00:00:00Z")], {
+        isColdStart: true,
+      }),
+    });
+
+    await expect(fetcher().previousWorkflowReport("10")).resolves.toBeUndefined();
+    expect(get).toHaveBeenCalledTimes(2);
+  });
+
+  it("reads at most 10 candidates", async () => {
+    const rows = [row(100, "2026-11-30T00:00:00Z")];
+    const answers: Record<string, unknown> = {
+      "100": summary("100", "2026-11-30T00:00:00Z", ["https://shop.example/cart"]),
+    };
+    for (let i = 1; i <= 15; i++) {
+      rows.push(row(100 - i, `2026-11-${String(30 - i).padStart(2, "0")}T00:00:00Z`));
+      answers[String(100 - i)] = summary(String(100 - i), "2026-01-01T00:00:00Z", ["https://elsewhere.example/"]);
+    }
+    route({ ...answers, list: reports(rows) });
+
+    await expect(fetcher().previousWorkflowReport("100")).resolves.toBeUndefined();
+    const read = get.mock.calls.map(([o]) => new URL(o.url).searchParams.get("ids")).filter(Boolean);
+    expect(read).toHaveLength(1 + 10);
   });
 });
 
@@ -707,7 +798,7 @@ describe("AccessibilityReportFetcher.score", () => {
   it.each<[string, IssueSource, string]>([
     ["a Website Scanner run", { kind: "scan", scanId: "1234", scanRunId: "30" }, `${API}/website-scanner/v1/scans/1234/scan_runs/30`],
     ["an Automated Tests build", { kind: "build", buildId: BUILD_ID }, BUILD_OVERVIEW],
-    ["a Workflow Analyzer report", { kind: "workflow", reportId: "278684" }, `${API}/workflow-analyzer/v1/reports/278684`],
+    ["a Workflow Analyzer report", { kind: "workflow", reportId: "278684" }, `${WEB}/tests/consolidate?ids=278684&view=summary`],
   ])("reads %s's score from its summary", async (_name, source, url) => {
     get.mockResolvedValueOnce(ok({ scoreData: SCORE_DATA }));
 

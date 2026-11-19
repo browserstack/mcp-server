@@ -81,6 +81,8 @@ To add it yourself, use your client's command or menu:
 | Cursor | Add `"browserstack": { "url": "https://mcp.browserstack.com/mcp" }` under `mcpServers` in `~/.cursor/mcp.json`, then sign in from Cursor Settings → MCP |
 | Any other MCP client | Point it at `https://mcp.browserstack.com/mcp` |
 
+To use the EU-hosted endpoint, replace `https://mcp.browserstack.com/mcp` with `https://mcp-eu.browserstack.com/mcp` in any of the above.
+
 ## 💡 Usage Examples
 
 ### 📱 Manual App Testing

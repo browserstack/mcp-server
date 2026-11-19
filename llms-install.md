@@ -16,6 +16,7 @@ Exposes BrowserStack's Test Platform as MCP tools: run and debug tests on real b
 Connect to the hosted Streamable HTTP endpoint. Authentication is OAuth; the client opens a browser window for the user to sign in. No credentials go into config files.
 
 - URL: `https://mcp.browserstack.com/mcp`
+- EU-hosted URL: `https://mcp-eu.browserstack.com/mcp`. Use it in place of the URL above, in every config below, when the user asks for the EU endpoint.
 - Transport: `streamable-http`
 - Auth: OAuth 2.1 with discovery. The endpoint returns `401` with a `WWW-Authenticate` header pointing at `/.well-known/oauth-protected-resource`.
 

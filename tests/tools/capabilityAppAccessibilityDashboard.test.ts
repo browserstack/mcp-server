@@ -66,28 +66,67 @@ const BACKEND_ALLOWLIST = new Set([
   "GET /api/v1/app_scanner/{report_id}/rules",
   "GET /api/v1/app_scanner/{report_id}/wcag_levels",
   "GET /api/v1/app_scanner/{report_id}/conformance-summary",
+  "GET /automate/api/v1/screen_reader/project/{project_id}/build",
+  "GET /automate/api/v1/screen_reader/build/{th_build_id}",
+  "GET /automate/api/v1/screen_reader/project/{project_id}/build/{th_build_id}/overview",
+  "GET /automate/api/v1/screen_reader/build/{th_build_id}/snapshot",
+  "POST /automate/api/v1/scan/{th_build_id}/hide-issue",
+  "POST /automate/api/v1/scan/{th_build_id}/unhide-issue",
+  "POST /automate/api/v1/scan/{th_build_id}/get-hide-count",
+  "POST /automate/api/v1/scan/{th_build_id}/get-unhide-count",
+  "POST /automate/api/v1/build/{th_build_id}/review-issue",
+  "POST /api/v1/app_scanner/{report_id}/hide-issue",
+  "POST /api/v1/app_scanner/{report_id}/unhide-issue",
+  "POST /api/v1/app_scanner/{report_id}/get-hide-count",
+  "POST /api/v1/app_scanner/{report_id}/get-unhide-count",
+  "POST /api/v1/app_scanner/{report_id}/review-issue",
 ]);
 
+const WRITES = [
+  "hide_app_accessibility_issues",
+  "hide_manual_app_accessibility_issues",
+  "review_app_accessibility_issue",
+  "review_manual_app_accessibility_issue",
+  "unhide_app_accessibility_issues",
+  "unhide_manual_app_accessibility_issues",
+];
+
 describe("the App Accessibility dashboard capabilities", () => {
-  it("ship the dashboard reads the public API does not serve", () => {
+  it("ship the dashboard reads and issue actions the public API does not serve", () => {
     expect(dash.map((c: any) => c.name).sort()).toEqual([
       "compare_app_accessibility_builds",
+      "count_app_accessibility_issues_to_hide",
+      "count_app_accessibility_issues_to_unhide",
+      "count_manual_app_accessibility_issues_to_hide",
+      "count_manual_app_accessibility_issues_to_unhide",
       "count_manual_app_accessibility_reports",
       "get_app_accessibility_build",
       "get_app_accessibility_build_conformance_summary",
       "get_app_accessibility_build_overview",
+      "get_app_accessibility_screen_reader_build",
+      "get_app_accessibility_screen_reader_build_overview",
       "get_manual_app_accessibility_report",
       "get_manual_app_accessibility_report_conformance_summary",
       "get_manual_app_accessibility_report_overview",
+      "hide_app_accessibility_issues",
+      "hide_manual_app_accessibility_issues",
+      "list_app_accessibility_build_issues",
       "list_app_accessibility_build_names",
       "list_app_accessibility_build_tests",
       "list_app_accessibility_bundle_ids",
       "list_app_accessibility_comparable_builds",
+      "list_app_accessibility_screen_reader_build_issues",
+      "list_app_accessibility_screen_reader_builds",
       "list_app_accessibility_test_issues",
       "list_app_accessibility_users",
       "list_manual_app_accessibility_devices",
+      "list_manual_app_accessibility_report_issues",
       "list_manual_app_accessibility_report_rules",
       "list_manual_app_accessibility_report_wcag_levels",
+      "review_app_accessibility_issue",
+      "review_manual_app_accessibility_issue",
+      "unhide_app_accessibility_issues",
+      "unhide_manual_app_accessibility_issues",
     ]);
   });
 
@@ -103,12 +142,56 @@ describe("the App Accessibility dashboard capabilities", () => {
     for (const c of publicApi) expect(c.auth, c.name).toBeUndefined();
   });
 
-  it("are reads on the backend's ai_agent allowlist, never deletes", () => {
+  it("stay on the backend's ai_agent allowlist and never delete", () => {
     for (const c of dash) {
-      expect(c.mode, c.name).toBe("read");
-      expect(c.method, c.name).toBe("GET");
+      expect(["GET", "POST"], c.name).toContain(c.method);
       expect(BACKEND_ALLOWLIST.has(`${c.method} ${c.path}`), c.name).toBe(true);
     }
+  });
+
+  it("mark only hide, unhide and review as writes; the hide counts only read", () => {
+    const writes = dash
+      .filter((c: any) => c.mode !== "read")
+      .map((c: any) => c.name)
+      .sort();
+    expect(writes).toEqual(WRITES);
+    for (const c of dash.filter((c: any) => c.mode !== "read"))
+      expect(c.mode, c.name).toBe("write");
+    for (const c of dash.filter(
+      (c: any) => c.name.startsWith("count_") && c.method === "POST",
+    ))
+      expect(c.mode, c.name).toBe("read");
+  });
+
+  it("never offer a persistent hide, which the backend refuses an agent", () => {
+    for (const c of app.capabilities) {
+      const names = [...(c.body ?? []), ...(c.query ?? [])].map(
+        (p: any) => p.name,
+      );
+      expect(names, c.name).not.toContain("persistence");
+    }
+  });
+
+  it("ask for approval before every write, and say how to undo a hide", () => {
+    for (const name of WRITES) {
+      expect(byName(name).guidance.join(" "), name).toMatch(/APPROVAL FIRST/);
+    }
+    expect(byName("hide_app_accessibility_issues").guidance.join(" ")).toMatch(
+      /unhide_app_accessibility_issues/,
+    );
+    expect(
+      byName("hide_manual_app_accessibility_issues").guidance.join(" "),
+    ).toMatch(/unhide_manual_app_accessibility_issues/);
+  });
+
+  it("point issue actions at the reads that carry uid and snapshot_id", () => {
+    // fetchAccessibilityIssues does not return them, so an agent must read these first.
+    expect(byName("hide_app_accessibility_issues").guidance.join(" ")).toMatch(
+      /list_app_accessibility_build_issues/,
+    );
+    expect(
+      byName("hide_manual_app_accessibility_issues").guidance.join(" "),
+    ).toMatch(/list_manual_app_accessibility_report_issues/);
   });
 
   it("ship one capability per route, each on an entity that names it", () => {
@@ -135,12 +218,8 @@ describe("the App Accessibility dashboard capabilities", () => {
     }
   });
 
-  it("leave out what fetchAccessibilityIssues and the public-API lists already serve", () => {
+  it("leave out what the public-API lists already serve", () => {
     const paths = dash.map((c: any) => c.path);
-    expect(paths).not.toContain(
-      "/automate/api/v1/build/{th_build_id}/snapshot",
-    );
-    expect(paths).not.toContain("/api/v1/app_scanner/{report_id}/snapshot");
     expect(paths).not.toContain("/automate/api/v1/project");
     expect(paths).not.toContain("/automate/api/v1/project/{project_id}/build");
     expect(paths).not.toContain("/api/v1/app_scanner");
@@ -159,7 +238,7 @@ describe("the App Accessibility dashboard capabilities", () => {
     const text =
       JSON.stringify(app.capabilities) + JSON.stringify(app.entities);
     const referenced = text.match(
-      /\b(?:list|get|count|compare)_(?:manual_)?app_accessibility(?:_[a-z]+)*\b/g,
+      /\b(?:list|get|count|compare|hide|unhide|review)_(?:manual_)?app_accessibility(?:_[a-z]+)*\b/g,
     );
     for (const name of new Set(referenced)) {
       expect(own.has(name), name).toBe(true);
@@ -302,6 +381,18 @@ describe("finding the dashboard reads", () => {
     [
       "issue counts by rule for a manual app accessibility report",
       "list_manual_app_accessibility_report_rules",
+    ],
+    [
+      "hide an issue in an app accessibility build",
+      "hide_app_accessibility_issues",
+    ],
+    [
+      "mark a needs review issue in a manual app accessibility report as not an issue",
+      "review_manual_app_accessibility_issue",
+    ],
+    [
+      "list screen reader automation builds of an app accessibility project",
+      "list_app_accessibility_screen_reader_builds",
     ],
   ])("finds %j as %s", (query, expected) => {
     const { hits } = searchCapabilities(products, query, {

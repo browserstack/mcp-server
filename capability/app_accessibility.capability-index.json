@@ -3,7 +3,7 @@
   "version": "1.0",
   "build_id": "app_accessibility-v1.0-lists",
   "app_accessibility": {
-    "summary": "BrowserStack App Accessibility: WCAG accessibility results for mobile apps (Android and iOS), from automated App Automate tests run with accessibility checks on, and from manual App Live sessions scanned with Workflow Analyzer. Find projects, builds and manual reports; read a build's overview, score trend, tests, per-test issues and WCAG conformance, compare two builds, and read a manual report's details, overview, rules and WCAG levels. These capabilities only read; they do not start tests or scans, or change or delete anything. A build's or report's full issue list comes from fetchAccessibilityIssues. Websites are covered by a separate product.",
+    "summary": "BrowserStack App Accessibility: WCAG accessibility results for mobile apps (Android and iOS), from automated App Automate tests run with accessibility checks on, Screen Reader Automation runs, and manual App Live sessions scanned with Workflow Analyzer. Find projects, builds and manual reports; read a build's overview, score trend, tests, issues and WCAG conformance, compare builds, read Screen Reader Automation builds, and read a manual report's details, overview, rules and WCAG levels. Writes, each needing approval: hide, unhide and review issues. Nothing here starts tests or scans or deletes anything; a full issue list for reading comes from fetchAccessibilityIssues. Websites are covered by a separate product.",
     "routing_terms": [
       "app accessibility",
       "accessibility score",
@@ -14,7 +14,10 @@
       "testhub id",
       "app accessibility build overview",
       "wcag conformance",
-      "compare builds"
+      "compare builds",
+      "screen reader automation",
+      "talkback",
+      "voiceover"
     ],
     "auth": { "type": "http", "scheme": "basic" },
     "base_url": "https://api-app-accessibility.browserstack.com",
@@ -1650,6 +1653,1384 @@
           "404": { "$response": "DashboardNotFound" },
           "500": { "$response": "DashboardUpstreamFailure" }
         }
+      },
+      {
+        "name": "list_app_accessibility_build_issues",
+        "method": "GET",
+        "path": "/automate/api/v1/build/{th_build_id}/snapshot",
+        "host": "dashboard",
+        "auth": { "type": "oauth2" },
+        "mode": "read",
+        "entity": "build",
+        "path_params": [
+          {
+            "name": "th_build_id",
+            "type": "string",
+            "required": true,
+            "description": "The build's th_build_id (40 characters), from list_app_accessibility_builds or the testhub id the SDK prints.",
+            "example": "oplk236dalltvafvsmyxgexhguzjlgo7kushur2o"
+          }
+        ],
+        "query": [
+          {
+            "name": "severity",
+            "type": "string",
+            "description": "Keeps issues of these severities: critical, serious, moderate, minor; several comma-separated.",
+            "example": "critical,serious"
+          },
+          {
+            "name": "rules",
+            "type": "string",
+            "description": "Keeps issues of these rule ids, comma-separated.",
+            "example": "text-color-contrast"
+          },
+          {
+            "name": "hide_duplicate_issues",
+            "type": "boolean",
+            "description": "true leaves repeats of an issue out of the counts, as the dashboard does by default.",
+            "example": true
+          },
+          {
+            "name": "scanWithIssuesOnly",
+            "type": "boolean",
+            "description": "true leaves out screens with no issues."
+          },
+          {
+            "name": "includeNeedsReviewIndex",
+            "type": "boolean",
+            "description": "true adds info.needs_review_index: the screens holding needs-review issues."
+          },
+          {
+            "name": "page",
+            "type": "integer",
+            "minimum": 1,
+            "default": 1,
+            "description": "Page number, from 1."
+          },
+          {
+            "name": "page_size",
+            "type": "integer",
+            "minimum": 1,
+            "default": 10,
+            "description": "Rows per page.",
+            "maximum": 100
+          }
+        ],
+        "intent": "List an App Accessibility build's scanned screens with each issue's uid, status and screen id - the ids hiding, unhiding or reviewing an issue needs.",
+        "guidance": [
+          "For reading or summarising issues, fetchAccessibilityIssues is simpler; use this when an issue is to be hidden, unhidden or reviewed.",
+          "details[].meta.snapshot_id is the screen id; aggregated_results[].rule_issues[] carry uid, status and duplication_count.",
+          "info.next is the following page, null on the last."
+        ],
+        "returns": ["data.details", "data.info"],
+        "paginated": true,
+        "responses": {
+          "200": {
+            "description": "A page of the build's screens with their issues.",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "success": { "type": "boolean" },
+                "data": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "meta": {
+                            "type": "object",
+                            "description": "snapshot_id, screenshot_url and the screen's device."
+                          },
+                          "aggregated_results": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "description": "One rule: rule_id, label, severity and rule_issues[] (uid, status, duplication_count)."
+                            }
+                          },
+                          "bounding_boxes": { "type": "object" }
+                        }
+                      }
+                    },
+                    "info": { "$schema": "PageInfo" }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$response": "DashboardUnauthorized" },
+          "403": { "$response": "DashboardForbidden" },
+          "404": { "$response": "DashboardNotFound" },
+          "500": { "$response": "DashboardUpstreamFailure" }
+        }
+      },
+      {
+        "name": "list_manual_app_accessibility_report_issues",
+        "method": "GET",
+        "path": "/api/v1/app_scanner/{report_id}/snapshot",
+        "host": "dashboard",
+        "auth": { "type": "oauth2" },
+        "mode": "read",
+        "entity": "manual_report",
+        "path_params": [
+          {
+            "name": "report_id",
+            "type": "string",
+            "required": true,
+            "description": "The manual report's UUID, from list_manual_app_accessibility_reports or the report's dashboard link.",
+            "example": "ce941692-14e0-4ef2-a0f4-198d27684a20"
+          }
+        ],
+        "query": [
+          {
+            "name": "severity",
+            "type": "string",
+            "description": "Keeps issues of these severities: critical, serious, moderate, minor; several comma-separated.",
+            "example": "critical,serious"
+          },
+          {
+            "name": "rules",
+            "type": "string",
+            "description": "Keeps issues of these rule ids, comma-separated.",
+            "example": "text-color-contrast"
+          },
+          {
+            "name": "hide_duplicate_issues",
+            "type": "boolean",
+            "description": "true leaves repeats of an issue out of the counts, as the dashboard does by default.",
+            "example": true
+          },
+          {
+            "name": "scanWithIssuesOnly",
+            "type": "boolean",
+            "description": "true leaves out screens with no issues."
+          },
+          {
+            "name": "includeNeedsReviewIndex",
+            "type": "boolean",
+            "description": "true adds info.needs_review_index: the screens holding needs-review issues."
+          },
+          {
+            "name": "page",
+            "type": "integer",
+            "minimum": 1,
+            "default": 1,
+            "description": "Page number, from 1."
+          },
+          {
+            "name": "page_size",
+            "type": "integer",
+            "minimum": 1,
+            "default": 10,
+            "description": "Rows per page.",
+            "maximum": 100
+          }
+        ],
+        "intent": "List a manual App Accessibility report's scanned screens with each issue's uid, status and screen id - the ids hiding, unhiding or reviewing an issue needs.",
+        "guidance": [
+          "For reading or summarising issues, fetchAccessibilityIssues is simpler; use this when an issue is to be hidden, unhidden or reviewed.",
+          "details[].meta.snapshot_id is the screen id; aggregated_results[].rule_issues[] carry uid, status and duplication_count.",
+          "Skip rule_issues that carry duplicated_element_uid or element_snapshot_id: they repeat another issue; act on the original.",
+          "info.next is the following page, null on the last."
+        ],
+        "returns": ["data.details", "data.info"],
+        "paginated": true,
+        "responses": {
+          "200": {
+            "description": "A page of the report's screens with their issues.",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "success": { "type": "boolean" },
+                "data": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "meta": {
+                            "type": "object",
+                            "description": "snapshot_id, screenshot_url and the screen's device."
+                          },
+                          "aggregated_results": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "description": "One rule: rule_id, label, severity and rule_issues[] (uid, status, duplication_count)."
+                            }
+                          },
+                          "bounding_boxes": { "type": "object" }
+                        }
+                      }
+                    },
+                    "info": { "$schema": "PageInfo" }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$response": "DashboardUnauthorized" },
+          "403": { "$response": "DashboardForbidden" },
+          "404": { "$response": "DashboardNotFound" },
+          "500": { "$response": "DashboardUpstreamFailure" }
+        }
+      },
+      {
+        "name": "hide_app_accessibility_issues",
+        "method": "POST",
+        "path": "/automate/api/v1/scan/{th_build_id}/hide-issue",
+        "host": "dashboard",
+        "auth": { "type": "oauth2" },
+        "mode": "write",
+        "entity": "issue",
+        "path_params": [
+          {
+            "name": "th_build_id",
+            "type": "string",
+            "required": true,
+            "description": "The build's th_build_id (40 characters), from list_app_accessibility_builds or the testhub id the SDK prints.",
+            "example": "oplk236dalltvafvsmyxgexhguzjlgo7kushur2o"
+          }
+        ],
+        "body": [
+          {
+            "name": "hide_level",
+            "type": "string",
+            "required": true,
+            "values": ["issue", "component", "rule"],
+            "json_path": "/hide_level",
+            "description": "issue: this issue and its duplicates; component: every issue on this element in this screen; rule: every issue of the rule in the whole report.",
+            "example": "issue"
+          },
+          {
+            "name": "reason_code",
+            "type": "string",
+            "required": true,
+            "values": [
+              "Not relevant",
+              "Not a priority",
+              "Technical challenges",
+              "False positive",
+              "Duplicate",
+              "Others"
+            ],
+            "json_path": "/reason_code",
+            "description": "Why it is hidden: one of the dashboard's six reasons.",
+            "example": "False positive"
+          },
+          {
+            "name": "explanation",
+            "type": "string",
+            "json_path": "/explanation",
+            "description": "Free text, required when reason_code is Others.",
+            "example": "Decorative image, read as part of the card"
+          },
+          {
+            "name": "rule_id",
+            "type": "string",
+            "required": true,
+            "json_path": "/rule_id",
+            "description": "The rule's id, aggregated_results[].rule_id of the issue read.",
+            "example": "text-color-contrast"
+          },
+          {
+            "name": "uid",
+            "type": "string",
+            "json_path": "/uid",
+            "description": "The issue's uid, rule_issues[].uid. Required for hide_level issue and component.",
+            "example": "1210624664-9929a318-5969-4626-a2cb-1630c4b09efc_40"
+          },
+          {
+            "name": "snapshot_id",
+            "type": "integer",
+            "json_path": "/snapshot_id",
+            "description": "The screen's id, details[].meta.snapshot_id. Required for hide_level issue and component.",
+            "example": 12345
+          },
+          {
+            "name": "status",
+            "type": "string",
+            "values": ["fail", "needs_review"],
+            "json_path": "/status",
+            "description": "The issue's current status, rule_issues[].status.",
+            "example": "fail"
+          }
+        ],
+        "intent": "Hide accessibility issues in an App Accessibility build at issue, element or rule level, with a reason - the dashboard's Hide issue action. Changes the build's issue counts and score.",
+        "guidance": [
+          "APPROVAL FIRST: before calling, tell the user exactly what will change (which issues are hidden, in which report, and how many issues, from count_app_accessibility_issues_to_hide) and wait for an explicit yes in their own words ('yes', 'go ahead'). A request to make the change, however specific, is not that yes: ask first, and send user_permission granted only after it.",
+          "Read the ids first: list_app_accessibility_build_issues (or list_app_accessibility_test_issues for one test) gives details[].meta.snapshot_id and, per rule, rule_issues[].uid and .status. fetchAccessibilityIssues does not return them.",
+          "Ask for the reason by offering exactly the six reason_code values; Others needs an explanation. 'Not an issue' is a needs-review decision (review_app_accessibility_issue), not a hide reason.",
+          "Undo is unhide_app_accessibility_issues with the same hide_level, rule_id, uid and snapshot_id.",
+          "Hides in this build only. A persistent hide that carries into later builds is not available to an agent: the backend refuses it.",
+          "A 403 that names the owner means this account lets only the build's owner hide its issues."
+        ],
+        "returns": ["data.message", "data.issue_summary"],
+        "paginated": false,
+        "responses": {
+          "200": {
+            "description": "Hidden; issue_summary is the build's new counts.",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "success": { "type": "boolean" },
+                "data": {
+                  "type": "object",
+                  "properties": {
+                    "message": { "type": "string" },
+                    "issue_summary": { "$schema": "IssueSummary" }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "$response": "DashboardBadRequest" },
+          "401": { "$response": "DashboardUnauthorized" },
+          "403": { "$response": "DashboardForbidden" },
+          "404": { "$response": "DashboardNotFound" },
+          "500": { "$response": "DashboardUpstreamFailure" }
+        }
+      },
+      {
+        "name": "unhide_app_accessibility_issues",
+        "method": "POST",
+        "path": "/automate/api/v1/scan/{th_build_id}/unhide-issue",
+        "host": "dashboard",
+        "auth": { "type": "oauth2" },
+        "mode": "write",
+        "entity": "issue",
+        "path_params": [
+          {
+            "name": "th_build_id",
+            "type": "string",
+            "required": true,
+            "description": "The build's th_build_id (40 characters), from list_app_accessibility_builds or the testhub id the SDK prints.",
+            "example": "oplk236dalltvafvsmyxgexhguzjlgo7kushur2o"
+          }
+        ],
+        "body": [
+          {
+            "name": "hide_level",
+            "type": "string",
+            "required": true,
+            "values": ["issue", "component", "rule"],
+            "json_path": "/hide_level",
+            "description": "issue: this issue and its duplicates; component: every issue on this element in this screen; rule: every issue of the rule in the whole report.",
+            "example": "issue"
+          },
+          {
+            "name": "rule_id",
+            "type": "string",
+            "required": true,
+            "json_path": "/rule_id",
+            "description": "The rule's id, aggregated_results[].rule_id of the issue read.",
+            "example": "text-color-contrast"
+          },
+          {
+            "name": "uid",
+            "type": "string",
+            "json_path": "/uid",
+            "description": "The issue's uid, rule_issues[].uid. Required for hide_level issue and component.",
+            "example": "1210624664-9929a318-5969-4626-a2cb-1630c4b09efc_40"
+          },
+          {
+            "name": "snapshot_id",
+            "type": "integer",
+            "json_path": "/snapshot_id",
+            "description": "The screen's id, details[].meta.snapshot_id. Required for hide_level issue and component.",
+            "example": 12345
+          },
+          {
+            "name": "status",
+            "type": "string",
+            "json_path": "/status",
+            "description": "The issue's current status, rule_issues[].status of a hidden issue.",
+            "example": "hidden_issues"
+          }
+        ],
+        "intent": "Unhide accessibility issues hidden in an App Accessibility build, at issue, element or rule level - undoes hide_app_accessibility_issues.",
+        "guidance": [
+          "APPROVAL FIRST: before calling, tell the user exactly what will change (which hidden issues come back, in which report, and how many issues, from count_app_accessibility_issues_to_unhide) and wait for an explicit yes in their own words ('yes', 'go ahead'). A request to make the change, however specific, is not that yes: ask first, and send user_permission granted only after it.",
+          "Send the same hide_level, rule_id, uid and snapshot_id the hide used; hidden issues are read from list_app_accessibility_build_issues.",
+          "Restores issues hidden in this build only."
+        ],
+        "returns": ["data.message", "data.issue_summary"],
+        "paginated": false,
+        "responses": {
+          "200": {
+            "description": "Restored; issue_summary is the build's new counts.",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "success": { "type": "boolean" },
+                "data": {
+                  "type": "object",
+                  "properties": {
+                    "message": { "type": "string" },
+                    "issue_summary": { "$schema": "IssueSummary" }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "$response": "DashboardBadRequest" },
+          "401": { "$response": "DashboardUnauthorized" },
+          "403": { "$response": "DashboardForbidden" },
+          "404": { "$response": "DashboardNotFound" },
+          "500": { "$response": "DashboardUpstreamFailure" }
+        }
+      },
+      {
+        "name": "review_app_accessibility_issue",
+        "method": "POST",
+        "path": "/automate/api/v1/build/{th_build_id}/review-issue",
+        "host": "dashboard",
+        "auth": { "type": "oauth2" },
+        "mode": "write",
+        "entity": "issue",
+        "path_params": [
+          {
+            "name": "th_build_id",
+            "type": "string",
+            "required": true,
+            "description": "The build's th_build_id (40 characters), from list_app_accessibility_builds or the testhub id the SDK prints.",
+            "example": "oplk236dalltvafvsmyxgexhguzjlgo7kushur2o"
+          }
+        ],
+        "body": [
+          {
+            "name": "snapshot_id",
+            "type": "integer",
+            "json_path": "/snapshot_id",
+            "description": "The screen's id, details[].meta.snapshot_id. Required for hide_level issue and component.",
+            "example": 12345,
+            "required": true
+          },
+          {
+            "name": "rule_id",
+            "type": "string",
+            "required": true,
+            "json_path": "/rule_id",
+            "description": "The rule's id, aggregated_results[].rule_id of the issue read.",
+            "example": "text-color-contrast"
+          },
+          {
+            "name": "uid",
+            "type": "string",
+            "json_path": "/uid",
+            "description": "The issue's uid, rule_issues[].uid. Required for hide_level issue and component.",
+            "example": "1210624664-9929a318-5969-4626-a2cb-1630c4b09efc_40",
+            "required": true
+          },
+          {
+            "name": "duplication_count",
+            "type": "integer",
+            "json_path": "/duplication_count",
+            "description": "rule_issues[].duplication_count of the issue; 0 when absent.",
+            "example": 0
+          },
+          {
+            "name": "current_status",
+            "type": "string",
+            "required": true,
+            "values": ["needs_review", "confirmed", "non_issues"],
+            "json_path": "/current_status",
+            "description": "The issue's status now, rule_issues[].status.",
+            "example": "needs_review"
+          },
+          {
+            "name": "moved_status",
+            "type": "string",
+            "required": true,
+            "values": ["confirmed", "non_issues", "needs_review"],
+            "json_path": "/moved_status",
+            "description": "confirmed: it is an issue; non_issues: it is not; needs_review: undo an earlier decision.",
+            "example": "confirmed"
+          }
+        ],
+        "intent": "Decide one needs-review issue in an App Accessibility build: confirm it as an issue, mark it not an issue, or undo the decision.",
+        "guidance": [
+          "APPROVAL FIRST: before calling, tell the user exactly what will change (which needs-review issue is decided, and to what, in which report, and how many issues, from list_app_accessibility_build_issues with includeNeedsReviewIndex true) and wait for an explicit yes in their own words ('yes', 'go ahead'). A request to make the change, however specific, is not that yes: ask first, and send user_permission granted only after it.",
+          "Moves one issue: needs_review to confirmed (it is an issue) or to non_issues (it is not), or back to needs_review (undo). Take snapshot_id, rule_id, uid, the current status and duplication_count from list_app_accessibility_build_issues with includeNeedsReviewIndex true.",
+          "A 403 'Review issue feature is not enabled' means needs-review is off for this build; 'Issue can only be reviewed by author' means only its author may review in this account.",
+          "Undo is the same call with moved_status needs_review and current_status the status it was moved to."
+        ],
+        "returns": ["success"],
+        "paginated": false,
+        "responses": {
+          "200": {
+            "description": "Decided.",
+            "schema": {
+              "type": "object",
+              "properties": { "success": { "type": "boolean" } }
+            }
+          },
+          "400": { "$response": "DashboardBadRequest" },
+          "401": { "$response": "DashboardUnauthorized" },
+          "403": { "$response": "DashboardForbidden" },
+          "404": { "$response": "DashboardNotFound" },
+          "500": { "$response": "DashboardUpstreamFailure" }
+        }
+      },
+      {
+        "name": "count_app_accessibility_issues_to_hide",
+        "method": "POST",
+        "path": "/automate/api/v1/scan/{th_build_id}/get-hide-count",
+        "host": "dashboard",
+        "auth": { "type": "oauth2" },
+        "mode": "read",
+        "entity": "issue",
+        "path_params": [
+          {
+            "name": "th_build_id",
+            "type": "string",
+            "required": true,
+            "description": "The build's th_build_id (40 characters), from list_app_accessibility_builds or the testhub id the SDK prints.",
+            "example": "oplk236dalltvafvsmyxgexhguzjlgo7kushur2o"
+          }
+        ],
+        "body": [
+          {
+            "name": "rule_id",
+            "type": "string",
+            "required": true,
+            "json_path": "/rule_id",
+            "description": "The rule's id, aggregated_results[].rule_id of the issue read.",
+            "example": "text-color-contrast"
+          },
+          {
+            "name": "uid",
+            "type": "string",
+            "json_path": "/uid",
+            "description": "The issue's uid, rule_issues[].uid. Required for hide_level issue and component.",
+            "example": "1210624664-9929a318-5969-4626-a2cb-1630c4b09efc_40"
+          },
+          {
+            "name": "snapshot_id",
+            "type": "integer",
+            "json_path": "/snapshot_id",
+            "description": "The screen's id, details[].meta.snapshot_id. Required for hide_level issue and component.",
+            "example": 12345
+          }
+        ],
+        "intent": "Count how many issues hiding a rule, or an element, in an App Accessibility build would change - the preview the Hide dialog shows.",
+        "guidance": [
+          "Reads only; use it to say how many issues a hide or unhide would change before asking for approval.",
+          "hide_rule_count is how many issues the rule-level action would change; hide_component_count how many on this element in this screen."
+        ],
+        "returns": ["hide_rule_count", "hide_component_count"],
+        "paginated": false,
+        "responses": {
+          "200": {
+            "description": "Counts.",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "success": { "type": "boolean" },
+                "hide_rule_count": { "type": "integer" },
+                "hide_component_count": { "type": "integer" }
+              }
+            }
+          },
+          "401": { "$response": "DashboardUnauthorized" },
+          "403": { "$response": "DashboardForbidden" },
+          "404": { "$response": "DashboardNotFound" },
+          "500": { "$response": "DashboardUpstreamFailure" }
+        }
+      },
+      {
+        "name": "count_app_accessibility_issues_to_unhide",
+        "method": "POST",
+        "path": "/automate/api/v1/scan/{th_build_id}/get-unhide-count",
+        "host": "dashboard",
+        "auth": { "type": "oauth2" },
+        "mode": "read",
+        "entity": "issue",
+        "path_params": [
+          {
+            "name": "th_build_id",
+            "type": "string",
+            "required": true,
+            "description": "The build's th_build_id (40 characters), from list_app_accessibility_builds or the testhub id the SDK prints.",
+            "example": "oplk236dalltvafvsmyxgexhguzjlgo7kushur2o"
+          }
+        ],
+        "body": [
+          {
+            "name": "rule_id",
+            "type": "string",
+            "required": true,
+            "json_path": "/rule_id",
+            "description": "The rule's id, aggregated_results[].rule_id of the issue read.",
+            "example": "text-color-contrast"
+          },
+          {
+            "name": "uid",
+            "type": "string",
+            "json_path": "/uid",
+            "description": "The issue's uid, rule_issues[].uid. Required for hide_level issue and component.",
+            "example": "1210624664-9929a318-5969-4626-a2cb-1630c4b09efc_40"
+          },
+          {
+            "name": "snapshot_id",
+            "type": "integer",
+            "json_path": "/snapshot_id",
+            "description": "The screen's id, details[].meta.snapshot_id. Required for hide_level issue and component.",
+            "example": 12345
+          }
+        ],
+        "intent": "Count how many hidden issues unhiding a rule, or an element, in an App Accessibility build would bring back.",
+        "guidance": [
+          "Reads only; use it to say how many issues a hide or unhide would change before asking for approval.",
+          "hide_rule_count is how many issues the rule-level action would change; hide_component_count how many on this element in this screen."
+        ],
+        "returns": ["hide_rule_count", "hide_component_count"],
+        "paginated": false,
+        "responses": {
+          "200": {
+            "description": "Counts.",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "success": { "type": "boolean" },
+                "hide_rule_count": { "type": "integer" },
+                "hide_component_count": { "type": "integer" }
+              }
+            }
+          },
+          "401": { "$response": "DashboardUnauthorized" },
+          "403": { "$response": "DashboardForbidden" },
+          "404": { "$response": "DashboardNotFound" },
+          "500": { "$response": "DashboardUpstreamFailure" }
+        }
+      },
+      {
+        "name": "hide_manual_app_accessibility_issues",
+        "method": "POST",
+        "path": "/api/v1/app_scanner/{report_id}/hide-issue",
+        "host": "dashboard",
+        "auth": { "type": "oauth2" },
+        "mode": "write",
+        "entity": "issue",
+        "path_params": [
+          {
+            "name": "report_id",
+            "type": "string",
+            "required": true,
+            "description": "The manual report's UUID, from list_manual_app_accessibility_reports or the report's dashboard link.",
+            "example": "ce941692-14e0-4ef2-a0f4-198d27684a20"
+          }
+        ],
+        "body": [
+          {
+            "name": "hide_level",
+            "type": "string",
+            "required": true,
+            "values": ["issue", "component", "rule"],
+            "json_path": "/hide_level",
+            "description": "issue: this issue and its duplicates; component: every issue on this element in this screen; rule: every issue of the rule in the whole report.",
+            "example": "issue"
+          },
+          {
+            "name": "reason_code",
+            "type": "string",
+            "required": true,
+            "values": [
+              "Not relevant",
+              "Not a priority",
+              "Technical challenges",
+              "False positive",
+              "Duplicate",
+              "Others"
+            ],
+            "json_path": "/reason_code",
+            "description": "Why it is hidden: one of the dashboard's six reasons.",
+            "example": "False positive"
+          },
+          {
+            "name": "explanation",
+            "type": "string",
+            "json_path": "/explanation",
+            "description": "Free text, required when reason_code is Others.",
+            "example": "Decorative image, read as part of the card"
+          },
+          {
+            "name": "rule_id",
+            "type": "string",
+            "required": true,
+            "json_path": "/rule_id",
+            "description": "The rule's id, aggregated_results[].rule_id of the issue read.",
+            "example": "text-color-contrast"
+          },
+          {
+            "name": "uid",
+            "type": "string",
+            "json_path": "/uid",
+            "description": "The issue's uid, rule_issues[].uid. Required for hide_level issue and component.",
+            "example": "1210624664-9929a318-5969-4626-a2cb-1630c4b09efc_40"
+          },
+          {
+            "name": "snapshot_id",
+            "type": "integer",
+            "json_path": "/snapshot_id",
+            "description": "The screen's id, details[].meta.snapshot_id. Required for hide_level issue and component.",
+            "example": 12345
+          },
+          {
+            "name": "status",
+            "type": "string",
+            "values": ["fail", "needs_review"],
+            "json_path": "/status",
+            "description": "The issue's current status, rule_issues[].status.",
+            "example": "fail"
+          }
+        ],
+        "intent": "Hide accessibility issues in a manual App Accessibility report at issue, element or rule level, with a reason - the dashboard's Hide issue action. Changes the report's issue counts and score.",
+        "guidance": [
+          "APPROVAL FIRST: before calling, tell the user exactly what will change (which issues are hidden, in which report, and how many issues, from count_manual_app_accessibility_issues_to_hide) and wait for an explicit yes in their own words ('yes', 'go ahead'). A request to make the change, however specific, is not that yes: ask first, and send user_permission granted only after it.",
+          "Read the ids first: list_manual_app_accessibility_report_issues gives details[].meta.snapshot_id and, per rule, rule_issues[].uid and .status. fetchAccessibilityIssues does not return them.",
+          "Ask for the reason by offering exactly the six reason_code values; Others needs an explanation. 'Not an issue' is a needs-review decision (review_manual_app_accessibility_issue), not a hide reason.",
+          "Undo is unhide_manual_app_accessibility_issues with the same hide_level, rule_id, uid and snapshot_id.",
+          "Hides in this report only. A persistent hide that carries into later reports is not available to an agent: the backend refuses it.",
+          "A 403 that names the owner means this account lets only the report's owner hide its issues."
+        ],
+        "returns": ["affected_count"],
+        "paginated": false,
+        "responses": {
+          "200": {
+            "description": "Hidden.",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "success": { "type": "boolean" },
+                "affected_count": {
+                  "type": "integer",
+                  "description": "Issues changed."
+                }
+              }
+            }
+          },
+          "400": { "$response": "DashboardBadRequest" },
+          "401": { "$response": "DashboardUnauthorized" },
+          "403": { "$response": "DashboardForbidden" },
+          "404": { "$response": "DashboardNotFound" },
+          "500": { "$response": "DashboardUpstreamFailure" }
+        }
+      },
+      {
+        "name": "unhide_manual_app_accessibility_issues",
+        "method": "POST",
+        "path": "/api/v1/app_scanner/{report_id}/unhide-issue",
+        "host": "dashboard",
+        "auth": { "type": "oauth2" },
+        "mode": "write",
+        "entity": "issue",
+        "path_params": [
+          {
+            "name": "report_id",
+            "type": "string",
+            "required": true,
+            "description": "The manual report's UUID, from list_manual_app_accessibility_reports or the report's dashboard link.",
+            "example": "ce941692-14e0-4ef2-a0f4-198d27684a20"
+          }
+        ],
+        "body": [
+          {
+            "name": "hide_level",
+            "type": "string",
+            "required": true,
+            "values": ["issue", "component", "rule"],
+            "json_path": "/hide_level",
+            "description": "issue: this issue and its duplicates; component: every issue on this element in this screen; rule: every issue of the rule in the whole report.",
+            "example": "issue"
+          },
+          {
+            "name": "rule_id",
+            "type": "string",
+            "required": true,
+            "json_path": "/rule_id",
+            "description": "The rule's id, aggregated_results[].rule_id of the issue read.",
+            "example": "text-color-contrast"
+          },
+          {
+            "name": "uid",
+            "type": "string",
+            "json_path": "/uid",
+            "description": "The issue's uid, rule_issues[].uid. Required for hide_level issue and component.",
+            "example": "1210624664-9929a318-5969-4626-a2cb-1630c4b09efc_40"
+          },
+          {
+            "name": "snapshot_id",
+            "type": "integer",
+            "json_path": "/snapshot_id",
+            "description": "The screen's id, details[].meta.snapshot_id. Required for hide_level issue and component.",
+            "example": 12345
+          },
+          {
+            "name": "status",
+            "type": "string",
+            "json_path": "/status",
+            "description": "The issue's current status, rule_issues[].status of a hidden issue.",
+            "example": "hidden_issues"
+          }
+        ],
+        "intent": "Unhide accessibility issues hidden in a manual App Accessibility report, at issue, element or rule level - undoes hide_manual_app_accessibility_issues.",
+        "guidance": [
+          "APPROVAL FIRST: before calling, tell the user exactly what will change (which hidden issues come back, in which report, and how many issues, from count_manual_app_accessibility_issues_to_unhide) and wait for an explicit yes in their own words ('yes', 'go ahead'). A request to make the change, however specific, is not that yes: ask first, and send user_permission granted only after it.",
+          "Send the same hide_level, rule_id, uid and snapshot_id the hide used; hidden issues are read from list_manual_app_accessibility_report_issues.",
+          "Restores issues hidden in this report only."
+        ],
+        "returns": ["affected_count"],
+        "paginated": false,
+        "responses": {
+          "200": {
+            "description": "Restored.",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "success": { "type": "boolean" },
+                "affected_count": {
+                  "type": "integer",
+                  "description": "Issues changed."
+                }
+              }
+            }
+          },
+          "400": { "$response": "DashboardBadRequest" },
+          "401": { "$response": "DashboardUnauthorized" },
+          "403": { "$response": "DashboardForbidden" },
+          "404": { "$response": "DashboardNotFound" },
+          "500": { "$response": "DashboardUpstreamFailure" }
+        }
+      },
+      {
+        "name": "review_manual_app_accessibility_issue",
+        "method": "POST",
+        "path": "/api/v1/app_scanner/{report_id}/review-issue",
+        "host": "dashboard",
+        "auth": { "type": "oauth2" },
+        "mode": "write",
+        "entity": "issue",
+        "path_params": [
+          {
+            "name": "report_id",
+            "type": "string",
+            "required": true,
+            "description": "The manual report's UUID, from list_manual_app_accessibility_reports or the report's dashboard link.",
+            "example": "ce941692-14e0-4ef2-a0f4-198d27684a20"
+          }
+        ],
+        "body": [
+          {
+            "name": "snapshot_id",
+            "type": "integer",
+            "json_path": "/snapshot_id",
+            "description": "The screen's id, details[].meta.snapshot_id. Required for hide_level issue and component.",
+            "example": 12345,
+            "required": true
+          },
+          {
+            "name": "rule_id",
+            "type": "string",
+            "required": true,
+            "json_path": "/rule_id",
+            "description": "The rule's id, aggregated_results[].rule_id of the issue read.",
+            "example": "text-color-contrast"
+          },
+          {
+            "name": "uid",
+            "type": "string",
+            "json_path": "/uid",
+            "description": "The issue's uid, rule_issues[].uid. Required for hide_level issue and component.",
+            "example": "1210624664-9929a318-5969-4626-a2cb-1630c4b09efc_40",
+            "required": true
+          },
+          {
+            "name": "duplication_count",
+            "type": "integer",
+            "json_path": "/duplication_count",
+            "description": "rule_issues[].duplication_count of the issue; 0 when absent.",
+            "example": 0
+          },
+          {
+            "name": "current_status",
+            "type": "string",
+            "required": true,
+            "values": ["needs_review", "confirmed", "non_issues"],
+            "json_path": "/current_status",
+            "description": "The issue's status now, rule_issues[].status.",
+            "example": "needs_review"
+          },
+          {
+            "name": "moved_status",
+            "type": "string",
+            "required": true,
+            "values": ["confirmed", "non_issues", "needs_review"],
+            "json_path": "/moved_status",
+            "description": "confirmed: it is an issue; non_issues: it is not; needs_review: undo an earlier decision.",
+            "example": "confirmed"
+          }
+        ],
+        "intent": "Decide one needs-review issue in a manual App Accessibility report: confirm it as an issue, mark it not an issue, or undo the decision.",
+        "guidance": [
+          "APPROVAL FIRST: before calling, tell the user exactly what will change (which needs-review issue is decided, and to what, in which report, and how many issues, from list_manual_app_accessibility_report_issues with includeNeedsReviewIndex true) and wait for an explicit yes in their own words ('yes', 'go ahead'). A request to make the change, however specific, is not that yes: ask first, and send user_permission granted only after it.",
+          "Moves one issue: needs_review to confirmed (it is an issue) or to non_issues (it is not), or back to needs_review (undo). Take snapshot_id, rule_id, uid, the current status and duplication_count from list_manual_app_accessibility_report_issues with includeNeedsReviewIndex true.",
+          "A 403 'Review issue feature is not enabled' means needs-review is off for this report; 'Issue can only be reviewed by author' means only its author may review in this account.",
+          "Undo is the same call with moved_status needs_review and current_status the status it was moved to."
+        ],
+        "returns": ["success"],
+        "paginated": false,
+        "responses": {
+          "200": {
+            "description": "Decided.",
+            "schema": {
+              "type": "object",
+              "properties": { "success": { "type": "boolean" } }
+            }
+          },
+          "400": { "$response": "DashboardBadRequest" },
+          "401": { "$response": "DashboardUnauthorized" },
+          "403": { "$response": "DashboardForbidden" },
+          "404": { "$response": "DashboardNotFound" },
+          "500": { "$response": "DashboardUpstreamFailure" }
+        }
+      },
+      {
+        "name": "count_manual_app_accessibility_issues_to_hide",
+        "method": "POST",
+        "path": "/api/v1/app_scanner/{report_id}/get-hide-count",
+        "host": "dashboard",
+        "auth": { "type": "oauth2" },
+        "mode": "read",
+        "entity": "issue",
+        "path_params": [
+          {
+            "name": "report_id",
+            "type": "string",
+            "required": true,
+            "description": "The manual report's UUID, from list_manual_app_accessibility_reports or the report's dashboard link.",
+            "example": "ce941692-14e0-4ef2-a0f4-198d27684a20"
+          }
+        ],
+        "body": [
+          {
+            "name": "rule_id",
+            "type": "string",
+            "required": true,
+            "json_path": "/rule_id",
+            "description": "The rule's id, aggregated_results[].rule_id of the issue read.",
+            "example": "text-color-contrast"
+          },
+          {
+            "name": "uid",
+            "type": "string",
+            "json_path": "/uid",
+            "description": "The issue's uid, rule_issues[].uid. Required for hide_level issue and component.",
+            "example": "1210624664-9929a318-5969-4626-a2cb-1630c4b09efc_40"
+          },
+          {
+            "name": "snapshot_id",
+            "type": "integer",
+            "json_path": "/snapshot_id",
+            "description": "The screen's id, details[].meta.snapshot_id. Required for hide_level issue and component.",
+            "example": 12345
+          }
+        ],
+        "intent": "Count how many issues hiding a rule, or an element, in a manual App Accessibility report would change - the preview the Hide dialog shows.",
+        "guidance": [
+          "Reads only; use it to say how many issues a hide or unhide would change before asking for approval.",
+          "hide_rule_count is how many issues the rule-level action would change; hide_issue_count how many on this element in this screen."
+        ],
+        "returns": ["hide_rule_count", "hide_issue_count"],
+        "paginated": false,
+        "responses": {
+          "200": {
+            "description": "Counts.",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "success": { "type": "boolean" },
+                "hide_rule_count": { "type": "integer" },
+                "hide_issue_count": { "type": "integer" }
+              }
+            }
+          },
+          "401": { "$response": "DashboardUnauthorized" },
+          "403": { "$response": "DashboardForbidden" },
+          "404": { "$response": "DashboardNotFound" },
+          "500": { "$response": "DashboardUpstreamFailure" }
+        }
+      },
+      {
+        "name": "count_manual_app_accessibility_issues_to_unhide",
+        "method": "POST",
+        "path": "/api/v1/app_scanner/{report_id}/get-unhide-count",
+        "host": "dashboard",
+        "auth": { "type": "oauth2" },
+        "mode": "read",
+        "entity": "issue",
+        "path_params": [
+          {
+            "name": "report_id",
+            "type": "string",
+            "required": true,
+            "description": "The manual report's UUID, from list_manual_app_accessibility_reports or the report's dashboard link.",
+            "example": "ce941692-14e0-4ef2-a0f4-198d27684a20"
+          }
+        ],
+        "body": [
+          {
+            "name": "rule_id",
+            "type": "string",
+            "required": true,
+            "json_path": "/rule_id",
+            "description": "The rule's id, aggregated_results[].rule_id of the issue read.",
+            "example": "text-color-contrast"
+          },
+          {
+            "name": "uid",
+            "type": "string",
+            "json_path": "/uid",
+            "description": "The issue's uid, rule_issues[].uid. Required for hide_level issue and component.",
+            "example": "1210624664-9929a318-5969-4626-a2cb-1630c4b09efc_40"
+          },
+          {
+            "name": "snapshot_id",
+            "type": "integer",
+            "json_path": "/snapshot_id",
+            "description": "The screen's id, details[].meta.snapshot_id. Required for hide_level issue and component.",
+            "example": 12345
+          }
+        ],
+        "intent": "Count how many hidden issues unhiding a rule, or an element, in a manual App Accessibility report would bring back.",
+        "guidance": [
+          "Reads only; use it to say how many issues a hide or unhide would change before asking for approval.",
+          "hide_rule_count is how many issues the rule-level action would change; hide_issue_count how many on this element in this screen."
+        ],
+        "returns": ["hide_rule_count", "hide_issue_count"],
+        "paginated": false,
+        "responses": {
+          "200": {
+            "description": "Counts.",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "success": { "type": "boolean" },
+                "hide_rule_count": { "type": "integer" },
+                "hide_issue_count": { "type": "integer" }
+              }
+            }
+          },
+          "401": { "$response": "DashboardUnauthorized" },
+          "403": { "$response": "DashboardForbidden" },
+          "404": { "$response": "DashboardNotFound" },
+          "500": { "$response": "DashboardUpstreamFailure" }
+        }
+      },
+      {
+        "name": "list_app_accessibility_screen_reader_builds",
+        "method": "GET",
+        "path": "/automate/api/v1/screen_reader/project/{project_id}/build",
+        "host": "dashboard",
+        "auth": { "type": "oauth2" },
+        "mode": "read",
+        "entity": "screen_reader_build",
+        "path_params": [
+          {
+            "name": "project_id",
+            "type": "integer",
+            "required": true,
+            "minimum": 1,
+            "description": "The project's integer id, from list_app_accessibility_projects.",
+            "example": 123456
+          }
+        ],
+        "query": [
+          {
+            "name": "build_name",
+            "type": "string",
+            "description": "Keeps builds whose build or app name contains this text.",
+            "example": "Nightly"
+          },
+          {
+            "name": "user_id",
+            "type": "integer",
+            "minimum": 1,
+            "description": "Keeps the builds one person started: their BrowserStack user id.",
+            "example": 1234567
+          },
+          {
+            "name": "bundle_id",
+            "type": "string",
+            "description": "Keeps builds of one app: its package name or bundle id.",
+            "example": "com.example.checkout"
+          },
+          {
+            "name": "page",
+            "type": "integer",
+            "minimum": 1,
+            "default": 1,
+            "description": "Page number, from 1."
+          },
+          {
+            "name": "page_size",
+            "type": "integer",
+            "minimum": 1,
+            "default": 10,
+            "description": "Rows per page."
+          }
+        ],
+        "intent": "List an App Accessibility project's Screen Reader Automation builds newest first - automated runs that checked the app with TalkBack or VoiceOver - with each build's id, status and issue counts.",
+        "guidance": [
+          "Screen Reader Automation builds are listed apart from list_app_accessibility_builds; th_build_id is the id the other screen reader capabilities take.",
+          "An empty list can mean the account has no Screen Reader Automation, not only that nothing ran.",
+          "info.next is the following page, null on the last."
+        ],
+        "returns": [
+          "builds.th_build_id",
+          "builds.name",
+          "builds.status",
+          "builds.report_status",
+          "builds.created_at",
+          "builds.app_details",
+          "builds.issue_summary",
+          "info.next"
+        ],
+        "paginated": true,
+        "responses": {
+          "200": {
+            "description": "A page of the project's Screen Reader Automation builds.",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "success": { "type": "boolean" },
+                "info": { "$schema": "PageInfo" },
+                "filters": { "type": "object" },
+                "builds": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "th_build_id": { "type": "string" },
+                      "build_number": { "type": "integer" },
+                      "name": { "type": "string" },
+                      "status": { "type": "string" },
+                      "report_status": { "type": "string" },
+                      "created_at": { "type": "string" },
+                      "app_details": { "type": "object" },
+                      "test_health": { "type": "object" },
+                      "issue_summary": { "$schema": "IssueSummary" }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$response": "DashboardUnauthorized" },
+          "403": { "$response": "DashboardForbidden" },
+          "404": { "$response": "DashboardNotFound" },
+          "500": { "$response": "DashboardUpstreamFailure" }
+        }
+      },
+      {
+        "name": "get_app_accessibility_screen_reader_build",
+        "method": "GET",
+        "path": "/automate/api/v1/screen_reader/build/{th_build_id}",
+        "host": "dashboard",
+        "auth": { "type": "oauth2" },
+        "mode": "read",
+        "entity": "screen_reader_build",
+        "path_params": [
+          {
+            "name": "th_build_id",
+            "type": "string",
+            "required": true,
+            "description": "The Screen Reader Automation build's th_build_id, from list_app_accessibility_screen_reader_builds.",
+            "example": "oplk236dalltvafvsmyxgexhguzjlgo7kushur2o"
+          }
+        ],
+        "intent": "Read one Screen Reader Automation build's header: project, creator, devices, app and framework, WCAG version, test configuration and issue counts.",
+        "guidance": [
+          "meta_data.eligible_rules is large; read it only when the question is which rules ran."
+        ],
+        "returns": [
+          "meta_data.name",
+          "meta_data.project_name",
+          "meta_data.created_at",
+          "meta_data.issue_summary",
+          "meta_data.app_details",
+          "meta_data.devices"
+        ],
+        "paginated": false,
+        "responses": {
+          "200": {
+            "description": "The build's header.",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "success": { "type": "boolean" },
+                "meta_data": { "type": "object" }
+              }
+            }
+          },
+          "401": { "$response": "DashboardUnauthorized" },
+          "403": { "$response": "DashboardForbidden" },
+          "404": { "$response": "DashboardNotFound" },
+          "500": { "$response": "DashboardUpstreamFailure" }
+        }
+      },
+      {
+        "name": "get_app_accessibility_screen_reader_build_overview",
+        "method": "GET",
+        "path": "/automate/api/v1/screen_reader/project/{project_id}/build/{th_build_id}/overview",
+        "host": "dashboard",
+        "auth": { "type": "oauth2" },
+        "mode": "read",
+        "entity": "screen_reader_build",
+        "path_params": [
+          {
+            "name": "project_id",
+            "type": "integer",
+            "required": true,
+            "minimum": 1,
+            "description": "The project's integer id, from list_app_accessibility_projects.",
+            "example": 123456
+          },
+          {
+            "name": "th_build_id",
+            "type": "string",
+            "required": true,
+            "description": "The Screen Reader Automation build's th_build_id, from list_app_accessibility_screen_reader_builds.",
+            "example": "oplk236dalltvafvsmyxgexhguzjlgo7kushur2o"
+          }
+        ],
+        "query": [
+          {
+            "name": "test_case_uuid",
+            "type": "string",
+            "description": "Limits the overview to one test, by its uuid.",
+            "example": "57ce30d9-13b5-48aa-bae8-deaa4bc88b36"
+          }
+        ],
+        "intent": "Read a Screen Reader Automation build's overview: issue counts by severity and category, test health, and the trend over the last same-named builds.",
+        "guidance": [
+          "data.trend_data holds the last same-named builds, each with its own issue_summary and test_health."
+        ],
+        "returns": [
+          "data.issue_summary",
+          "data.issue_category",
+          "data.test_health",
+          "data.trend_data",
+          "data.report_status"
+        ],
+        "paginated": false,
+        "responses": {
+          "200": {
+            "description": "The build's overview.",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "success": { "type": "boolean" },
+                "data": { "type": "object" }
+              }
+            }
+          },
+          "401": { "$response": "DashboardUnauthorized" },
+          "403": { "$response": "DashboardForbidden" },
+          "404": { "$response": "DashboardNotFound" },
+          "500": { "$response": "DashboardUpstreamFailure" }
+        }
+      },
+      {
+        "name": "list_app_accessibility_screen_reader_build_issues",
+        "method": "GET",
+        "path": "/automate/api/v1/screen_reader/build/{th_build_id}/snapshot",
+        "host": "dashboard",
+        "auth": { "type": "oauth2" },
+        "mode": "read",
+        "entity": "screen_reader_build",
+        "path_params": [
+          {
+            "name": "th_build_id",
+            "type": "string",
+            "required": true,
+            "description": "The Screen Reader Automation build's th_build_id, from list_app_accessibility_screen_reader_builds.",
+            "example": "oplk236dalltvafvsmyxgexhguzjlgo7kushur2o"
+          }
+        ],
+        "query": [
+          {
+            "name": "scanWithIssuesOnly",
+            "type": "boolean",
+            "description": "true leaves out screens with no issues."
+          },
+          {
+            "name": "page",
+            "type": "integer",
+            "minimum": 1,
+            "default": 1,
+            "description": "Page number, from 1."
+          },
+          {
+            "name": "page_size",
+            "type": "integer",
+            "minimum": 1,
+            "default": 10,
+            "description": "Rows per page."
+          }
+        ],
+        "intent": "List a Screen Reader Automation build's scanned screens with the issues the screen reader pass found on each.",
+        "guidance": [
+          "Each data.details[] is one screen: meta has the screenshot and device, aggregated_results groups its issues by rule.",
+          "info.next is the following page, null on the last."
+        ],
+        "returns": ["data.details", "data.info"],
+        "paginated": true,
+        "responses": {
+          "200": {
+            "description": "A page of the build's screens with their issues.",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "success": { "type": "boolean" },
+                "data": {
+                  "type": "object",
+                  "properties": {
+                    "details": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "meta": {
+                            "type": "object",
+                            "description": "snapshot_id, screenshot_url and the screen's device."
+                          },
+                          "aggregated_results": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "description": "One rule: rule_id, label, severity and rule_issues[] (uid, status, duplication_count)."
+                            }
+                          },
+                          "bounding_boxes": { "type": "object" }
+                        }
+                      }
+                    },
+                    "info": { "$schema": "PageInfo" }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$response": "DashboardUnauthorized" },
+          "403": { "$response": "DashboardForbidden" },
+          "404": { "$response": "DashboardNotFound" },
+          "500": { "$response": "DashboardUpstreamFailure" }
+        }
       }
     ],
     "entities": {
@@ -1688,7 +3069,8 @@
           "automated accessibility build",
           "accessibility run",
           "app automate accessibility build",
-          "testhub build"
+          "testhub build",
+          "app accessibility project build"
         ],
         "id_convention": "th_build_id, a 40-character string, is the id the accessibility issue tools read; the SDK prints it as the testhub id. build_number counts per build name and the integer id is internal. Discover ids through the build list.",
         "parents": ["project"],
@@ -1702,7 +3084,8 @@
           "get_app_accessibility_build_overview",
           "get_app_accessibility_build_conformance_summary",
           "list_app_accessibility_comparable_builds",
-          "compare_app_accessibility_builds"
+          "compare_app_accessibility_builds",
+          "list_app_accessibility_build_issues"
         ],
         "key_facts": [
           "A build appears only if its tests ran with accessibility checks on; one without them is not listed.",
@@ -1734,7 +3117,8 @@
           "get_manual_app_accessibility_report_overview",
           "list_manual_app_accessibility_report_rules",
           "list_manual_app_accessibility_report_wcag_levels",
-          "get_manual_app_accessibility_report_conformance_summary"
+          "get_manual_app_accessibility_report_conformance_summary",
+          "list_manual_app_accessibility_report_issues"
         ],
         "key_facts": [
           "A report is in_progress while its session is still recording, and completed once it has ended.",
@@ -1772,6 +3156,66 @@
         "relations": [],
         "capabilities": ["list_app_accessibility_users"],
         "key_facts": ["Only people in the caller's own account are listed."]
+      },
+      "issue": {
+        "entity": "issue",
+        "title": "Issue",
+        "description": "One accessibility issue on an app screen, which can be hidden, unhidden or reviewed as on the dashboard.",
+        "aliases": [
+          "accessibility issue",
+          "app accessibility issue",
+          "violation",
+          "hide issue",
+          "hidden issue",
+          "needs review issue"
+        ],
+        "id_convention": "Named by its screen (details[].meta.snapshot_id), its rule (rule_id) and its uid, read from the build or report issue lists.",
+        "parents": ["build", "manual_report"],
+        "relations": [
+          { "entity": "build", "via": "found in an automated build" },
+          { "entity": "manual_report", "via": "found in a manual report" }
+        ],
+        "capabilities": [
+          "hide_app_accessibility_issues",
+          "unhide_app_accessibility_issues",
+          "review_app_accessibility_issue",
+          "count_app_accessibility_issues_to_hide",
+          "count_app_accessibility_issues_to_unhide",
+          "hide_manual_app_accessibility_issues",
+          "unhide_manual_app_accessibility_issues",
+          "review_manual_app_accessibility_issue",
+          "count_manual_app_accessibility_issues_to_hide",
+          "count_manual_app_accessibility_issues_to_unhide"
+        ],
+        "key_facts": [
+          "Hiding or reviewing changes the counts and score every viewer of the report sees.",
+          "A hide applies to this report only; persistent hides are dashboard-only."
+        ]
+      },
+      "screen_reader_build": {
+        "entity": "screen_reader_build",
+        "title": "Screen Reader Automation build",
+        "description": "One automated run that checked an app with a screen reader (TalkBack or VoiceOver), and the issues it found.",
+        "aliases": [
+          "screen reader build",
+          "screen reader automation build",
+          "sra build",
+          "screen reader report",
+          "talkback report",
+          "voiceover report"
+        ],
+        "id_convention": "th_build_id, a 40-character string, discovered through the project's screen reader build list.",
+        "parents": ["project"],
+        "relations": [{ "entity": "project", "via": "belongs to one project" }],
+        "capabilities": [
+          "list_app_accessibility_screen_reader_builds",
+          "get_app_accessibility_screen_reader_build",
+          "get_app_accessibility_screen_reader_build_overview",
+          "list_app_accessibility_screen_reader_build_issues"
+        ],
+        "key_facts": [
+          "Needs Screen Reader Automation on the account's plan; it is listed apart from ordinary builds."
+        ]
       }
     },
     "schemas": {

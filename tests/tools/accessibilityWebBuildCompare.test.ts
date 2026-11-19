@@ -7,7 +7,7 @@ import { beforeEach, describe, expect, it, Mock, vi } from "vitest";
 // The HTTP layer is mocked; the report fetcher and the CSV parser run as they do live.
 
 vi.mock("../../src/lib/apiClient.js", () => ({
-  apiClient: { get: vi.fn() },
+  apiClient: { get: vi.fn(), post: vi.fn() },
 }));
 // Web builds are read from the Accessibility dashboard with a minted token; no auth server here.
 vi.mock("../../src/tools/capability-registry/egress.js", async (original) => ({
@@ -28,6 +28,7 @@ import addAccessibilityTools from "../../src/tools/accessibility.js";
 import { reportExports } from "../../src/tools/accessiblity-utils/report-fetcher.js";
 
 const get = apiClient.get as Mock;
+const post = apiClient.post as Mock;
 const API = "https://api-accessibility.browserstack.com/api";
 const COMPARE = `${API}/automated-tests/v1/builds/compare/issues`;
 
@@ -145,15 +146,11 @@ function route({ url }: { url: string }): Reply | Promise<Reply> {
       },
     };
   }
-  if (u.pathname.endsWith("/automated-tests/v1/builds/issues")) {
-    const start = u.searchParams.get("buildUuid");
-    return {
-      ok: true,
-      status: 200,
-      data: start
-        ? { success: true, data: { task_id: `t-${start}` } }
-        : { success: true, data: { reportLink: `https://csv.example/${u.searchParams.get("taskId")!.slice(2)}` } },
-    };
+  // A build's issues export through the dashboard: the POST below queues it under the build's
+  // own id, and this read hands back its CSV link.
+  const exported = u.pathname.match(/^\/api\/export_reports\/([a-z0-9]{40})$/)?.[1];
+  if (exported) {
+    return { ok: true, status: 200, data: { success: true, data: { url: `https://csv.example/${exported}` } } };
   }
   if (url === `${APP_API}/build/${APP_BUILD}`) {
     return { ok: true, status: 200, data: { meta_data: { build_id: 7, th_build_id: APP_BUILD, name: "app", status: "done" } } };
@@ -166,7 +163,7 @@ function route({ url }: { url: string }): Reply | Promise<Reply> {
 
 const compareCalls = () =>
   get.mock.calls.map(([o]) => o.url as string).filter((u) => u.startsWith(COMPARE)).map((u) => new URL(u).searchParams);
-const exportCalls = () => get.mock.calls.map(([o]) => o.url as string).filter((u) => u.includes("buildUuid="));
+const exportCalls = () => post.mock.calls.map(([o]) => o.body?.th_build_id as string).filter(Boolean);
 
 function fetchIssues() {
   let handler: (...args: any[]) => any = () => undefined;
@@ -193,6 +190,12 @@ function listed(out: string, label: string): any[] {
 beforeEach(() => {
   get.mockReset();
   get.mockImplementation(route);
+  post.mockReset();
+  post.mockImplementation(async ({ url, body }: { url: string; body: { th_build_id: string } }) =>
+    url.endsWith("/api/export_reports")
+      ? { ok: true, status: 200, data: { success: true, data: { id: body.th_build_id } } }
+      : { ok: false, status: 404, data: {} },
+  );
   reportExports.clear();
   undated = new Set();
   statusOf = {};

@@ -227,13 +227,18 @@ const SCAN_BUILD_LINK_TTL_MS = 5 * 60 * 1000;
  */
 export const reportExports = new Map<
   string,
-  { link?: string; expiresAt?: number; taskId?: string }
+  { link?: string; expiresAt?: number; taskId?: string; startedAt?: number }
 >();
 export const MAX_REPORT_EXPORTS = 200;
 
 function rememberExport(
   key: string,
-  entry: { link?: string; expiresAt?: number; taskId?: string },
+  entry: {
+    link?: string;
+    expiresAt?: number;
+    taskId?: string;
+    startedAt?: number;
+  },
 ): void {
   reportExports.delete(key);
   reportExports.set(key, entry);
@@ -245,12 +250,16 @@ function rememberExport(
 
 /** An export still being generated when a call stopped waiting on it. */
 export class ExportPendingError extends Error {
+  /**
+   * `taskId` is undefined when the export running is one this call could not start or read,
+   * such as one started from the dashboard: the next call starts its own once that one ends.
+   */
   constructor(
-    readonly taskId: string,
+    readonly taskId: string | undefined,
     readonly waitedMs: number,
   ) {
     super(
-      `The report's CSV export is still being generated after ${Math.round(waitedMs / 1000)}s (export task ${taskId}).`,
+      `The report's CSV export is still being generated after ${Math.round(waitedMs / 1000)}s${taskId ? ` (export task ${taskId})` : " (an export of this report started elsewhere is still running)"}.`,
     );
     this.name = "ExportPendingError";
   }
@@ -449,6 +458,33 @@ function exportUrls(source: IssueSource): {
   }
 }
 
+/**
+ * A dashboard export still running this long is taken as failed and started again: the
+ * dashboard answers a running, a failed and an expired export alike (410), so a dead one
+ * would otherwise be waited on forever.
+ */
+const DASHBOARD_EXPORT_STALE_MS = 15 * 60 * 1000;
+
+/**
+ * The dashboard's export request for a report (`POST /api/export_reports`), or undefined for
+ * a report it cannot name: a Website Scanner run known only by its scan's ids, whose build id
+ * the dashboard needs, is still exported through the External API.
+ */
+function dashboardExportBody(
+  source: IssueSource,
+): Record<string, unknown> | undefined {
+  switch (source.kind) {
+    case "build":
+      return { type: "automatedTest", th_build_id: source.buildId };
+    case "scanBuild":
+      return { type: "websiteScan", th_build_id: source.thBuildId };
+    case "workflow":
+      return { type: "workflowScan", report_id: source.reportId };
+    default:
+      return undefined;
+  }
+}
+
 /** Why an export did not start, in the API's words, and where a build's id comes from when it is not found. */
 function startFailure(source: IssueSource, status: number, body: any): string {
   const reason =
@@ -516,6 +552,14 @@ export class AccessibilityReportFetcher {
   private async dashboardGet(
     path: string,
   ): Promise<{ ok: boolean; status: number; data: any }> {
+    return this.dashboardRequest("get", path);
+  }
+
+  private async dashboardRequest(
+    method: "get" | "post",
+    path: string,
+    body?: unknown,
+  ): Promise<{ ok: boolean; status: number; data: any }> {
     const credentials = this.dashboardCredentials();
     const send = async () => {
       this.dashboardAuth ??= signedHeaders(
@@ -530,11 +574,10 @@ export class AccessibilityReportFetcher {
         this.dashboardAuth = undefined;
         throw error;
       }
-      return apiClient.get({
-        url: `${dashboard()}${path}`,
-        headers,
-        raise_error: false,
-      });
+      const url = `${dashboard()}${path}`;
+      return method === "post"
+        ? apiClient.post({ url, headers, body, raise_error: false })
+        : apiClient.get({ url, headers, raise_error: false });
     };
     let resp = await send();
     if (resp.status === 401) {
@@ -939,6 +982,11 @@ export class AccessibilityReportFetcher {
     const known = options.stillProcessing ? undefined : reportExports.get(key);
     if (known?.link && (known.expiresAt ?? 0) > Date.now()) return known.link;
 
+    const exportBody = dashboardExportBody(source);
+    if (exportBody) {
+      return this.dashboardReportLink(source, key, exportBody, known, options);
+    }
+
     const urls = exportUrls(source);
     let taskId = options.exportTaskId ?? known?.taskId;
     if (!taskId) {
@@ -1005,6 +1053,106 @@ export class AccessibilityReportFetcher {
       const pause =
         EXPORT_POLL_MS[Math.min(attempt, EXPORT_POLL_MS.length - 1)];
       await new Promise((resolve) => setTimeout(resolve, pause));
+    }
+  }
+
+  /**
+   * The CSV link of a report, exported through the dashboard: `POST /api/export_reports`
+   * queues the export, `GET /api/export_reports/{id}` answers 410 until it has finished and then
+   * a presigned link. The dashboard also emails the user the file, as its own Export button does.
+   * An export of the same report already running (one started from the dashboard, say) is a
+   * 422 with no id to follow, so the create is retried until that one ends.
+   */
+  private async dashboardReportLink(
+    source: IssueSource,
+    key: string,
+    body: Record<string, unknown>,
+    known: { taskId?: string; startedAt?: number } | undefined,
+    options: {
+      exportTaskId?: string;
+      onWait?: (waitedMs: number) => Promise<void>;
+      stillProcessing?: boolean;
+    },
+  ): Promise<string> {
+    const started = Date.now();
+    const pause = (attempt: number) =>
+      new Promise((resolve) =>
+        setTimeout(
+          resolve,
+          EXPORT_POLL_MS[Math.min(attempt, EXPORT_POLL_MS.length - 1)],
+        ),
+      );
+    const stale =
+      known?.startedAt !== undefined &&
+      Date.now() - known.startedAt > DASHBOARD_EXPORT_STALE_MS;
+    let exportId = options.exportTaskId ?? (stale ? undefined : known?.taskId);
+    let exportStartedAt = exportId ? (known?.startedAt ?? started) : started;
+
+    for (let attempt = 0; !exportId; attempt++) {
+      const resp = await this.dashboardRequest(
+        "post",
+        "/api/export_reports",
+        body,
+      );
+      const id = resp.data?.data?.id;
+      if (resp.ok && id !== undefined && id !== null) {
+        exportId = String(id);
+        exportStartedAt = Date.now();
+        break;
+      }
+      const reason = resp.data?.message ?? resp.data?.error;
+      if (resp.status === 422 && /in progress/i.test(String(reason ?? ""))) {
+        const waited = Date.now() - started;
+        if (waited >= EXPORT_WAIT_MS)
+          throw new ExportPendingError(undefined, waited);
+        await options.onWait?.(waited);
+        await pause(attempt);
+        continue;
+      }
+      reportExports.delete(key);
+      // Unknown to the dashboard: for a run named by a report link's build id, the caller
+      // looks the run up in the scan list instead.
+      if (source.kind === "scanBuild" && resp.status === 404) {
+        throw new ScanRunNotFoundError(source.thBuildId);
+      }
+      const message = startFailure(source, resp.status, {
+        error: reason ? [String(reason)] : undefined,
+      });
+      const callers = resp.status >= 400 && resp.status < 500;
+      throw callers ? new CallerError(message) : new Error(message);
+    }
+    // As with the External export: a report still adding issues gets a snapshot, kept nowhere.
+    if (options.stillProcessing) reportExports.delete(key);
+    else rememberExport(key, { taskId: exportId, startedAt: exportStartedAt });
+
+    for (let attempt = 0; ; attempt++) {
+      const resp = await this.dashboardGet(
+        `/api/export_reports/${encodeURIComponent(exportId)}`,
+      );
+      const link = resp.ok ? resp.data?.data?.url : undefined;
+      if (typeof link === "string" && link) {
+        if (options.stillProcessing) reportExports.delete(key);
+        else {
+          const expiresAt =
+            source.kind === "scanBuild"
+              ? Math.min(linkExpiry(link), Date.now() + SCAN_BUILD_LINK_TTL_MS)
+              : linkExpiry(link);
+          rememberExport(key, { link, expiresAt });
+        }
+        return link;
+      }
+      // 410: not finished yet (the dashboard says the same of a failed or expired one).
+      if (resp.status !== 410) {
+        reportExports.delete(key);
+        throw new Error(
+          `Failed to fetch the report's CSV export: HTTP ${resp.status}`,
+        );
+      }
+      const waited = Date.now() - started;
+      if (waited >= EXPORT_WAIT_MS)
+        throw new ExportPendingError(exportId, waited);
+      await options.onWait?.(waited);
+      await pause(attempt);
     }
   }
 

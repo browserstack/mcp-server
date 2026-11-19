@@ -79,7 +79,12 @@ const REGIONAL_HOSTS: Record<
 > = {
   tm: { base: "testManagement" },
   tra: { base: "observabilityApi" },
-  app_accessibility: { base: "appAccessibilityApi" },
+  // `dashboard`: as for web_accessibility below, read with an ai_agent token on the routes
+  // app-accessibility's allowlist admits.
+  app_accessibility: {
+    base: "appAccessibilityApi",
+    hosts: { dashboard: "appAccessibilityDashboard" },
+  },
   // `dashboard`: the dashboard's own routes, which never read Basic auth; those capabilities
   // declare oauth2 themselves and the backend admits only what its ai_agent scope allows.
   web_accessibility: {
@@ -163,6 +168,7 @@ function credentialsFrom(config: BrowserStackConfig): Credentials {
  */
 const STRICT_NAMED_HOST_PRODUCTS: ReadonlySet<string> = new Set([
   "web_accessibility",
+  "app_accessibility",
 ]);
 
 /**

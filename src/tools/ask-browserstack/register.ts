@@ -24,6 +24,7 @@
  * itself because a headless client returns `cancel`, which is a deny.
  */
 
+import { FIX_WORKFLOW_POINTER } from "../accessiblity-utils/fix-workflow.js";
 import {
   McpServer,
   RegisteredTool,
@@ -958,7 +959,44 @@ export function addAskBrowserStackAITool(
     },
   );
 
+  // An a11y answer is advice; when the user wants the issues fixed in code, point the agent
+  // at the fix workflow. Wrapped here so every one of the handler's return paths gets it.
+  const askHandler = tools.askBrowserStackAI.handler as unknown as (
+    args: { product?: string },
+    extra: unknown,
+  ) => Promise<CallToolResult>;
+  tools.askBrowserStackAI.handler = (async (
+    args: { product?: string },
+    extra: unknown,
+  ) => {
+    const result = await askHandler(args, extra);
+    if (args?.product !== "a11y" || !isFinishedAnswer(result)) return result;
+    return {
+      ...result,
+      content: [
+        ...(result.content ?? []),
+        { type: "text", text: FIX_WORKFLOW_POINTER },
+      ],
+    };
+  }) as unknown as typeof tools.askBrowserStackAI.handler;
+
   return tools;
+}
+
+/**
+ * A finished answer (`status: "ok"`), as opposed to a run waiting on the user (approval, an
+ * upload, questions), a refusal, or a failure. Only a finished answer gets the fix-workflow
+ * pointer: on a reply that says "ask the user, then call again" it is a competing next step.
+ */
+function isFinishedAnswer(result: CallToolResult): boolean {
+  if (result.isError) return false;
+  const first = result.content?.[0];
+  if (first?.type !== "text") return false;
+  try {
+    return JSON.parse(first.text)?.status === "ok";
+  } catch {
+    return false;
+  }
 }
 
 /** The tool-adder the server factory calls. */

@@ -1891,6 +1891,79 @@ describe("askBrowserStackAI, against the injected seam", () => {
     });
   });
 
+  it("ends an a11y answer, and only an a11y answer, with the fix workflow pointer", async () => {
+    const answered = (product: string) => {
+      const mcp = new McpServer({ name: "t", version: "0" });
+      const tools = addAskBrowserStackAITool(mcp, {
+        agentUrl: () => "https://atlas.example/agent",
+        mintToken: async () => MINTED,
+        credentialsFor: () => ({ username: "u", accessKey: "k" }),
+        deferredTransport: (async () => ({
+          status: 200,
+          body: { status: "ok", answer: "Fix the contrast first." },
+        })) as never,
+      });
+      return tools.askBrowserStackAI.handler({ product, query: "what to fix first?" }, {} as any);
+    };
+    const POINTER = "first call fetchAccessibilityIssues with fixWorkflow: true";
+
+    const a11y = await answered("a11y");
+    expect(a11y.content.at(-1).text).toContain(POINTER);
+    const tm = await answered("tm");
+    expect(JSON.stringify(tm.content)).not.toContain(POINTER);
+  });
+
+  // Only a finished answer gets it: on a reply that says "ask the user, then call again" the
+  // pointer would be a competing next step.
+  it.each<[string, number, Record<string, unknown>, string]>([
+    [
+      "a run waiting for approval",
+      200,
+      {
+        ok: false,
+        status: "needs_approval",
+        run_id: "run-" + "b".repeat(32),
+        asks: [{ perm_id: "perm-1", description: "Hide 3 issues", product: "a11y", mode: "ask-always" }],
+      },
+      "needs_approval",
+    ],
+    ["a run a human declined", 200, { status: "blocked", answer: "Not done.", needs_approval: ["Hide 3 issues"] }, "blocked"],
+    ["an account without Ask AI", 403, { detail: "agent is not enabled for this account" }, "error"],
+  ])("does not add the pointer to %s", async (_label, status, body, expected) => {
+    const mcp = new McpServer({ name: "t", version: "0" });
+    const tools = addAskBrowserStackAITool(mcp, {
+      agentUrl: () => "https://atlas.example/agent",
+      mintToken: async () => MINTED,
+      credentialsFor: () => ({ username: "u", accessKey: "k" }),
+      deferredTransport: (async () => ({ status, body })) as never,
+    });
+
+    const result = await tools.askBrowserStackAI.handler(
+      { product: "a11y", query: "hide the contrast issues" },
+      {} as any,
+    );
+    expect(JSON.parse(result.content[0].text).status).toBe(expected);
+    expect(JSON.stringify(result.content)).not.toContain("fixWorkflow");
+  });
+
+  it("does not add the pointer to a failed a11y call", async () => {
+    const mcp = new McpServer({ name: "t", version: "0" });
+    const tools = addAskBrowserStackAITool(mcp, {
+      agentUrl: () => "https://atlas.example/agent",
+      mintToken: async () => MINTED,
+      credentialsFor: () => ({ username: "u", accessKey: "k" }),
+      deferredTransport: (async () => {
+        throw new Error("boom");
+      }) as never,
+    });
+
+    const result = await tools.askBrowserStackAI.handler(
+      { product: "a11y", query: "what to fix first?" },
+      {} as any,
+    );
+    expect(JSON.stringify(result.content)).not.toContain("fixWorkflow");
+  });
+
   it("reports a transport failure with nothing left to clean up", async () => {
     // Under A2 this test existed because a thrown transport could strand a bound port,
     // and the assertion was that the listener still closed. A1 binds NOTHING — no port,

@@ -69,7 +69,7 @@ describe("a file parameter", () => {
     const { bind } = await bindWith(base);
     expect(() =>
       bind(CAPABILITY as never, { body: { file: outside } }),
-    ).toThrow(/must be located inside/);
+    ).toThrow(/must be an existing file inside/);
   });
 
   it("refuses an extension that is not an app build", async () => {
@@ -85,7 +85,7 @@ describe("a file parameter", () => {
     const { bind } = await bindWith(base);
     expect(() =>
       bind(CAPABILITY as never, { body: { file: join(base, "gone.apk") } }),
-    ).toThrow(/File not found/);
+    ).toThrow(/must be an existing file inside/);
   });
 
   it("refuses a build under a hidden directory", async () => {
@@ -239,7 +239,7 @@ describe("tm's upload_generic_attachments in the shipped index", () => {
     expect(file.max_bytes).toBe(50 * 1024 * 1024);
   });
 
-  it("accepts at least every extension the uploadFile tool accepts for tm", async () => {
+  it("accepts every generic Test Management attachment extension", async () => {
     const { readFileSync } = await import("node:fs");
     const { TEST_MANAGEMENT_ATTACHMENT_EXTENSIONS } = await import(
       "../../src/lib/upload-validator.js"

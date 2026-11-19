@@ -1,5 +1,10 @@
 import { AxiosError } from "axios";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import {
+  markCallerFault,
+  recordRegionProbeFailure,
+} from "./upstream-status.js";
+import { wrapUntrusted } from "./untrusted-content.js";
 
 const MAX_ERROR_TEXT = 500;
 const BODY_FIELDS = ["message", "error", "errors"] as const;
@@ -52,13 +57,18 @@ function bodyText(data: unknown): string | undefined {
  * it prefers the body's `message`, `error` or `errors` field, serialising
  * objects, and uses the whole body when none of those fields exist. An empty,
  * whitespace-only or HTML-document body falls back to the error's own message.
+ *
+ * The backend response body is untrusted content, so it is returned wrapped
+ * with {@link wrapUntrusted}, the same as other backend-supplied output. It is
+ * capped first so the wrapper's closing marker is never truncated. The
+ * server-authored fallbacks (`err.message`, `defaultText`) are returned plain.
  * @param err - The error object to describe
  * @param defaultText - The fallback error message
  */
 export function errorText(err: unknown, defaultText: string): string {
   if (err instanceof AxiosError) {
     const text = bodyText(err.response?.data);
-    if (text) return text;
+    if (text) return wrapUntrusted("API response", text);
     return clip(err.message || defaultText);
   }
   if (err instanceof Error) return clip(err.message || defaultText);
@@ -78,6 +88,41 @@ export function formatAxiosError(
     content: [{ type: "text", text: errorText(err, defaultText) }],
     isError: true,
   };
+}
+
+/**
+ * The caller's input or account set-up was rejected: a missing or unsupported argument,
+ * an id that names nothing, a file that is not there. Telemetry attributes the call to
+ * the caller, and keeps doing so when a catch block rewraps the error. `name` stays
+ * "Error" so the text shown to the user is unchanged.
+ */
+export class CallerError extends Error {
+  constructor(message: string) {
+    super(message);
+    markCallerFault();
+  }
+}
+
+/**
+ * The Test Management region probe found no host that accepted the account. The
+ * message is what the user sees (unchanged); `results` keeps each host's answer so
+ * telemetry can attribute the failure by what the US host did rather than by the last
+ * host tried: a 402 is an account without the product, anything else is the probe itself.
+ */
+export class RegionProbeError extends Error {
+  constructor(
+    message: string,
+    readonly results: ReadonlyArray<{ host: string; status: number }>,
+  ) {
+    super(message);
+    this.name = "RegionProbeError";
+    recordRegionProbeFailure(this.usStatus);
+  }
+
+  /** What the first (US) host answered; 0 when the connection was never answered. */
+  get usStatus(): number {
+    return this.results[0]?.status ?? 0;
+  }
 }
 
 /** A failed HTTP request, keeping the status for callers to branch on. */

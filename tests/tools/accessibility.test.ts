@@ -12,6 +12,7 @@ vi.mock("../../src/tools/accessiblity-utils/scanner", () => ({
     startScan: vi.fn().mockResolvedValue({ id: "scan-1", scanRunId: "run-1" }),
     waitUntilComplete: vi.fn().mockResolvedValue({ status: "completed" }),
   })),
+  ScanRefusedError: class extends Error {},
 }));
 vi.mock("../../src/tools/accessiblity-utils/report-fetcher", () => ({
   AccessibilityReportFetcher: vi.fn().mockImplementation(() => ({

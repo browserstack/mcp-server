@@ -8,6 +8,7 @@ import {
   TestDetails,
   TestFailureSignature,
 } from "./types.js";
+import { trackedFetch } from "../../lib/upstream-status.js";
 
 // Keeps the response payload lean — never full stack traces.
 const ERROR_SUMMARY_MAX = 200;
@@ -20,9 +21,9 @@ async function fetchWithRetry(
   init: RequestInit,
 ): Promise<Response> {
   try {
-    return await fetch(url, init);
+    return await trackedFetch(url, init);
   } catch {
-    return await fetch(url, init);
+    return await trackedFetch(url, init);
   }
 }
 

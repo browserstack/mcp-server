@@ -45,6 +45,7 @@ import {
   RUN_APP_AUTOMATE_SCHEMA,
 } from "./appautomate-utils/native-execution/constants.js";
 import { getRegionalHost } from "../lib/regional-host.js";
+import { CallerError } from "../lib/error.js";
 
 /**
  * Launches an app on a selected BrowserStack device and takes a screenshot.
@@ -78,7 +79,9 @@ async function takeAppScreenshot(args: {
     );
 
     if (!platformData) {
-      throw new Error(`Platform ${desiredPlatform} not found in device cache.`);
+      throw new CallerError(
+        `Platform ${desiredPlatform} not found in device cache.`,
+      );
     }
 
     const matchingDevices = findMatchingDevice(
@@ -97,7 +100,7 @@ async function takeAppScreenshot(args: {
     );
 
     if (!selectedDevice) {
-      throw new Error(
+      throw new CallerError(
         `Device "${desiredPhone}" with version ${desiredPlatformVersion} not found.`,
       );
     }
@@ -110,7 +113,7 @@ async function takeAppScreenshot(args: {
       logger.info(`Using provided BrowserStack app URL: ${app_url}`);
     } else {
       if (!appPath) {
-        throw new Error(
+        throw new CallerError(
           "appPath is required when browserstackAppUrl is not provided",
         );
       }
@@ -242,12 +245,12 @@ async function runAppTestsOnBrowserStack(
   const accessibility = args.accessibility === true;
   // Validate that either paths or URLs are provided for both app and test suite
   if (!args.browserstackAppUrl && !args.appPath) {
-    throw new Error(
+    throw new CallerError(
       "appPath is required when browserstackAppUrl is not provided",
     );
   }
   if (!args.browserstackTestSuiteUrl && !args.testSuitePath) {
-    throw new Error(
+    throw new CallerError(
       "testSuitePath is required when browserstackTestSuiteUrl is not provided",
     );
   }
@@ -368,7 +371,7 @@ async function runAppTestsOnBrowserStack(
       }
     }
     default:
-      throw new Error(
+      throw new CallerError(
         `Unsupported automation framework: ${args.detectedAutomationFramework}. If you need support for this framework, please open an issue at Github`,
       );
   }

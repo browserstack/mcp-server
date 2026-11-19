@@ -48,6 +48,8 @@ export async function queryAccessibilityRAG(
 
   const responseData = response.data as any;
 
+  // The RAG endpoint answered 2xx and reported failure in its body: "Query is too long" is
+  // the caller's, "Something went wrong" is not. Untagged until the message says which.
   if (!responseData.success) {
     throw new Error("Something went wrong: " + responseData.message);
   }

@@ -5,6 +5,7 @@ import {
 } from "../../src/tools/automate-utils/fetch-screenshots";
 import { SessionType } from "../../src/lib/constants";
 import { apiClient } from "../../src/lib/apiClient";
+import { RedirectRefusedError } from "../../src/lib/trusted-hosts";
 
 vi.mock("../../src/lib/apiClient", () => ({
   apiClient: { get: vi.fn() },
@@ -76,6 +77,19 @@ describe("parseScreenshotUrls", () => {
     ].join("\r\n");
 
     expect(parseScreenshotUrls(logs)).toEqual([b2, direct]);
+  });
+
+  it("accepts regional S3 bucket hosts with dashed region segments", () => {
+    const west = `https://bstack-shots.s3-us-west-2.amazonaws.com/${S}/a.png`;
+    const dual = `https://bstack-shots.s3.dualstack.us-east-1.amazonaws.com/${S}/b.png`;
+    const dotRegion = `https://bstack-shots.s3.ap-south-1.amazonaws.com/${S}/c.png`;
+    const logs = [
+      `2026-10-13 9:00:00:000 DEBUG ${west}`,
+      `2026-10-13 9:00:01:000 DEBUG ${dual}`,
+      `2026-10-13 9:00:02:000 DEBUG ${dotRegion}`,
+    ].join("\r\n");
+
+    expect(parseScreenshotUrls(logs)).toEqual([west, dual, dotRegion]);
   });
 
   it("skips intermediate lines between a screenshot request and its response", () => {
@@ -158,7 +172,10 @@ describe("fetchAutomationScreenshots", () => {
   const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a]);
 
   it("returns the last five screenshots with detected mime types", async () => {
-    const urls = Array.from({ length: 6 }, (_, i) => `${S3}/screenshot-${i}.jpeg`);
+    const urls = Array.from(
+      { length: 6 },
+      (_, i) => `${S3}/screenshot-${i}.jpeg`,
+    );
     const logs = urls
       .map((u, i) => `2026-10-13 9:00:0${i}:000 DEBUG ${u}`)
       .concat(requestedOnlyLogs.split("\n").slice(0, 2))
@@ -188,5 +205,42 @@ describe("fetchAutomationScreenshots", () => {
       "image/jpeg",
       "image/png",
     ]);
+  });
+
+  it("skips a screenshot whose download is refused for redirecting off trusted hosts", async () => {
+    const good = `${S3}/good.png`;
+    const bad = `${S3}/bad.png`;
+    const logs = [
+      `2026-10-13 9:00:00:000 DEBUG ${good}`,
+      `2026-10-13 9:00:01:000 DEBUG ${bad}`,
+    ].join("\n");
+
+    (apiClient.get as Mock).mockImplementation(async ({ url }) => {
+      if (url.endsWith("/logs")) {
+        return { ok: true, status: 200, data: logs };
+      }
+      if (url === bad) {
+        // Mirror how axios + the redirect library surface the guard's error:
+        // wrapped two levels down the cause chain.
+        const refusal = new RedirectRefusedError("nope");
+        const frFailure = Object.assign(new Error("redirect failed"), {
+          code: "ERR_FR_REDIRECTION_FAILURE",
+          cause: refusal,
+        });
+        throw Object.assign(new Error("Request failed"), {
+          name: "AxiosError",
+          cause: frFailure,
+        });
+      }
+      return { ok: true, status: 200, data: png };
+    });
+
+    const result = await fetchAutomationScreenshots(
+      S,
+      SessionType.Automate,
+      mockConfig,
+    );
+
+    expect(result.map((s) => s.url)).toEqual([good]);
   });
 });

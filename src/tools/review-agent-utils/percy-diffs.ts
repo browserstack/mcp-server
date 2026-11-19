@@ -1,3 +1,4 @@
+import { trackedFetch } from "../../lib/upstream-status.js";
 export interface PercySnapshotDiff {
   id: string;
   name: string | null;
@@ -12,7 +13,7 @@ export async function getPercySnapshotDiff(
 ): Promise<PercySnapshotDiff[]> {
   const apiUrl = `https://percy.io/api/v1/snapshots/${snapshotId}`;
 
-  const response = await fetch(apiUrl, {
+  const response = await trackedFetch(apiUrl, {
     headers: {
       Authorization: `Token token=${percyToken}`,
       "Content-Type": "application/json",

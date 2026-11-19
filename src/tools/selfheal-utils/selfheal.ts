@@ -45,6 +45,9 @@ import { getBrowserStackAuth } from "../../lib/get-auth.js";
 import { BrowserStackConfig } from "../../lib/types.js";
 import { apiClient } from "../../lib/apiClient.js";
 import { getRegionalHost, sessionApiHost } from "../../lib/regional-host.js";
+import { CallerError } from "../../lib/error.js";
+import { encodePathSegment } from "../../lib/path-segment.js";
+import { trustedRedirectGuard } from "../../lib/trusted-hosts.js";
 
 type SessionType = "automate" | "app-automate";
 
@@ -63,7 +66,7 @@ export async function fetchSelfHealingReportByBuild(
   config: BrowserStackConfig,
 ): Promise<SelfHealingReport> {
   if (!buildUuid) {
-    throw new Error("buildUuid is required");
+    throw new CallerError("buildUuid is required");
   }
 
   const authString = getBrowserStackAuth(config);
@@ -87,6 +90,8 @@ export async function fetchSelfHealingReportByBuild(
 
   const reportResp = await apiClient.get<SelfHealingReport>({
     url: presignedUrl,
+    maxRedirects: 5,
+    beforeRedirect: trustedRedirectGuard("self-healing report"),
   });
   await assertOkResponse(reportResp, "self-healing report payload");
 
@@ -134,7 +139,7 @@ export async function getSelfHealSelectors(
   const productPath =
     sessionType === "app-automate" ? "app-automate" : "automate";
   const host = sessionApiHost(sessionType);
-  const url = `${host}/${productPath}/sessions/${sessionId}/logs`;
+  const url = `${host}/${productPath}/sessions/${encodePathSegment(sessionId, "sessionId")}/logs`;
 
   const response = await apiClient.get({
     url,

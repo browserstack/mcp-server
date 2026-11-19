@@ -11,10 +11,14 @@ vi.mock("../../src/lib/apiClient.js", () => ({
 import { apiClient } from "../../src/lib/apiClient.js";
 import {
   AccessibilityReportFetcher,
+  foundScanRuns,
   reportExports,
   ScanRunNotFoundError,
   scanRunLink,
 } from "../../src/tools/accessiblity-utils/report-fetcher.js";
+
+// Runs found by build id are cached for the process; each test starts without them.
+beforeEach(() => foundScanRuns.clear());
 
 const get = apiClient.get as Mock;
 const API = "https://api-accessibility.browserstack.com/api";

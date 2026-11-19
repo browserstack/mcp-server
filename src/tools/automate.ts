@@ -15,9 +15,14 @@ import {
   resolveHashedBuildId,
 } from "./automate-utils/resolve-hashed-build-id.js";
 import { SessionType } from "../lib/constants.js";
+import {
+  findFrameworkBuild,
+  frameworkSessions,
+} from "./appautomate-utils/framework-builds.js";
 import { trackMCP } from "../lib/instrumentation.js";
 import logger from "../logger.js";
 import { BrowserStackConfig } from "../lib/types.js";
+import { wrapUntrusted } from "../lib/untrusted-content.js";
 
 // Tool function that fetches and processes screenshots from BrowserStack Automate session
 export async function fetchAutomationScreenshotsTool(
@@ -34,6 +39,9 @@ export async function fetchAutomationScreenshotsTool(
       config,
     );
 
+    // Not tagged as the caller's: an empty result is also what a parsing bug in our
+    // own log reader produces (#545), so it stays unattributed until the tool can tell
+    // "nothing captured" from "nothing found".
     if (screenshots.length === 0) {
       return {
         content: [
@@ -160,13 +168,29 @@ export async function listSessionIdsTool(
       }
     }
 
+    // Framework builds (Maestro, Espresso, XCUITest, Flutter) are empty on the
+    // generic App Automate list; their own build endpoint has the sessions.
+    if (sessions.length === 0 && sessionType === SessionType.AppAutomate) {
+      const framework = await findFrameworkBuild(buildId, config);
+      if (framework) {
+        const wanted = args.status?.trim().toLowerCase();
+        const offset = args.offset ?? 0;
+        sessions = frameworkSessions(framework)
+          .filter((s) => !wanted || (s.status ?? "").toLowerCase() === wanted)
+          .slice(offset, offset + (args.limit ?? DEFAULT_SESSION_LIST_LIMIT));
+        notes.push(
+          `This build ran through the ${framework.framework.name} framework API; sessions are listed from it.`,
+        );
+      }
+    }
+
     const content: CallToolResult["content"] = [
       {
         type: "text",
         text:
           sessions.length === 0
             ? "No sessions found for this hashed build ID."
-            : JSON.stringify(sessions, null, 2),
+            : wrapUntrusted("session list", JSON.stringify(sessions, null, 2)),
       },
     ];
     for (const note of notes) {

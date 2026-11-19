@@ -132,7 +132,7 @@ describe('BrowserStack Failure Logs', () => {
         sessionType: 'app-automate'
       }, mockServer);
 
-      expect(appAutomate.retrieveDeviceLogs).toHaveBeenCalledWith('test-session', 'hashed-app-build', mockServer);
+      expect(appAutomate.retrieveDeviceLogs).toHaveBeenCalledWith('test-session', 'hashed-app-build', mockServer, { throwOnNotFound: true });
     });
 
     it('should resolve buildId from the session when not provided', async () => {
@@ -151,6 +151,7 @@ describe('BrowserStack Failure Logs', () => {
         'test-session',
         'resolved-build-id',
         mockServer,
+        { throwOnNotFound: true },
       );
       expect(result.isError).toBeFalsy();
     });
@@ -171,6 +172,7 @@ describe('BrowserStack Failure Logs', () => {
         'test-session',
         'explicit-build-id',
         mockServer,
+        { throwOnNotFound: true },
       );
     });
 
@@ -201,7 +203,7 @@ describe('BrowserStack Failure Logs', () => {
       }, mockServer);
 
       expect(result.isError).toBeFalsy();
-      expect(appAutomate.retrieveDeviceLogs).toHaveBeenCalledWith('test-session', 'app-build', mockServer);
+      expect(appAutomate.retrieveDeviceLogs).toHaveBeenCalledWith('test-session', 'app-build', mockServer, { throwOnNotFound: true });
     });
 
     it('fetches appiumLogs for sessionLogs and reports networkLogs as unavailable on an app session', async () => {
@@ -217,7 +219,7 @@ describe('BrowserStack Failure Logs', () => {
       }, mockServer);
 
       expect(result.isError).toBeFalsy();
-      expect(appAutomate.retrieveAppiumLogs).toHaveBeenCalledWith('test-session', 'app-build', mockServer);
+      expect(appAutomate.retrieveAppiumLogs).toHaveBeenCalledWith('test-session', 'app-build', mockServer, { throwOnNotFound: true });
       expect(appAutomate.retrieveDeviceLogs).not.toHaveBeenCalled();
       expect(automate.retrieveSessionFailures).not.toHaveBeenCalled();
       const texts = result.content.map((c: any) => c.text).join('\n');
@@ -329,7 +331,7 @@ describe('BrowserStack Failure Logs', () => {
         sessionType: 'app-automate'
       }, mockServer);
 
-      expect(appAutomate.retrieveDeviceLogs).toHaveBeenCalledWith(mockSessionId, mockBuildId, expect.anything());
+      expect(appAutomate.retrieveDeviceLogs).toHaveBeenCalledWith(mockSessionId, mockBuildId, expect.anything(), { throwOnNotFound: true });
       if (result.content?.[0]?.type === 'text') {
         expect(result.content[0].text).toContain('Device Failures (1 found)');
         expect(result.content[0].text).toContain('Fatal Exception');
@@ -345,7 +347,7 @@ describe('BrowserStack Failure Logs', () => {
         sessionType: 'app-automate'
       }, mockServer);
 
-      expect(appAutomate.retrieveAppiumLogs).toHaveBeenCalledWith(mockSessionId, mockBuildId, expect.anything());
+      expect(appAutomate.retrieveAppiumLogs).toHaveBeenCalledWith(mockSessionId, mockBuildId, expect.anything(), { throwOnNotFound: true });
       if (result.content?.[0]?.type === 'text') {
         expect(result.content[0].text).toContain('Appium Failures (1 found)');
         expect(result.content[0].text).toContain('Element not found');
@@ -361,7 +363,7 @@ describe('BrowserStack Failure Logs', () => {
         sessionType: 'app-automate'
       }, mockServer);
 
-      expect(appAutomate.retrieveCrashLogs).toHaveBeenCalledWith(mockSessionId, mockBuildId, expect.anything());
+      expect(appAutomate.retrieveCrashLogs).toHaveBeenCalledWith(mockSessionId, mockBuildId, expect.anything(), { throwOnNotFound: true });
       if (result.content?.[0]?.type === 'text') {
         expect(result.content[0].text).toContain('Crash Failures (1 found)');
         expect(result.content[0].text).toContain('signal 11');
@@ -503,7 +505,7 @@ console.error('Uncaught TypeError')
       }, mockServer);
 
       expect(resolveAppAutomateBuildId).toHaveBeenCalledTimes(1);
-      expect(appAutomate.retrieveAppiumLogs).toHaveBeenCalledWith('sess-3', 'resolved-build', mockServer);
+      expect(appAutomate.retrieveAppiumLogs).toHaveBeenCalledWith('sess-3', 'resolved-build', mockServer, { throwOnNotFound: true });
       expect(retrieveSessionVideo).toHaveBeenCalledWith('sess-3', 'app-automate', mockServer);
       expect(result.content.map((c: any) => c.text)).toEqual([
         'Appium Failures (1 found)',

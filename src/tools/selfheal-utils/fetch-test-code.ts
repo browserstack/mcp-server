@@ -1,8 +1,10 @@
 import { getBrowserStackAuth } from "../../lib/get-auth.js";
 import { BrowserStackConfig } from "../../lib/types.js";
 import { apiClient } from "../../lib/apiClient.js";
+import { wrapUntrusted } from "../../lib/untrusted-content.js";
 import logger from "../../logger.js";
 import { getRegionalHost } from "../../lib/regional-host.js";
+import { CallerError } from "../../lib/error.js";
 
 export interface TestCodeEntry {
   testRunId: number;
@@ -97,7 +99,7 @@ export async function fetchTestCodeBySession(
   config: BrowserStackConfig,
 ): Promise<SessionTestCode> {
   if (!sessionId) {
-    throw new Error("sessionId is required to fetch test code");
+    throw new CallerError("sessionId is required to fetch test code");
   }
 
   const authString = getBrowserStackAuth(config);
@@ -324,7 +326,7 @@ export function formatTestCodeAsContext(
       const fileInfo = t.filename ? `File: ${t.filename}` : "File: unknown";
       const urlInfo = t.url ? `URL: ${t.url}` : "";
       const header = [fileInfo, urlInfo].filter(Boolean).join("\n");
-      return `${header}\n\`\`\`\n${t.code}\n\`\`\``;
+      return wrapUntrusted("test code", `${header}\n\`\`\`\n${t.code}\n\`\`\``);
     });
 
     sections.push(`Session: ${session.sessionId}\n${testLines.join("\n\n")}`);

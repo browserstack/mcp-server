@@ -136,7 +136,7 @@ describe("the capability index is shared across servers", () => {
     await call(bob, "invokeCapability", args);
 
     const sent = fetch.mock.calls
-      .filter(([url]) => String(url).startsWith("https://tm.example.com"))
+      .filter(([url]) => String(url).startsWith("https://tm.example.com/"))
       .map(([, init]) => init.headers);
     const asAlice = await headersFor(ALICE);
     const asBob = await headersFor(BOB);

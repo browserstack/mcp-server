@@ -58,7 +58,7 @@ describe("the fix workflow over MCP", () => {
     await client.close();
   });
 
-  it("sends general WCAG questions to askBrowserStackAI, not the deprecated accessibilityExpert", async () => {
+  it("sends general WCAG questions to askBrowserStackAI, not the removed accessibilityExpert", async () => {
     const client = await connected();
 
     const { messages } = await client.getPrompt({ name: "fix-accessibility-issues", arguments: {} });

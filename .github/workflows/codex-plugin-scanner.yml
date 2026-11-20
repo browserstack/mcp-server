@@ -1,0 +1,16 @@
+name: Codex Plugin Scanner
+
+on:
+  push:
+    paths:
+      - '.codex-plugin/plugin.json'
+  pull_request:
+    paths:
+      - '.codex-plugin/plugin.json'
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashgraph-online/codex-plugin-scanner-action@v1

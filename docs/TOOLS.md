@@ -358,6 +358,26 @@ searchCapability  →  describeCapability  →  invokeCapability
 </details>
 
 <details>
+<summary><b>🐞 Bug Capture</b></summary>
+
+Read a Bug Capture recording from its link (`toolkit.browserstack.com/sessions/<id>`, or a migrated Bird Eats Bug link). You can read a recording here only if you can open it in Bug Capture itself. Auth headers and cookies are always masked, and request and response bodies are off unless asked for.
+
+| Tool | What it does |
+|---|---|
+| `get_bug_capture_recording` | Summarize one recording: title, description, start page, browser, OS, when it started, which data it holds, and how many console logs, errors and failed requests it has. Start here. |
+| `list_bug_capture_console_logs` | List the recording's console logs (errors by default, or warnings, or every level), paged. |
+| `list_bug_capture_errors` | List the JavaScript errors the recording caught, with message, stack trace and source file, line and column, paged. |
+| `list_bug_capture_network_requests` | List the recording's network requests (failed ones by default) with method, URL, status, duration and redacted headers; bodies only with `include_bodies=true`. Paged. |
+
+Example prompts:
+
+- "Review this bug and propose a fix: https://toolkit.browserstack.com/sessions/&lt;id&gt;"
+- "Summarize this Bug Capture recording: &lt;link&gt;"
+- "Which API calls failed in this recording? &lt;link&gt;"
+
+</details>
+
+<details>
 <summary><b>📊 Test Reporting & Analytics</b></summary>
 
 | Tool | What it does |

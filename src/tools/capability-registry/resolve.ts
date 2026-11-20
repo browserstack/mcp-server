@@ -15,7 +15,12 @@
 
 import { invalidateToken } from "../../lib/central-oauth.js";
 import { bind, GroupedArguments } from "./bind.js";
-import { authHeaders, Credentials, Transport } from "./egress.js";
+import {
+  authHeaders,
+  clientHeaders,
+  Credentials,
+  Transport,
+} from "./egress.js";
 import { resolveScope, resolveTokenUrl } from "./oauth.js";
 import { AuthScheme } from "./types.js";
 import { openAsBlob } from "node:fs";
@@ -133,6 +138,8 @@ export async function invoke(
   transport: Transport,
   auth?: AuthScheme,
   product?: string,
+  /** The connected MCP client's name, sent as `x-mcp-client`. */
+  client?: string,
 ): Promise<InvokeResult> {
   if (!baseUrl)
     throw new InvocationError("no base URL is configured for that product");
@@ -146,7 +153,10 @@ export async function invoke(
       ? await multipartBody(capability, bound.body)
       : undefined;
   const send = async () => {
-    const headers = await authHeaders(credentials, auth, product);
+    const headers = {
+      ...(await authHeaders(credentials, auth, product)),
+      ...clientHeaders(client),
+    };
     if (multipart) {
       // fetch writes its own Content-Type with the boundary. Leaving the JSON one on sends
       // a body the product cannot parse, under a header that says it should be able to.

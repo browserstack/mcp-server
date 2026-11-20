@@ -93,8 +93,8 @@ export default function addAppLiveTools(
   const description =
     "Open a manual App Live session for the user to operate by hand; the agent cannot drive it." +
     (capabilityRegistryEnabled()
-      ? " To tap/type/read yourself: mobiledevicecontrol via invokeCapability." +
-        " Uploaded apps: applive list_apps."
+      ? " Use invokeCapability: mobiledevicecontrol to tap/type/read;" +
+        " applive list_apps to reuse an upload."
       : "");
 
   tools.runAppLiveSession = server.tool(
@@ -116,14 +116,13 @@ export default function addAppLiveTools(
         .string()
         .optional()
         .describe(
-          "Local .apk/.ipa in MCP_UPLOAD_BASE_DIR; omit if browserstackAppUrl set.",
+          "Local .apk/.ipa in MCP_UPLOAD_BASE_DIR. Check applive list_apps first;" +
+            " if already uploaded pass browserstackAppUrl.",
         ),
       browserstackAppUrl: z
         .string()
         .optional()
-        .describe(
-          "bs:// app_url of an already-uploaded app (applive list_apps).",
-        ),
+        .describe("bs:// app_url from applive list_apps."),
     },
     {
       title: "Run App Live Session",

@@ -1,0 +1,253 @@
+{
+  "schema_version": 1,
+  "version": "1.0",
+  "build_id": "applive-v1.0-apps",
+  "applive": {
+    "title": "App Live",
+    "summary": "App Live: the app store App Live installs from. An app uploaded here is addressed by a bs:// URL and installed on the device when a session is launched. List the caller's own uploads, the whole team's, or every version uploaded under one custom id, each row carrying the bs:// URL a launch installs — use these to reuse an app already uploaded instead of uploading it again. App Live's store is separate from App Automate's, so an app uploaded for one is not available to the other. These capabilities read the store; they do not upload, delete, launch a session or drive a device.",
+    "routing_terms": [
+      "app live",
+      "applive",
+      "app live apps",
+      "uploaded apps",
+      "recent apps",
+      "app url",
+      "bs url",
+      "already uploaded",
+      "app store",
+      "team apps",
+      "custom id"
+    ],
+    "base_url": "https://api-cloud.browserstack.com",
+    "auth": {
+      "type": "http",
+      "scheme": "basic"
+    },
+    "capabilities": [
+      {
+        "name": "list_apps",
+        "method": "GET",
+        "path": "/app-live/recent_apps",
+        "mode": "read",
+        "entity": "app",
+        "intent": "List the apps this user has uploaded to App Live, newest first, with their bs:// URLs — use this to reuse an uploaded app instead of uploading again.",
+        "guidance": [
+          "App Live keeps its own app store. An app uploaded for App Automate (mobile device control) is not listed here and cannot be launched in App Live; upload it here as well.",
+          "No match answers 200 with a message object rather than an empty array; treat it as 'nothing here'.",
+          "This is only the calling user's own uploads; list_team_apps covers everyone on the team.",
+          "app_url is what a launch installs; app_id is the same identifier without the bs:// prefix, and is what delete takes.",
+          "custom_id is present only on apps uploaded under one."
+        ],
+        "query": [
+          {
+            "name": "limit",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100,
+            "default": 10,
+            "example": 20,
+            "description": "How many apps to return. A value outside 1 to 100 is clamped to the nearest bound rather than refused."
+          }
+        ],
+        "returns": [
+          "app_name",
+          "app_version",
+          "app_url",
+          "app_id",
+          "custom_id",
+          "uploaded_at",
+          "bypass_secure_screen_restriction"
+        ],
+        "narrowable": {
+          "fields": [
+            "app_name",
+            "app_version",
+            "app_url",
+            "app_id",
+            "custom_id",
+            "uploaded_at",
+            "bypass_secure_screen_restriction"
+          ],
+          "note": "The endpoint takes no filtering parameters, so this narrowing is applied after the call. `where` on custom_id or app_name finds one app; `limit: 1` takes the newest."
+        },
+        "responses": {
+          "200": {
+            "description": "Recently uploaded apps, newest first.",
+            "schema": {
+              "$schema": "AppList"
+            }
+          },
+          "401": {
+            "$response": "Unauthorized"
+          }
+        }
+      },
+      {
+        "name": "get_apps_by_custom_id",
+        "method": "GET",
+        "path": "/app-live/recent_apps/{custom_id}",
+        "mode": "read",
+        "entity": "app",
+        "intent": "List every App Live upload under one custom id, newest first — use this to resolve a stable app name to the bs:// URL of its latest version.",
+        "guidance": [
+          "The newest upload under the id is the first row.",
+          "No match answers 200 with a message object rather than an empty array; treat it as 'nothing here'."
+        ],
+        "path_params": [
+          {
+            "name": "custom_id",
+            "type": "string",
+            "required": true,
+            "description": "The stable name the app was uploaded under.",
+            "example": "my-app-staging"
+          }
+        ],
+        "returns": [
+          "app_name",
+          "app_version",
+          "app_url",
+          "app_id",
+          "custom_id",
+          "uploaded_at",
+          "bypass_secure_screen_restriction"
+        ],
+        "responses": {
+          "200": {
+            "description": "Uploads under that custom id.",
+            "schema": {
+              "$schema": "AppList"
+            }
+          },
+          "401": {
+            "$response": "Unauthorized"
+          }
+        }
+      },
+      {
+        "name": "list_team_apps",
+        "method": "GET",
+        "path": "/app-live/recent_group_apps",
+        "mode": "read",
+        "entity": "app",
+        "intent": "List the apps everyone on the team has uploaded to App Live, newest first — use this to find an app a colleague uploaded.",
+        "guidance": [
+          "App Live keeps its own app store. An app uploaded for App Automate (mobile device control) is not listed here and cannot be launched in App Live; upload it here as well.",
+          "No match answers 200 with a message object rather than an empty array; treat it as 'nothing here'.",
+          "Rows here carry no custom_id even when one was set; list_apps or get_apps_by_custom_id shows it for the caller's own uploads."
+        ],
+        "query": [
+          {
+            "name": "limit",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100,
+            "default": 10,
+            "example": 20,
+            "description": "How many apps to return. A value outside 1 to 100 is clamped to the nearest bound rather than refused."
+          }
+        ],
+        "returns": [
+          "app_name",
+          "app_version",
+          "app_url",
+          "app_id",
+          "uploaded_at",
+          "bypass_secure_screen_restriction"
+        ],
+        "narrowable": {
+          "fields": [
+            "app_name",
+            "app_version",
+            "app_url",
+            "app_id",
+            "uploaded_at"
+          ],
+          "note": "The endpoint takes no filtering parameters, so this narrowing is applied after the call."
+        },
+        "responses": {
+          "200": {
+            "description": "The team's recent uploads, newest first.",
+            "schema": {
+              "$schema": "AppList"
+            }
+          },
+          "401": {
+            "$response": "Unauthorized"
+          }
+        }
+      }
+    ],
+    "schemas": {
+      "AppList": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "app_name": {
+              "type": "string"
+            },
+            "app_version": {
+              "type": "string",
+              "description": "Empty when the binary carries no version."
+            },
+            "app_url": {
+              "type": "string",
+              "description": "The bs:// URL a launch installs."
+            },
+            "app_id": {
+              "type": "string",
+              "description": "The same identifier without the bs:// prefix; what delete takes."
+            },
+            "custom_id": {
+              "type": "string",
+              "description": "Only on apps uploaded under one, and only on the caller's own uploads."
+            },
+            "uploaded_at": {
+              "type": "string",
+              "description": "UTC, as 'YYYY-MM-DD HH:MM:SS UTC'."
+            },
+            "bypass_secure_screen_restriction": {
+              "type": "string",
+              "description": "'true' or 'false' as text, not a boolean."
+            }
+          }
+        }
+      }
+    },
+    "responses": {
+      "Unauthorized": {
+        "description": "The BrowserStack username or access key was rejected, or the group allows token authentication only."
+      }
+    },
+    "entities": {
+      "app": {
+        "title": "App",
+        "description": "An app binary uploaded to App Live, addressed by a bs:// URL, that the dashboard installs on the device when a session is launched.",
+        "aliases": [
+          "app",
+          "uploaded app",
+          "app build",
+          "build",
+          "binary",
+          "apk",
+          "aab",
+          "ipa",
+          "app upload",
+          "app url",
+          "recent apps"
+        ],
+        "id_convention": "app_url is a bs:// URL of 40 hex characters; app_id and app_hashed_id are that same hex without the prefix. A custom_id is a name chosen at upload that resolves to the newest upload under it.",
+        "key_facts": [
+          "App Live's store is separate from App Automate's: an app uploaded for one is not available to the other.",
+          "Uploading under a custom id that already exists adds another version rather than replacing the old one, and both stay listed.",
+          "An app uploaded by one person is visible to the whole team, and owners and admins can remove any of them."
+        ],
+        "capabilities": [
+          "list_apps",
+          "get_apps_by_custom_id",
+          "list_team_apps"
+        ]
+      }
+    }
+  }
+}

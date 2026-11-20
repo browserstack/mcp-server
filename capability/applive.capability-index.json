@@ -4,7 +4,7 @@
   "build_id": "applive-v1.0-apps",
   "applive": {
     "title": "App Live",
-    "summary": "App Live: the app store App Live installs from. An app uploaded here is addressed by a bs:// URL and installed on the device when a session is launched. List the caller's own uploads, the whole team's, or every version uploaded under one custom id, each row carrying the bs:// URL a launch installs — use these to reuse an app already uploaded instead of uploading it again. App Live's store is separate from App Automate's, so an app uploaded for one is not available to the other. These capabilities read the store; they do not upload, delete, launch a session or drive a device.",
+    "summary": "App Live: the app store App Live installs from. An app uploaded here is addressed by a bs:// URL and installed on the device when a session is launched. List the caller's own uploads, the whole team's, or every version uploaded under one custom id, each row carrying the bs:// URL a launch installs — use these to reuse an app already uploaded instead of uploading it again. App Live's store is separate from App Automate's, so an app uploaded for one is not available to the other. These capabilities read the store; they do not upload, delete, launch a session or drive a device. This product publishes only these three capabilities today, and a search inside it scores a word every one of them shares — \"app\", \"apps\", \"list\" — at nothing, so a plain-language query can come back empty: call searchCapability with query '*' and product 'applive' to see all three, then pick.",
     "routing_terms": [
       "app live",
       "applive",

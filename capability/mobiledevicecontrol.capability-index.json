@@ -67,7 +67,7 @@
     "intent": "Start a live Appium session on a real Android or iOS device with an uploaded app \u2014 use this before reading the screen, tapping, typing or swiping in the app.",
     "guidance": {
      "shared": [
-      "The app must already be uploaded: pass the bs:// URL from upload_app_build or list_app_builds, or the custom_id it was uploaded under, which always resolves to the newest build with that id.",
+      "The app must already be uploaded: pass the bs:// URL from upload_app_build_from_url or list_app_builds, or the custom_id it was uploaded under, which always resolves to the newest build with that id.",
       "Allocation and app install usually take 20\u201330 seconds; the response carries the new session id at value.sessionId \u2014 carry it into every other app_session call.",
       "The session ends itself after idle_timeout seconds with no command (90 by default, 900 at most) and after 2 hours in total. Keep calling, or call get_window_rect as a cheap keep-alive, while deciding the next step.",
       "Every session occupies a device and consumes device minutes until it ends: always finish with set_session_status and then delete_session.",
@@ -123,7 +123,7 @@
       "type": "string",
       "required": true,
       "json_path": "/capabilities/alwaysMatch/appium:app",
-      "description": "The bs:// app URL returned by upload_app_build, or the custom_id given at upload time (the latest app with that id is used).",
+      "description": "The bs:// app URL returned by upload_app_build_from_url, or the custom_id given at upload time (the latest app with that id is used).",
       "example": "bs://0123456789abcdef0123456789abcdef01234567"
      },
      {
@@ -1108,7 +1108,7 @@
     "host": "api"
    },
    {
-    "name": "upload_app_build",
+    "name": "upload_app_build_from_url",
     "method": "POST",
     "path": "/app-automate/upload",
     "mode": "write",
@@ -2974,7 +2974,7 @@
       "APP LIVE KEEPS A SEPARATE STORE. An app uploaded for App Live (manual, exploratory testing in a person's browser) is not available here, and one uploaded here does not appear in App Live \u2014 so when the app is going to be driven by you, tapped, typed into or scrolled by capability calls, upload it HERE, whatever the user calls the testing. The bs:// this returns is the one create_session installs.",
       "Only .apk, .aab and .ipa are accepted.",
       "A large build takes minutes, because the upload does not return until the whole file has been sent.",
-      "upload_app_build takes a public https link instead, and list_app_builds reuses a build already on the account \u2014 builds last 30 days."
+      "upload_app_build_from_url takes a public https link instead, and list_app_builds reuses a build already on the account \u2014 builds last 30 days."
      ],
      "local": [
       "The file must sit inside the directory MCP_UPLOAD_BASE_DIR names. When that is not set the upload is refused and nothing is sent: tell the user to set it to the folder holding their builds and restart the server.",
@@ -2984,7 +2984,7 @@
      ],
      "remote": [
       "Cheapest route first: list_app_builds or list_team_app_builds, if the build was uploaded before.",
-      "Then upload_app_build, if the build sits at a public https link \u2014 the only route that needs nothing from the user.",
+      "Then upload_app_build_from_url, if the build sits at a public https link \u2014 the only route that needs nothing from the user.",
       "Otherwise the user uploads it themselves. The asset-upload helper PRINTS a curl command and nothing more \u2014 it reads no file and sends no request \u2014 so the user runs that command, and it answers with the bs:// url directly from /app-automate/upload. There is no intermediate storage and no second step.",
       "Take the bs:// url back from them and pass it as the app for create_session."
      ]
@@ -3844,7 +3844,7 @@
      "A build uploaded by one person is visible to the whole team."
     ],
     "capabilities": [
-     "upload_app_build",
+     "upload_app_build_from_url",
      "list_app_builds",
      "list_team_app_builds",
      "get_app_builds_by_custom_id",

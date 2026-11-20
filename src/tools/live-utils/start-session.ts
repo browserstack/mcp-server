@@ -18,6 +18,7 @@ import { getBrowserStackAuth } from "../../lib/get-auth.js";
 import { BrowserStackConfig } from "../../lib/types.js";
 import envConfig from "../../config.js";
 import { CallerError } from "../../lib/error.js";
+import { stripPrereleaseLabel } from "../../lib/version-resolver.js";
 
 /**
  * Prepares local tunnel setup based on URL type
@@ -124,7 +125,7 @@ function buildMobileUrl(
 
   const params = new URLSearchParams({
     os: os,
-    os_version: d.os_version,
+    os_version: stripPrereleaseLabel(d.os_version),
     device: d.display_name,
     device_browser: args.browser,
     url: args.url,

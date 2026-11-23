@@ -1787,14 +1787,14 @@
           {
             "name": "severity",
             "type": "string",
-            "description": "Keeps issues of these severities: critical, serious, moderate, minor; several comma-separated.",
-            "example": "critical,serious"
+            "description": "Keeps issues of these severities, as a JSON array: [\"critical\",\"serious\"]. Anything but a JSON array is ignored.",
+            "example": "[\"critical\",\"serious\"]"
           },
           {
             "name": "rules",
             "type": "string",
-            "description": "Keeps issues of these rule ids, comma-separated.",
-            "example": "text-color-contrast"
+            "description": "Keeps issues of these rule ids, as a JSON array: [\"text-color-contrast\"]. Anything but a JSON array is ignored.",
+            "example": "[\"text-color-contrast\"]"
           },
           {
             "name": "hide_duplicate_issues",

@@ -72,7 +72,7 @@ export function handleMCPError(
   const readableToolName = toolName.replace(/([A-Z])/g, " $1").toLowerCase();
 
   return errorContent(
-    `Failed to ${readableToolName}: ${errorMessage}. Please open an issue on GitHub if the problem persists.`,
+    `Failed to ${readableToolName}: ${errorMessage}. Please open an issue on GitHub if the problem persists`,
   );
 }
 

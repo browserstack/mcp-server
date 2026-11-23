@@ -68,7 +68,6 @@ export function replyCutOffMessage(detail: string): string {
   );
 }
 
-/** A connection that was never answered: nothing was sent. */
 export const PRODUCT_UNREACHABLE = "the product could not be reached";
 
 /** What this server can put into a credential template. Nothing else is fillable. */

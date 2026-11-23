@@ -170,7 +170,6 @@ export async function invoke(
     });
   };
 
-  // A read that never reached the product sent nothing, so trying again is safe.
   let response =
     capability.mode === "read"
       ? await retryRead(

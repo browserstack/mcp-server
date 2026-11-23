@@ -519,7 +519,7 @@ export default function addAppAutomationTools(
           content: [
             {
               type: "text",
-              text: `Failed to bootstrap project with BrowserStack App Automate SDK. Error: ${error_message}. Please open an issue on GitHub if the problem persists.`,
+              text: `Failed to bootstrap project with BrowserStack App Automate SDK. Error: ${error_message}. Please open an issue on GitHub if the problem persists`,
             },
           ],
           isError: true,

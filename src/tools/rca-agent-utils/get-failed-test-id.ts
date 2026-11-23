@@ -12,8 +12,9 @@ import { trackedFetch } from "../../lib/upstream-status.js";
 
 // The error message is kept whole up to this length; stack traces are reduced to one frame.
 const ERROR_SUMMARY_MAX = 1000;
-// Builds with many failures share this budget, down to ERROR_SUMMARY_MIN per test.
-const ERROR_SUMMARY_BUDGET = 100_000;
+const STACK_FRAME_MAX = 300;
+// All summaries in one response share this budget, down to ERROR_SUMMARY_MIN per test.
+const ERROR_SUMMARY_BUDGET = 20_000;
 const ERROR_SUMMARY_MIN = 200;
 const STACK_FRAME = /^(at\s|File\s"|from\s\S+:\d+)/;
 const LIBRARY_FRAME = /node_modules|node:internal|\(internal\//;
@@ -107,12 +108,15 @@ export async function getTestIds(
 
 export function fitErrorSummaries(tests: FailedTestInfo[]): void {
   const withSummary = tests.filter((test) => test.failure?.error_summary);
-  if (withSummary.length === 0) return;
+  const total = withSummary.reduce(
+    (sum, test) => sum + test.failure!.error_summary!.length,
+    0,
+  );
+  if (total <= ERROR_SUMMARY_BUDGET) return;
   const perTest = Math.max(
     ERROR_SUMMARY_MIN,
     Math.floor(ERROR_SUMMARY_BUDGET / withSummary.length),
   );
-  if (perTest >= ERROR_SUMMARY_MAX) return;
   for (const test of withSummary) {
     const summary = test.failure!.error_summary!;
     if (summary.length > perTest) {
@@ -239,7 +243,11 @@ function summarizeError(text: string): string | undefined {
     firstFrame === -1
       ? []
       : lines.slice(firstFrame).filter((line) => STACK_FRAME.test(line));
-  const frame = frames.find((line) => !LIBRARY_FRAME.test(line)) ?? frames[0];
+  const found = frames.find((line) => !LIBRARY_FRAME.test(line)) ?? frames[0];
+  const frame =
+    found && found.length > STACK_FRAME_MAX
+      ? `${found.slice(0, STACK_FRAME_MAX)}…`
+      : found;
 
   let message = messageLines.join("\n");
   if (message.length > ERROR_SUMMARY_MAX) {

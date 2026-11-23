@@ -201,7 +201,7 @@ describe("getTestIds — failure signature extraction", () => {
   it("error_summary is not trimmed when the failures fit the budget", async () => {
     const message = "M".repeat(900);
     mockFetchOnce({
-      hierarchy: Array.from({ length: 100 }, (_, i) =>
+      hierarchy: Array.from({ length: 20 }, (_, i) =>
         failedNode(2000 + i, `test ${i}`, {
           retries: [{ logs: { TEST_FAILURE: [message] } }],
         }),
@@ -212,6 +212,43 @@ describe("getTestIds — failure signature extraction", () => {
     const rows = await getTestIds("build-1", AUTH, TestStatus.FAILED, true);
 
     expect(rows.every((row) => row.failure?.error_summary === message)).toBe(true);
+  });
+
+  it("error_summary keeps a mid-size failing build under the budget, frame included", async () => {
+    const log = `${"M".repeat(900)}\n    at Context.<anonymous> (test/specs/limits.spec.js:42:15)`;
+    mockFetchOnce({
+      hierarchy: Array.from({ length: 50 }, (_, i) =>
+        failedNode(3000 + i, `test ${i}`, {
+          retries: [{ logs: { TEST_FAILURE: [log] } }],
+        }),
+      ),
+      pagination: { has_next: false, next_page: null },
+    });
+
+    const rows = await getTestIds("build-1", AUTH, TestStatus.FAILED, true);
+    const total = rows.reduce(
+      (sum, row) => sum + (row.failure?.error_summary?.length ?? 0),
+      0,
+    );
+
+    expect(rows[0].failure?.error_summary).toBe(`${"M".repeat(400)}…`);
+    expect(total).toBeLessThanOrEqual(20_000 + 50);
+  });
+
+  it("error_summary caps a long stack frame", async () => {
+    const frame = `at a (${"x".repeat(5000)}.min.js:1:1)`;
+    mockFetchOnce({
+      hierarchy: [
+        failedNode(108, "minified", {
+          retries: [{ logs: { TEST_FAILURE: [`Boom\n    ${frame}`] } }],
+        }),
+      ],
+      pagination: { has_next: false, next_page: null },
+    });
+
+    const [row] = await getTestIds("build-1", AUTH, TestStatus.FAILED, true);
+
+    expect(row.failure?.error_summary).toBe(`Boom\n${frame.slice(0, 300)}…`);
   });
 
   it("handles object-shaped TEST_FAILURE entries ({ text })", async () => {

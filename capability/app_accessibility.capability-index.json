@@ -1016,9 +1016,10 @@
           {
             "name": "page",
             "type": "integer",
+            "required": true,
             "minimum": 1,
-            "default": 1,
-            "description": "Page number, from 1."
+            "description": "Page number, from 1. Always send it: left out, the route reads page 30 and answers an empty list.",
+            "example": 1
           },
           {
             "name": "page_size",
@@ -1080,9 +1081,10 @@
           {
             "name": "page",
             "type": "integer",
+            "required": true,
             "minimum": 1,
-            "default": 1,
-            "description": "Page number, from 1."
+            "description": "Page number, from 1. Always send it: left out, the route reads page 30 and answers an empty list.",
+            "example": 1
           },
           {
             "name": "page_size",

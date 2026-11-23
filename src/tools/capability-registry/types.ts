@@ -485,16 +485,22 @@ export interface AuthScheme {
  * AI-generated attribution. Listing the agent beside the capabilities is what lets the
  * client see that the task already has an owner.
  *
- * NO REQUEST FIELD NAMES THE AGENT. BrowserStack AI takes a task and a product and routes on
- * the task's wording against each agent's own trigger, the same as the in-product chat. So
- * nothing here is sent anywhere: `name` is for telemetry and humans, and the client's job is
- * to pass the user's request through verbatim.
+ * THE PRODUCT'S AGENT TOOL NAMES THE AGENT. `tmAIAgents` takes one of these by `handle` and
+ * sends `name` to BrowserStack AI as an `@agent` mention, so `name` must be the agent's name
+ * in BrowserStack AI. askBrowserStackAI names none: it routes on the task's wording.
  */
 export interface AgentDoc {
-  /** The agent's id, e.g. `tm-generate-test-cases`. */
+  /** The agent's name in BrowserStack AI, e.g. `tm-generate-test-cases`. */
   name: string;
   /** Human title, e.g. "Test case generation". */
   title?: string;
+  /**
+   * What the product's agent tool takes as `agent`, e.g. `generate_test_cases`: a verb
+   * phrase a client can match to a request. Derived from `name` when absent.
+   */
+  handle?: string;
+  /** The agent's one line in its product tool's description. First sentence when absent. */
+  tagline?: string;
   /** What it does, in product language. Public: this file ships to npm. */
   description: string;
   /**

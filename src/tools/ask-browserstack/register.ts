@@ -29,12 +29,15 @@ import {
   McpServer,
   RegisteredTool,
 } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { RequestHandlerExtra } from "@modelcontextprotocol/sdk/shared/protocol.js";
 import {
   CallToolResult,
   ElicitResult,
   ErrorCode,
   McpError,
   RequestId,
+  ServerNotification,
+  ServerRequest,
 } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 
@@ -52,6 +55,19 @@ import {
 import { fetchTokenTransport, mintCentralToken } from "./central-oauth.js";
 import { toAudienceResult } from "./result-audience.js";
 import { Credentials, agentHeaders } from "./egress.js";
+import {
+  AgentVia,
+  agentMention,
+  indexedAgents,
+  viaAgentTool,
+} from "./agent-tools.js";
+import {
+  agentHandle,
+  agentParamDescription,
+  agentToolDescription,
+  agentToolName,
+} from "../capability-registry/agents.js";
+import { AgentDoc } from "../capability-registry/types.js";
 import {
   EVENT_PERMISSION,
   EVENT_RESULT,
@@ -134,6 +150,8 @@ export interface AskDeps {
   getTransport?: GetTransport;
   /** The HTTP client attachments are uploaded with. Substituted in tests. */
   uploadFetch?: typeof fetch;
+  /** A product's agents, for its agent tool. Read from the capability index by default. */
+  agentsFor?: (product: string) => AgentDoc[];
 }
 
 /**
@@ -587,6 +605,69 @@ export function relayMode(server: McpServer): RelayMode {
   return "deferred";
 }
 
+/**
+ * The run parameters' types, shared by askBrowserStackAI and the product agent tools.
+ * Each tool describes them in its own words: an agent tool's text is kept short, because
+ * every client loads every description at connect time.
+ */
+const RUN_TYPES = {
+  query: z.string().optional(),
+  run_id: z.string().optional(),
+  perm_id: z.string().optional(),
+  decision: z.enum(["allow", "deny"]).optional(),
+  conversation_id: z.string().optional(),
+  answers: z
+    .record(z.string(), z.union([z.string(), z.array(z.string())]))
+    .optional(),
+  files: z
+    .array(
+      z.union([
+        z.string(),
+        z.object({ name: z.string(), bytes: z.number().int().positive() }),
+      ]),
+    )
+    .max(MAX_FILES)
+    .optional(),
+  attachment_ids: z
+    .array(z.string().regex(/^att_[0-9a-f]{32}$/))
+    .max(MAX_FILES)
+    .optional(),
+};
+
+const ASK_PARAMS = {
+  product: z
+    .enum(PRODUCTS)
+    .describe(
+      "Product: tm (Test Management), a11y (Accessibility), tra (Test Reporting & Analytics).",
+    ),
+  // OPTIONAL, because a resume does not carry one. `next_step` tells the model to
+  // call again "with exactly these params" — `product`, `run_id`, `perm_id`,
+  // `decision` — and a required `query` made following that instruction literally
+  // fail schema validation before the handler ever ran. It is still required to
+  // START a run; the handler enforces that, where a useful message can be given
+  // instead of an InvalidParams from the SDK.
+  query: RUN_TYPES.query.describe(
+    "What you want, in plain language. One thing per call.",
+  ),
+  // --- resuming a parked run (the hosted, deferred path only) ---
+  //
+  // Both together or neither. They exist because that deployment cannot hold a
+  // prompt open mid-run: it returns the pending approval instead, and the caller
+  // comes back. On a local stdio install these are never needed — the prompt
+  // appears inside the first call — so they are optional and unmentioned in the
+  // description's main flow.
+  run_id: RUN_TYPES.run_id.describe("Handle; never show it."),
+  perm_id: RUN_TYPES.perm_id.describe("Handle; never show it."),
+  decision: RUN_TYPES.decision.describe("The user's answer, never yours."),
+  conversation_id: RUN_TYPES.conversation_id.describe("Handle; never show it."),
+  answers: RUN_TYPES.answers.describe("Answers to `questions`, by id."),
+  files: RUN_TYPES.files.describe("Hosted: {name, bytes} (wc -c)."),
+  attachment_ids: RUN_TYPES.attachment_ids.describe("From needs_upload."),
+};
+
+type AskArgs = z.infer<z.ZodObject<typeof ASK_PARAMS>>;
+type AskExtra = RequestHandlerExtra<ServerRequest, ServerNotification>;
+
 export function addAskBrowserStackAITool(
   server: McpServer,
   deps: AskDeps,
@@ -612,351 +693,289 @@ export function addAskBrowserStackAITool(
     }
   };
 
-  tools.askBrowserStackAI = server.tool(
-    "askBrowserStackAI",
-    DESCRIPTION,
-    {
-      product: z
-        .enum(PRODUCTS)
-        .describe(
-          "Product: tm (Test Management), a11y (Accessibility), tra (Test Reporting & Analytics).",
-        ),
-      // OPTIONAL, because a resume does not carry one. `next_step` tells the model to
-      // call again "with exactly these params" — `product`, `run_id`, `perm_id`,
-      // `decision` — and a required `query` made following that instruction literally
-      // fail schema validation before the handler ever ran. It is still required to
-      // START a run; the handler enforces that, where a useful message can be given
-      // instead of an InvalidParams from the SDK.
-      query: z
-        .string()
-        .optional()
-        .describe("What you want, in plain language. One thing per call."),
-      // --- resuming a parked run (the hosted, deferred path only) ---
-      //
-      // Both together or neither. They exist because that deployment cannot hold a
-      // prompt open mid-run: it returns the pending approval instead, and the caller
-      // comes back. On a local stdio install these are never needed — the prompt
-      // appears inside the first call — so they are optional and unmentioned in the
-      // description's main flow.
-      run_id: z
-        .string()
-        .optional()
-        .describe("Internal handle from needs_approval; never show it."),
-      perm_id: z
-        .string()
-        .optional()
-        .describe("Internal handle from that result; never show it."),
-      decision: z
-        .enum(["allow", "deny"])
-        .optional()
-        .describe("The user's answer. Never assume allow — ask them."),
-      conversation_id: z
-        .string()
-        .optional()
-        .describe("Internal handle from a prior result; never show it."),
-      answers: z
-        .record(z.string(), z.union([z.string(), z.array(z.string())]))
-        .optional()
-        .describe("Answers to `questions`, by question id."),
-      files: z
-        .array(
-          z.union([
-            z.string(),
-            z.object({ name: z.string(), bytes: z.number().int().positive() }),
-          ]),
-        )
-        .max(MAX_FILES)
-        .optional()
-        .describe("Files to attach. Hosted: {name, bytes} (wc -c)."),
-      attachment_ids: z
-        .array(z.string().regex(/^att_[0-9a-f]{32}$/))
-        .max(MAX_FILES)
-        .optional()
-        .describe("From needs_upload, once its commands ran."),
-    },
-    {
-      // It can write now, which is the whole point of the relay. Destructive operations
-      // stay refused, so `destructiveHint` is false for the same reason invokeEndpoint
-      // sets it false: consent is not a licence to delete.
-      readOnlyHint: false,
-      destructiveHint: false,
-      // openWorldHint: the agent fans out to product APIs chosen at runtime, so the set of
-      // effects is not knowable from this schema. idempotentHint false because a repeated
-      // call can create a second record — the relay asks again, it does not dedupe.
-      openWorldHint: true,
-      idempotentHint: false,
-      title: "Ask BrowserStack AI (Alpha)",
-    },
-    async (
-      {
-        product,
-        query,
-        run_id,
-        perm_id,
-        decision,
-        conversation_id,
-        answers,
-        files,
-        attachment_ids,
-      },
-      extra,
-    ): Promise<CallToolResult> => {
-      track("askBrowserStackAI");
-      const approvals: ApprovalRecord[] = [];
-      // Negotiated before anything else so the failure paths below report the mode they
-      // would have run in.
-      const mode = relayMode(server);
+  const askAnnotations = {
+    // It can write now, which is the whole point of the relay. Destructive operations
+    // stay refused, so `destructiveHint` is false for the same reason invokeEndpoint
+    // sets it false: consent is not a licence to delete.
+    readOnlyHint: false,
+    destructiveHint: false,
+    // openWorldHint: the agent fans out to product APIs chosen at runtime, so the set of
+    // effects is not knowable from this schema. idempotentHint false because a repeated
+    // call can create a second record — the relay asks again, it does not dedupe.
+    openWorldHint: true,
+    idempotentHint: false,
+    title: "Ask BrowserStack AI (Alpha)",
+  };
 
-      // Answering an agent's questions without answers would post an empty reply, which
-      // the agent reads as the user's. Refused before anything is sent.
-      if (
-        run_id &&
-        perm_id?.startsWith(RUN_QUESTION_PREFIX) &&
-        answers === undefined
-      ) {
-        return toResult(
-          errorResult(
-            "Pass the user's answers to `questions` as `answers`, by question id. Nothing was sent.",
-            approvals,
+  const runAsk = async (
+    {
+      product,
+      query,
+      run_id,
+      perm_id,
+      decision,
+      conversation_id,
+      answers,
+      files,
+      attachment_ids,
+    }: AskArgs,
+    extra: AskExtra | undefined,
+    via?: AgentVia,
+  ): Promise<CallToolResult> => {
+    const toolName = via?.tool ?? "askBrowserStackAI";
+    track(toolName);
+    // Through a product's agent tool, its own next call is that tool again.
+    const render = (payload: AskResult): CallToolResult =>
+      toResult(via ? viaAgentTool(payload, via) : payload);
+    const approvals: ApprovalRecord[] = [];
+    // Negotiated before anything else so the failure paths below report the mode they
+    // would have run in.
+    const mode = relayMode(server);
+
+    // Answering an agent's questions without answers would post an empty reply, which
+    // the agent reads as the user's. Refused before anything is sent.
+    if (
+      run_id &&
+      perm_id?.startsWith(RUN_QUESTION_PREFIX) &&
+      answers === undefined
+    ) {
+      return render(
+        errorResult(
+          "Pass the user's answers to `questions` as `answers`, by question id. Nothing was sent.",
+          approvals,
+        ),
+      );
+    }
+
+    try {
+      const url = deps.agentUrl();
+      // Signed in BEFORE the listener is opened and before the run starts. Minting
+      // lazily mid-call would put a token round-trip inside the window where a human is
+      // being prompted, and a mint that failed there would strand an open port.
+      const headers = agentHeaders(await deps.mintToken());
+
+      // Upload progress, for a client that shows it. An agent run is never waited on
+      // here: its state is returned and the caller checks back (`next_step`).
+      const progressToken = extra?._meta?.progressToken;
+      let progressCount = 0;
+      const notify = (message: string): void => {
+        if (progressToken === undefined) return;
+        progressCount += 1;
+        void extra
+          ?.sendNotification({
+            method: "notifications/progress",
+            params: { progressToken, progress: progressCount, message },
+          })
+          .catch(() => undefined);
+      };
+      let attached: string[] = [];
+      const finish = (result: AskResult): CallToolResult =>
+        render(
+          withConversation(
+            attached.length ? { ...result, attachments: attached } : result,
+            result.atlas_response,
+            product,
           ),
+        );
+
+      // ANSWERING an agent's questions: `run_id` is the conversation.
+      if (run_id && perm_id && perm_id.startsWith(RUN_QUESTION_PREFIX)) {
+        const reply = await deferredTransport(answerUrl(url, run_id), headers, {
+          ask_id: perm_id,
+          product,
+          values: answers,
+        } as never);
+        return finish(
+          keepPendingAnswer(conversationResult(reply, run_id, mode, product), {
+            product,
+            run_id,
+            perm_id,
+            answers,
+          }),
         );
       }
 
-      try {
-        const url = deps.agentUrl();
-        // Signed in BEFORE the listener is opened and before the run starts. Minting
-        // lazily mid-call would put a token round-trip inside the window where a human is
-        // being prompted, and a mint that failed there would strand an open port.
-        const headers = agentHeaders(await deps.mintToken());
+      // CHECKING on a conversation's agent.
+      if (conversation_id && !run_id && !(query && query.trim())) {
+        const now = await getTransport(
+          conversationUrl(url, conversation_id, product),
+          headers,
+        );
+        return render(conversationResult(now, conversation_id, mode, product));
+      }
 
-        // Upload progress, for a client that shows it. An agent run is never waited on
-        // here: its state is returned and the caller checks back (`next_step`).
-        const progressToken = extra?._meta?.progressToken;
-        let progressCount = 0;
-        const notify = (message: string): void => {
-          if (progressToken === undefined) return;
-          progressCount += 1;
-          void extra
-            ?.sendNotification({
-              method: "notifications/progress",
-              params: { progressToken, progress: progressCount, message },
-            })
-            .catch(() => undefined);
-        };
-        let attached: string[] = [];
-        const finish = (result: AskResult): CallToolResult =>
-          toResult(
-            withConversation(
-              attached.length ? { ...result, attachments: attached } : result,
-              result.atlas_response,
-              product,
-            ),
-          );
-
-        // ANSWERING an agent's questions: `run_id` is the conversation.
-        if (run_id && perm_id && perm_id.startsWith(RUN_QUESTION_PREFIX)) {
-          const reply = await deferredTransport(
-            answerUrl(url, run_id),
-            headers,
-            {
-              ask_id: perm_id,
-              product,
-              values: answers,
-            } as never,
-          );
-          return finish(
-            keepPendingAnswer(
-              conversationResult(reply, run_id, mode, product),
-              {
-                product,
-                run_id,
-                perm_id,
-                answers,
-              },
-            ),
-          );
+      // RESUMING a parked run: no new run, no task — just the decision and the
+      // remainder. FIRST, because the arguments are mutually exclusive with starting
+      // one and a caller that sent both meant to resume — and because `query` is not
+      // required on this path, so nothing above may depend on it.
+      if (run_id) {
+        if (!perm_id || !decision) {
+          return render(incompleteResume());
         }
-
-        // CHECKING on a conversation's agent.
-        if (conversation_id && !run_id && !(query && query.trim())) {
-          const now = await getTransport(
-            conversationUrl(url, conversation_id, product),
-            headers,
-          );
-          return toResult(
-            conversationResult(now, conversation_id, mode, product),
-          );
-        }
-
-        // RESUMING a parked run: no new run, no task — just the decision and the
-        // remainder. FIRST, because the arguments are mutually exclusive with starting
-        // one and a caller that sent both meant to resume — and because `query` is not
-        // required on this path, so nothing above may depend on it.
-        if (run_id) {
-          if (!perm_id || !decision) {
-            return toResult(incompleteResume());
-          }
-          // A `query` sent here is ignored rather than rejected: the run's task is in
-          // Atlas's checkpoint, so a model that resent it is redundant, not wrong.
-          return finish(
-            keepPendingAnswer(
-              await runResumed(
-                url,
-                headers,
-                run_id,
-                perm_id,
-                decision,
-                // The SAME transport the start uses: since the converged gate both
-                // calls POST and read back either a parked run or a finished one.
-                deferredTransport,
-                mode,
-                product,
-              ),
-              { product, run_id, perm_id, decision },
-            ),
-          );
-        }
-
-        // STARTING one, which is the only path that needs a task. Enforced here rather
-        // than in the schema so the model gets a sentence it can act on instead of an
-        // SDK InvalidParams — and so `next_step`, which omits `query`, stays valid.
-        if (!query || !query.trim()) {
-          return toResult(missingQuery());
-        }
-        const body: AgentRequest = { task: query, product };
-        if (conversation_id) body.conversation_id = conversation_id;
-
-        const wantsFiles = Boolean(files?.length || attachment_ids?.length);
-        // Files belong to a conversation, which needs the approval relay.
-        if (wantsFiles && mode !== "offered" && mode !== "deferred") {
-          return toResult(errorResult(FILES_NEED_RELAY, approvals));
-        }
-        if (files && files.length) {
-          if (appConfig.REMOTE_MCP) {
-            // The hosted server cannot read the user's disk: reserve each upload and
-            // hand back the command that sends it, then the caller comes back.
-            const sized = files.filter(
-              (f): f is { name: string; bytes: number } =>
-                typeof f !== "string",
-            );
-            if (sized.length !== files.length) {
-              return toResult(errorResult(FILES_NEED_SIZES, approvals));
-            }
-            const uploads = await prepareRemoteUploads(sized, {
-              agentUrl: url,
-              headers,
-              product,
-              fetchImpl: deps.uploadFetch,
-            });
-            return toResult(
-              needsUploadResult(uploads, product, query, conversation_id),
-            );
-          }
-          const uploaded = await uploadFiles(
-            files.map((f) => (typeof f === "string" ? f : f.name)),
-            {
-              agentUrl: url,
-              headers,
-              product,
-              baseDir: appConfig.UPLOAD_BASE_DIR,
-              progress: notify,
-              fetchImpl: deps.uploadFetch,
-            },
-          );
-          body.attachment_ids = uploaded.map((f) => f.id);
-          attached = uploaded.map((f) => f.name);
-        }
-        if (attachment_ids && attachment_ids.length) {
-          body.attachment_ids = [
-            ...new Set([...(body.attachment_ids || []), ...attachment_ids]),
-          ];
-        }
-
-        // Attribution, and now belt-and-braces rather than the source of truth: the minted
-        // JWT is user-attested, so Atlas sets `principal_verified=True` and takes the acting
-        // user from signed claims instead of this field. It is still sent because it is part
-        // of the frozen wire format (CONTRACT v1.2 §3) and dropping it would be a one-sided
-        // change — but nothing should trust it, and Atlas no longer does.
-        // Omitted ENTIRELY when unset, never sent as "".
-        const username = (deps.credentialsFor().username || "").trim();
-        if (username) body.user_id = username;
-
-        // DEFERRED: the hosted shape. One request, one JSON answer, nothing held open
-        // while a human decides — see `deferred.ts` for why that matters here and why
-        // stdio does not use it.
-        if (mode === "deferred") {
-          return finish(
-            await runDeferred(
+        // A `query` sent here is ignored rather than rejected: the run's task is in
+        // Atlas's checkpoint, so a model that resent it is redundant, not wrong.
+        return finish(
+          keepPendingAnswer(
+            await runResumed(
               url,
               headers,
-              body,
+              run_id,
+              perm_id,
+              decision,
+              // The SAME transport the start uses: since the converged gate both
+              // calls POST and read back either a parked run or a finished one.
               deferredTransport,
               mode,
               product,
             ),
+            { product, run_id, perm_id, decision },
+          ),
+        );
+      }
+
+      // STARTING one, which is the only path that needs a task. Enforced here rather
+      // than in the schema so the model gets a sentence it can act on instead of an
+      // SDK InvalidParams — and so `next_step`, which omits `query`, stays valid.
+      if (!query || !query.trim()) {
+        return render(missingQuery());
+      }
+      const body: AgentRequest = { task: query, product };
+      if (conversation_id) body.conversation_id = conversation_id;
+      // The agent the caller named starts, as an @agent mention does in chat.
+      if (via) Object.assign(body, agentMention(query, via.agent));
+
+      const wantsFiles = Boolean(files?.length || attachment_ids?.length);
+      // Files belong to a conversation, which needs the approval relay.
+      if (wantsFiles && mode !== "offered" && mode !== "deferred") {
+        return render(errorResult(FILES_NEED_RELAY, approvals));
+      }
+      if (files && files.length) {
+        if (appConfig.REMOTE_MCP) {
+          // The hosted server cannot read the user's disk: reserve each upload and
+          // hand back the command that sends it, then the caller comes back.
+          const sized = files.filter(
+            (f): f is { name: string; bytes: number } => typeof f !== "string",
+          );
+          if (sized.length !== files.length) {
+            return render(errorResult(FILES_NEED_SIZES, approvals));
+          }
+          const uploads = await prepareRemoteUploads(sized, {
+            agentUrl: url,
+            headers,
+            product,
+            fetchImpl: deps.uploadFetch,
+          });
+          return render(
+            needsUploadResult(uploads, product, query, conversation_id),
           );
         }
+        const uploaded = await uploadFiles(
+          files.map((f) => (typeof f === "string" ? f : f.name)),
+          {
+            agentUrl: url,
+            headers,
+            product,
+            baseDir: appConfig.UPLOAD_BASE_DIR,
+            progress: notify,
+            fetchImpl: deps.uploadFetch,
+          },
+        );
+        body.attachment_ids = uploaded.map((f) => f.id);
+        attached = uploaded.map((f) => f.name);
+      }
+      if (attachment_ids && attachment_ids.length) {
+        body.attachment_ids = [
+          ...new Set([...(body.attachment_ids || []), ...attachment_ids]),
+        ];
+      }
 
-        // A1: asking for a stream costs nothing to set up — no port, no listener, no
-        // per-run bearer, because nothing dials in. Which is the whole point: the
-        // callback this replaces could never reach a laptop behind NAT, so the feature
-        // was read-only for every real user regardless of what was configured.
-        if (mode === "offered") {
-          body.permission_relay = { mode: "stream", contract: RELAY_CONTRACT };
-        } else {
-          // Omitted ENTIRELY, not sent empty: its absence is what selects Atlas's
-          // read-only HeadlessGate.
-          logger.info(
-            "askBrowserStackAI: no permission relay (%s); running read-only",
-            mode,
-          );
-        }
+      // Attribution, and now belt-and-braces rather than the source of truth: the minted
+      // JWT is user-attested, so Atlas sets `principal_verified=True` and takes the acting
+      // user from signed claims instead of this field. It is still sent because it is part
+      // of the frozen wire format (CONTRACT v1.2 §3) and dropping it would be a one-sided
+      // change — but nothing should trust it, and Atlas no longer does.
+      // Omitted ENTIRELY when unset, never sent as "".
+      const username = (deps.credentialsFor().username || "").trim();
+      if (username) body.user_id = username;
 
-        // `product` reaches the result so an entitlement refusal can name it: the flags
-        // are per product, and a bare "not enabled" sends the user to their admin
-        // asking about the wrong thing.
+      // DEFERRED: the hosted shape. One request, one JSON answer, nothing held open
+      // while a human decides — see `deferred.ts` for why that matters here and why
+      // stdio does not use it.
+      if (mode === "deferred") {
         return finish(
-          await runStreamed(
-            server,
-            streamTransport,
-            deferredTransport,
+          await runDeferred(
             url,
             headers,
             body,
-            approvals,
+            deferredTransport,
             mode,
             product,
-            // The tool call's own id, so each elicitation is routed onto THIS request's
-            // stream. Over Streamable HTTP there is nowhere else for it to go.
-            extra?.requestId,
           ),
         );
-      } catch (error) {
-        const message =
-          error instanceof AskError || error instanceof Error
-            ? error.message
-            : String(error);
-        logger.error("askBrowserStackAI failed: %s", message);
-        // Error telemetry, in the same never-fatal shape as the success-path `track()`:
-        // a failing tool call must not be made worse by a failing analytics call.
-        try {
-          trackMCP(
-            "askBrowserStackAI",
-            server.server.getClientVersion()!,
-            error,
-            config,
-          );
-        } catch {
-          /* ignore */
-        }
-        // No `canElicit` argument: the request never left this process, so whether the
-        // client could have been prompted is not what the reader needs to know.
-        return toResult(errorResult(message, approvals));
       }
-      // No teardown: A1 opens no port and binds nothing, so there is nothing that can
-      // leak across calls or survive an error. The stream is closed by its own
-      // iteration ending, and Atlas drops the run when the response completes.
-    },
+
+      // A1: asking for a stream costs nothing to set up — no port, no listener, no
+      // per-run bearer, because nothing dials in. Which is the whole point: the
+      // callback this replaces could never reach a laptop behind NAT, so the feature
+      // was read-only for every real user regardless of what was configured.
+      if (mode === "offered") {
+        body.permission_relay = { mode: "stream", contract: RELAY_CONTRACT };
+      } else {
+        // Omitted ENTIRELY, not sent empty: its absence is what selects Atlas's
+        // read-only HeadlessGate.
+        logger.info(
+          "askBrowserStackAI: no permission relay (%s); running read-only",
+          mode,
+        );
+      }
+
+      // `product` reaches the result so an entitlement refusal can name it: the flags
+      // are per product, and a bare "not enabled" sends the user to their admin
+      // asking about the wrong thing.
+      return finish(
+        await runStreamed(
+          server,
+          streamTransport,
+          deferredTransport,
+          url,
+          headers,
+          body,
+          approvals,
+          mode,
+          product,
+          // The tool call's own id, so each elicitation is routed onto THIS request's
+          // stream. Over Streamable HTTP there is nowhere else for it to go.
+          extra?.requestId,
+        ),
+      );
+    } catch (error) {
+      const message =
+        error instanceof AskError || error instanceof Error
+          ? error.message
+          : String(error);
+      logger.error("%s failed: %s", toolName, message);
+      // Error telemetry, in the same never-fatal shape as the success-path `track()`:
+      // a failing tool call must not be made worse by a failing analytics call.
+      try {
+        trackMCP(toolName, server.server.getClientVersion()!, error, config);
+      } catch {
+        /* ignore */
+      }
+      // No `canElicit` argument: the request never left this process, so whether the
+      // client could have been prompted is not what the reader needs to know.
+      return render(errorResult(message, approvals));
+    }
+    // No teardown: A1 opens no port and binds nothing, so there is nothing that can
+    // leak across calls or survive an error. The stream is closed by its own
+    // iteration ending, and Atlas drops the run when the response completes.
+  };
+
+  tools.askBrowserStackAI = server.tool(
+    "askBrowserStackAI",
+    DESCRIPTION,
+    ASK_PARAMS,
+    askAnnotations,
+    (args, extra) => runAsk(args, extra),
   );
 
   // An a11y answer is advice; when the user wants the issues fixed in code, point the agent
@@ -979,6 +998,39 @@ export function addAskBrowserStackAITool(
       ],
     };
   }) as unknown as typeof tools.askBrowserStackAI.handler;
+
+  // ONE AGENT TOOL PER PRODUCT THAT HAS AGENTS (`tmAIAgents`). Its description lists the
+  // agents, one line each, so a client sees them in its tool list and names the one to run.
+  // Measured against askBrowserStackAI alone, clients hand far more agent tasks over.
+  const agentsFor = deps.agentsFor || indexedAgents;
+  for (const product of PRODUCTS) {
+    const agents = agentsFor(product);
+    if (agents.length === 0) continue;
+    const tool = agentToolName(product);
+    const byHandle = new Map(agents.map((a) => [agentHandle(a), a]));
+    const handles = [...byHandle.keys()] as [string, ...string[]];
+    tools[tool] = server.tool(
+      tool,
+      agentToolDescription(product),
+      {
+        agent: z.enum(handles).describe(agentParamDescription(agents)),
+        ...RUN_TYPES,
+        query: RUN_TYPES.query.describe("The user's request, verbatim."),
+        decision: RUN_TYPES.decision.describe(
+          "The user's answer, never yours.",
+        ),
+      },
+      { ...askAnnotations, title: `BrowserStack AI agents (${product})` },
+      ({ agent, ...args }, extra) => {
+        const doc = byHandle.get(agent) as AgentDoc;
+        return runAsk({ ...args, product }, extra, {
+          tool,
+          agent: doc,
+          handle: agent,
+        });
+      },
+    );
+  }
 
   return tools;
 }

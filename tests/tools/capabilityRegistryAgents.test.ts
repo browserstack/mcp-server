@@ -29,6 +29,7 @@ describe("the shipped tm agents", () => {
   it("are well-formed, so none is silently dropped at load", () => {
     expect(agentsOf(TM).length).toBe(TM.agents.length);
     expect(TM.agents.map((a: any) => a.name).sort()).toEqual([
+      "test-selection",
       "tm-dedupe",
       "tm-generate-test-cases",
       "tm-generate-test-data",
@@ -135,7 +136,12 @@ describe("the tools surface the handoff", () => {
     );
     expect(Object.keys(out)[0]).toBe("use_agent");
     expect(out.use_agent.product).toBe("tm");
-    expect(out.use_agent.next_step).toMatch(/askBrowserStackAI/);
+    // It points at the product's agent tool, which the server registers beside it.
+    expect(out.use_agent.next_step).toMatch(/Call tmAIAgents with `agent`/);
+    expect(t.tmAIAgents).toBeDefined();
+    expect(out.use_agent.agents.map((a: any) => a.agent)).toContain(
+      "generate_test_cases",
+    );
     expect(out.use_agent.next_step).toMatch(/verbatim/);
     // An account without Ask AI must still be able to finish the task.
     expect(out.use_agent.next_step).toMatch(

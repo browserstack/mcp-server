@@ -89,6 +89,9 @@ import {
 } from "./testmanagement-utils/get-sub-testplan.js";
 
 import { BrowserStackConfig } from "../lib/types.js";
+import { isEnabled as askIsEnabled } from "./ask-browserstack/config.js";
+import { indexedAgents } from "./ask-browserstack/agent-tools.js";
+import { agentHandle, agentToolName } from "./capability-registry/agents.js";
 import { elicitCredentialsIfSupported } from "../lib/elicit-credentials.js";
 import {
   NEEDS_PROJECT_ID,
@@ -732,6 +735,21 @@ export async function getSubTestPlanTool(
 }
 
 /**
+ * The call that builds a run for a requirement, a release or a goal, when the test selection
+ * agent is reachable; else "". Without it, a client asked for such a run picks the cases
+ * itself, or creates an empty run.
+ */
+function selectionCall(): string {
+  if (!askIsEnabled()) return "";
+  const agent = indexedAgents("tm").find((a) => a.name === "test-selection");
+  if (!agent) return "";
+  return (
+    `call ${agentToolName("tm")} with agent '${agentHandle(agent)}' and the user's ` +
+    "request, verbatim, as `query`"
+  );
+}
+
+/**
  * Registers both project/folder and test-case tools.
  */
 export default function addTestManagementTools(
@@ -828,10 +846,18 @@ export default function addTestManagementTools(
     (args) => listTemplatesTool(args, config, server),
   );
 
+  const selection = selectionCall();
   tools.createTestRun = server.tool(
     "createTestRun",
+    // The description stays as it was: the pointer is in the refusal below, which a
+    // client reads only when it asks for a run with nothing chosen.
     "Create a test run in BrowserStack Test Management." + NEEDS_PROJECT_ID,
-    CreateTestRunSchema.shape,
+    selection
+      ? CreateTestRunSchema.extend({
+          // Undescribed: the refusal that needs it says when to send it.
+          allow_empty: z.boolean().optional(),
+        }).shape
+      : CreateTestRunSchema.shape,
     {
       title: "Create Test Run",
       readOnlyHint: false,
@@ -839,7 +865,32 @@ export default function addTestManagementTools(
       destructiveHint: false,
       idempotentHint: false,
     },
-    (args) => createTestRunTool(args, config, server),
+    (args) => {
+      const { allow_empty, ...run } = args as typeof args & {
+        allow_empty?: boolean;
+      };
+      // A run with nothing in it is rarely what was asked for: usually the request was a
+      // run for a requirement or a goal, and the cases were never chosen.
+      const named =
+        (run.test_run?.test_cases?.length || 0) +
+        (run.test_run?.folder_ids?.length || 0);
+      if (selection && !allow_empty && named === 0) {
+        return {
+          content: [
+            {
+              type: "text",
+              text:
+                "No test run was created: no test cases or folders were named. To build a " +
+                "run for a requirement, a release or a goal such as smoke or regression, " +
+                `BrowserStack's test selection agent chooses the cases: ${selection}. ` +
+                "To create an empty run on purpose, call createTestRun again with " +
+                "allow_empty: true.",
+            },
+          ],
+        };
+      }
+      return createTestRunTool(run, config, server);
+    },
   );
 
   tools.listTestRuns = server.tool(

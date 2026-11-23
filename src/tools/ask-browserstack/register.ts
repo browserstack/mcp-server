@@ -64,6 +64,7 @@ import {
 import {
   agentHandle,
   agentParamDescription,
+  agentProductTitle,
   agentToolDescription,
   agentToolName,
 } from "../capability-registry/agents.js";
@@ -177,8 +178,23 @@ const DESCRIPTION =
   "here fits, or when the ones you tried did not get you there. Prefer a specific tool " +
   "whenever one fits. Describe the task in plain language. A data change asks you to " +
   "confirm first: put it to the user, never decide for them; deletes are refused " +
-  "outright. If no one can confirm, the run is read-only and changes come back in " +
-  "`needs_approval`. One task per call.";
+  "outright. One task per call.";
+
+/**
+ * askBrowserStackAI's description, sending agent work to the products' agent tools: a
+ * client that reads "BrowserStack AI" here would otherwise start an agent through it.
+ */
+function askDescription(agentProducts: string[]): string {
+  return (
+    DESCRIPTION +
+    agentProducts
+      .map(
+        (product) =>
+          ` To run a ${agentProductTitle(product)} agent, use ${agentToolName(product)}.`,
+      )
+      .join("")
+  );
+}
 
 const FILES_NEED_SIZES =
   "This BrowserStack MCP server cannot read your files, so each one is sent from your " +
@@ -970,9 +986,15 @@ export function addAskBrowserStackAITool(
     // iteration ending, and Atlas drops the run when the response completes.
   };
 
+  // The products whose agents have their own tool, registered below.
+  const agentsFor = deps.agentsFor || indexedAgents;
+  const productAgents = PRODUCTS.map(
+    (product) => [product, agentsFor(product)] as const,
+  ).filter(([, agents]) => agents.length > 0);
+
   tools.askBrowserStackAI = server.tool(
     "askBrowserStackAI",
-    DESCRIPTION,
+    askDescription(productAgents.map(([product]) => product)),
     ASK_PARAMS,
     askAnnotations,
     (args, extra) => runAsk(args, extra),
@@ -999,13 +1021,10 @@ export function addAskBrowserStackAITool(
     };
   }) as unknown as typeof tools.askBrowserStackAI.handler;
 
-  // ONE AGENT TOOL PER PRODUCT THAT HAS AGENTS (`tmAIAgents`). Its description lists the
+  // ONE AGENT TOOL PER PRODUCT THAT HAS AGENTS (`testManagementAIAgents`). Its description lists the
   // agents, one line each, so a client sees them in its tool list and names the one to run.
   // Measured against askBrowserStackAI alone, clients hand far more agent tasks over.
-  const agentsFor = deps.agentsFor || indexedAgents;
-  for (const product of PRODUCTS) {
-    const agents = agentsFor(product);
-    if (agents.length === 0) continue;
+  for (const [product, agents] of productAgents) {
     const tool = agentToolName(product);
     const byHandle = new Map(agents.map((a) => [agentHandle(a), a]));
     const handles = [...byHandle.keys()] as [string, ...string[]];

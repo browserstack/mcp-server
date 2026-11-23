@@ -137,8 +137,10 @@ describe("the tools surface the handoff", () => {
     expect(Object.keys(out)[0]).toBe("use_agent");
     expect(out.use_agent.product).toBe("tm");
     // It points at the product's agent tool, which the server registers beside it.
-    expect(out.use_agent.next_step).toMatch(/Call tmAIAgents with `agent`/);
-    expect(t.tmAIAgents).toBeDefined();
+    expect(out.use_agent.next_step).toMatch(
+      /Call testManagementAIAgents with `agent`/,
+    );
+    expect(t.testManagementAIAgents).toBeDefined();
     expect(out.use_agent.agents.map((a: any) => a.agent)).toContain(
       "generate_test_cases",
     );

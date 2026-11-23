@@ -485,7 +485,7 @@ export interface AuthScheme {
  * AI-generated attribution. Listing the agent beside the capabilities is what lets the
  * client see that the task already has an owner.
  *
- * THE PRODUCT'S AGENT TOOL NAMES THE AGENT. `tmAIAgents` takes one of these by `handle` and
+ * THE PRODUCT'S AGENT TOOL NAMES THE AGENT. `testManagementAIAgents` takes one of these by `handle` and
  * sends `name` to BrowserStack AI as an `@agent` mention, so `name` must be the agent's name
  * in BrowserStack AI. askBrowserStackAI names none: it routes on the task's wording.
  */

@@ -1,5 +1,5 @@
 /**
- * A product's agent tool (`tmAIAgents`): askBrowserStackAI with the product fixed and the
+ * A product's agent tool (`testManagementAIAgents`): askBrowserStackAI with the product fixed and the
  * agent named by the caller.
  *
  * It is a second door to the same handler, so approvals, check-backs, questions and uploads
@@ -16,7 +16,7 @@ import { AgentDoc } from "../capability-registry/types.js";
 import { AgentRequest, AskResult } from "./types.js";
 
 export interface AgentVia {
-  /** The tool the call came through, e.g. `tmAIAgents`. */
+  /** The tool the call came through, e.g. `testManagementAIAgents`. */
   tool: string;
   /** The agent the caller named. */
   agent: AgentDoc;

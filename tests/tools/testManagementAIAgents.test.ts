@@ -77,11 +77,11 @@ async function connect(
   return { client, tools, call, sent };
 }
 
-describe("tmAIAgents", () => {
+describe("testManagementAIAgents", () => {
   it("lists every agent on `agent`, one line each, and keeps its own text short", async () => {
     const { client } = await connect();
     const tool = (await client.listTools()).tools.find(
-      (t) => t.name === "tmAIAgents",
+      (t) => t.name === "testManagementAIAgents",
     )!;
     expect(tool.description!.length).toBeLessThanOrEqual(200);
     const agent = (tool.inputSchema.properties as any).agent;
@@ -97,14 +97,16 @@ describe("tmAIAgents", () => {
 
   it("refuses a call that names no agent", async () => {
     const { call, sent } = await connect();
-    const res = await call("tmAIAgents", { query: "find duplicates" });
+    const res = await call("testManagementAIAgents", {
+      query: "find duplicates",
+    });
     expect(res.isError).toBe(true);
     expect(sent).toEqual([]);
   });
 
   it("starts the named agent as an @agent mention", async () => {
     const { call, sent } = await connect();
-    await call("tmAIAgents", {
+    await call("testManagementAIAgents", {
       agent: "find_duplicate_test_cases",
       query: "find duplicates in the Auth folder",
     });
@@ -122,7 +124,7 @@ describe("tmAIAgents", () => {
 
   it("names the agent on a follow-up turn too", async () => {
     const { call, sent } = await connect();
-    await call("tmAIAgents", {
+    await call("testManagementAIAgents", {
       agent: "find_duplicate_test_cases",
       query: "now the Payments folder",
       conversation_id: "run-abc",
@@ -135,13 +137,15 @@ describe("tmAIAgents", () => {
 
   it("returns an approval that is answered through it, with the agent", async () => {
     const { call } = await connect(undefined, PARKED);
-    const out = await call("tmAIAgents", {
+    const out = await call("testManagementAIAgents", {
       agent: "find_duplicate_test_cases",
       query: "find duplicates",
     });
     expect(out.status).toBe("needs_approval");
-    expect(out.next_step.call).toBe("tmAIAgents");
-    expect(out.next_step.instruction).toContain("call tmAIAgents again");
+    expect(out.next_step.call).toBe("testManagementAIAgents");
+    expect(out.next_step.instruction).toContain(
+      "call testManagementAIAgents again",
+    );
     expect(out.next_step.instruction).not.toContain("askBrowserStackAI");
     expect(out.next_step.params).toEqual({
       agent: "find_duplicate_test_cases",
@@ -167,6 +171,28 @@ describe("tmAIAgents", () => {
     const { tools } = await connect([]);
     expect(Object.keys(tools)).toEqual(["askBrowserStackAI"]);
   });
+
+  it("is what askBrowserStackAI sends agent work to, and only when it exists", async () => {
+    const describe = async (agents: AgentDoc[]) =>
+      (await (await connect(agents)).client.listTools()).tools.find(
+        (t) => t.name === "askBrowserStackAI",
+      )!.description!;
+    expect(await describe([DEDUPE])).toMatch(
+      / To run a Test Management agent, use testManagementAIAgents\.$/,
+    );
+    expect(await describe([])).not.toContain("AIAgents");
+  });
+
+  it("says to use it, not askBrowserStackAI, within 200 characters", async () => {
+    const { client } = await connect();
+    const tool = (await client.listTools()).tools.find(
+      (t) => t.name === "testManagementAIAgents",
+    )!;
+    expect(tool.description).toMatch(
+      /^Use this tool to run a BrowserStack AI agent for Test Management, not askBrowserStackAI/,
+    );
+    expect(tool.description!.length).toBeLessThanOrEqual(200);
+  });
 });
 
 describe("the agent mention", () => {
@@ -186,7 +212,7 @@ describe("the agent mention", () => {
 
 describe("a result through the agent tool", () => {
   const via = {
-    tool: "tmAIAgents",
+    tool: "testManagementAIAgents",
     agent: DEDUPE,
     handle: "find_duplicate_test_cases",
   };

@@ -9,7 +9,7 @@
  * named Login": the two share most of their words and only the first is the agent's job.
  *
  * THE CHOICE BETWEEN AGENTS IS NOT MADE HERE. The matches only point the client at the
- * product's agent tool (`tmAIAgents`); the client names the agent there, from that tool's
+ * product's agent tool (`testManagementAIAgents`); the client names the agent there, from that tool's
  * description.
  */
 
@@ -92,9 +92,16 @@ export function agentSummary(agent: AgentDoc) {
   };
 }
 
-/** The tool that runs a product's agents, e.g. `tmAIAgents`. */
+/** The tool that runs a product's agents, named for the product as a user says it. */
+const AGENT_TOOL_NAMES: Record<string, string> = {
+  tm: "testManagementAIAgents",
+  tra: "testReportingAIAgents",
+  a11y: "accessibilityAIAgents",
+};
+
+/** The tool that runs a product's agents, e.g. `testManagementAIAgents`. */
 export function agentToolName(product: string): string {
-  return `${product}AIAgents`;
+  return AGENT_TOOL_NAMES[product] || `${product}AIAgents`;
 }
 
 /** What that tool takes as `agent`: authored, else derived from the agent's name. */
@@ -120,11 +127,16 @@ const PRODUCT_TITLES: Record<string, string> = {
  * description at connect time, so the agents are listed on `agent` instead.
  */
 export function agentToolDescription(product: string): string {
-  const title = PRODUCT_TITLES[product] || product;
   return (
-    `Run a BrowserStack AI agent for ${title}: it does the whole task and asks ` +
-    "before saving. Prefer it to individual tools for the tasks under `agent`."
+    `Use this tool to run a BrowserStack AI agent for ${agentProductTitle(product)}, ` +
+    "not askBrowserStackAI or individual tools. The agent does the whole task and asks " +
+    "before saving. Agents: see `agent`."
   );
+}
+
+/** The product as a user names it, e.g. "Test Management". */
+export function agentProductTitle(product: string): string {
+  return PRODUCT_TITLES[product] || product;
 }
 
 /** The `agent` parameter's description: the agents, one line each. */

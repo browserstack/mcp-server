@@ -45,7 +45,7 @@ describe("createTestRun, with the test selection agent reachable", () => {
 
   it("reads as it always did, with a way to ask for an empty run", async () => {
     const { tool } = await connect();
-    expect(tool.description).not.toContain("tmAIAgents");
+    expect(tool.description).not.toContain("testManagementAIAgents");
     expect(tool.inputSchema.properties).toHaveProperty("allow_empty");
   });
 
@@ -54,7 +54,7 @@ describe("createTestRun, with the test selection agent reachable", () => {
     const res = await run({ test_run: { name: "Smoke" } });
     expect(res.content[0].text).toMatch(/^No test run was created/);
     expect(res.content[0].text).toContain(
-      "call tmAIAgents with agent 'create_test_run_from_requirement'",
+      "call testManagementAIAgents with agent 'create_test_run_from_requirement'",
     );
     expect(createTestRun).not.toHaveBeenCalled();
   });
@@ -86,7 +86,7 @@ describe("createTestRun, with BrowserStack AI switched off", () => {
 
   it("reads and behaves as it always did", async () => {
     const { tool, run } = await connect();
-    expect(tool.description).not.toContain("tmAIAgents");
+    expect(tool.description).not.toContain("testManagementAIAgents");
     expect(tool.inputSchema.properties).not.toHaveProperty("allow_empty");
     await run({ test_run: { name: "Smoke" } });
     expect(createTestRun).toHaveBeenCalledTimes(1);

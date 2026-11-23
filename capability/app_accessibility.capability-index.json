@@ -1787,8 +1787,8 @@
           {
             "name": "severity",
             "type": "string",
-            "description": "Keeps issues of these severities, as a JSON array: [\"critical\",\"serious\"]. Anything but a JSON array is ignored.",
-            "example": "[\"critical\",\"serious\"]"
+            "description": "Keeps issues of these severities, as a JSON array of capitalised names: [\"Critical\",\"Serious\"] (Critical, Serious, Moderate, Minor). Lower case drops every issue; anything but a JSON array is ignored.",
+            "example": "[\"Critical\",\"Serious\"]"
           },
           {
             "name": "rules",

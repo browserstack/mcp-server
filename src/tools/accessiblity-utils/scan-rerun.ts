@@ -1,5 +1,5 @@
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
-import type { SavedScan, ScanSettings } from "./scanner.js";
+import type { SavedScan, ScanScope, ScanSettings } from "./scanner.js";
 import { onOff, wcagName } from "./shared.js";
 import { wrapUntrusted } from "../../lib/untrusted-content.js";
 
@@ -75,6 +75,48 @@ export function otherPageNote(
   return `Scan ${scanId} is for ${urlList.length} pages, not just ${pageURL}, so a new scan was started. Its pages${more}: ${pages}`;
 }
 
+/** How a scope finds its element: "CSS selector" or "XPath". */
+export function scopeKind(scope: ScanScope): string {
+  return scope.type === "css" ? "CSS selector" : "XPath";
+}
+
+/**
+ * The part of the page a saved scan covers, said before its run. Its selector is the
+ * account's, which another user may have set: quoted as data.
+ */
+export function savedScopeLine(saved: SavedScan): string[] {
+  const scope = saved.settings.scanScope;
+  return scope
+    ? [
+        `This scan covers only the first element of the page its saved ${scopeKind(scope)} matches: ${wrapUntrusted("saved scan scope", scope.value)}`,
+      ]
+    : [];
+}
+
+/**
+ * Whether the scope passed differs from the saved one, said without the saved selector,
+ * which savedScopeLine quotes as data.
+ */
+function scopeDifference(
+  passed: ScanScope | undefined,
+  savedScope: ScanScope | null | undefined,
+): string[] {
+  if (!passed || savedScope === undefined) return [];
+  if (
+    savedScope &&
+    savedScope.type === passed.type &&
+    savedScope.value === passed.value
+  ) {
+    return [];
+  }
+  const saved = savedScope
+    ? `a different ${scopeKind(savedScope)} (quoted below)`
+    : "the whole page";
+  return [
+    `part of the page: saved ${saved}, passed ${scopeKind(passed)} ${JSON.stringify(passed.value)}`,
+  ];
+}
+
 /**
  * The settings a call passed that differ from the scan's saved ones. A re-run takes no
  * settings, so running it anyway would quietly drop what was asked for. Only settings the
@@ -116,6 +158,7 @@ export function savedSettingDifferences(
       onOff,
     ),
     ...differ("needs review", args.needsReview, settings.needsReview, onOff),
+    ...scopeDifference(args.scanScope ?? undefined, settings.scanScope),
     ...(args.authConfigId !== undefined && saved.authEnabled === false
       ? [
           `login: the scan has no auth config saved, passed authConfigId ${args.authConfigId}`,
@@ -150,6 +193,7 @@ export function uncheckedSettings(args: ScanArgs, saved: SavedScan): string[] {
     args.needsReview !== undefined && settings.needsReview === undefined
       ? "needsReview"
       : "",
+    args.scanScope && settings.scanScope === undefined ? "scanScope" : "",
   ].filter(Boolean);
 }
 

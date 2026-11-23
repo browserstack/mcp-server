@@ -8,6 +8,7 @@ import { BrowserStackConfig } from "../../lib/types.js";
 import { apiClient } from "../../lib/apiClient.js";
 import { wrapUntrusted } from "../../lib/untrusted-content.js";
 import { getRegionalHost } from "../../lib/regional-host.js";
+import { encodePathSegment } from "../../lib/path-segment.js";
 
 /** The session has no such log here (404). Opt-in, so the caller can try elsewhere. */
 export class LogsNotFoundError extends Error {
@@ -29,7 +30,7 @@ export async function retrieveDeviceLogs(
   config: BrowserStackConfig,
   options: AppLogOptions = {},
 ): Promise<string> {
-  const url = `${getRegionalHost("appAutomateApi")}/app-automate/builds/${buildId}/sessions/${sessionId}/devicelogs`;
+  const url = `${getRegionalHost("appAutomateApi")}/app-automate/builds/${encodePathSegment(buildId, "buildId")}/sessions/${encodePathSegment(sessionId, "sessionId")}/devicelogs`;
   const authString = getBrowserStackAuth(config);
   const auth = Buffer.from(authString).toString("base64");
 
@@ -68,7 +69,7 @@ export async function retrieveAppiumLogs(
   config: BrowserStackConfig,
   options: AppLogOptions = {},
 ): Promise<string> {
-  const url = `${getRegionalHost("appAutomateApi")}/app-automate/builds/${buildId}/sessions/${sessionId}/appiumlogs`;
+  const url = `${getRegionalHost("appAutomateApi")}/app-automate/builds/${encodePathSegment(buildId, "buildId")}/sessions/${encodePathSegment(sessionId, "sessionId")}/appiumlogs`;
   const authString = getBrowserStackAuth(config);
   const auth = Buffer.from(authString).toString("base64");
 
@@ -107,7 +108,7 @@ export async function retrieveCrashLogs(
   config: BrowserStackConfig,
   options: AppLogOptions = {},
 ): Promise<string> {
-  const url = `${getRegionalHost("appAutomateApi")}/app-automate/builds/${buildId}/sessions/${sessionId}/crashlogs`;
+  const url = `${getRegionalHost("appAutomateApi")}/app-automate/builds/${encodePathSegment(buildId, "buildId")}/sessions/${encodePathSegment(sessionId, "sessionId")}/crashlogs`;
   const authString = getBrowserStackAuth(config);
   const auth = Buffer.from(authString).toString("base64");
 

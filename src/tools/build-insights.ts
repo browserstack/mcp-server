@@ -14,6 +14,7 @@ import {
 } from "./automate-utils/resolve-hashed-build-id.js";
 import { mapHashedToTra } from "./automate-utils/resolve-tra-build-id.js";
 import { getRegionalHost } from "../lib/regional-host.js";
+import { wrapUntrusted } from "../lib/untrusted-content.js";
 
 // Tool function that fetches build insights from two APIs
 export async function fetchBuildInsightsTool(
@@ -78,14 +79,16 @@ export async function fetchBuildInsightsTool(
 
     const qualityProfilesText =
       qualityProfiles && qualityProfiles.length > 0
-        ? `Quality Gate Profiles (respond only if explicitly requested): ${JSON.stringify(qualityProfiles, null, 2)}`
+        ? `Quality Gate Profiles (respond only if explicitly requested): ${wrapUntrusted("quality gate profiles", JSON.stringify(qualityProfiles, null, 2))}`
         : "No Quality Gate Profiles available.";
 
     return {
       content: [
         {
           type: "text",
-          text: "Build insights:\n" + JSON.stringify(insights, null, 2),
+          text:
+            "Build insights:\n" +
+            wrapUntrusted("build insights", JSON.stringify(insights, null, 2)),
         },
         { type: "text", text: qualityProfilesText },
       ],

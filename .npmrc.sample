@@ -1,0 +1,7 @@
+# Copy to .npmrc (git-ignored); CI applies it before install.
+ignore-scripts=true
+strict-ssl=true
+save-exact=true
+engine-strict=true
+legacy-peer-deps=false
+audit-level=high

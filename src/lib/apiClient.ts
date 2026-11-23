@@ -15,6 +15,8 @@ type RequestOptions = {
   timeout?: number;
   responseType?: AxiosRequestConfig["responseType"];
   maxContentLength?: number;
+  maxRedirects?: number;
+  beforeRedirect?: AxiosRequestConfig["beforeRedirect"];
   raise_error?: boolean; // default: true
 };
 
@@ -243,6 +245,8 @@ class ApiClient {
     timeout,
     responseType,
     maxContentLength,
+    maxRedirects,
+    beforeRedirect,
     raise_error = true,
   }: RequestOptions): Promise<ApiResponse<T>> {
     const config: AxiosRequestConfig = {
@@ -251,6 +255,8 @@ class ApiClient {
       timeout,
       responseType,
       maxContentLength,
+      maxRedirects,
+      beforeRedirect,
       httpsAgent: this.axiosAgent,
     };
     return this.requestWrapper<T>(

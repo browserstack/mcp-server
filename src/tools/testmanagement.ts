@@ -130,7 +130,7 @@ export async function createProjectOrFolderTool(
           type: "text",
           text: `Failed to create project/folder: ${
             err instanceof Error ? err.message : "Unknown error"
-          }. Please open an issue on GitHub if the problem persists`,
+          }. Please open an issue on GitHub if the problem persists.`,
         },
       ],
       isError: true,
@@ -165,7 +165,7 @@ export async function createTestCaseTool(
           type: "text",
           text: `Failed to create test case: ${
             err instanceof Error ? err.message : "Unknown error"
-          }. Please open an issue on GitHub if the problem persists`,
+          }. Please open an issue on GitHub if the problem persists.`,
         },
       ],
       isError: true,
@@ -198,7 +198,7 @@ export async function updateTestCaseTool(
           type: "text",
           text: `Failed to update test case: ${
             err instanceof Error ? err.message : "Unknown error"
-          }. Please open an issue on GitHub if the problem persists`,
+          }. Please open an issue on GitHub if the problem persists.`,
         },
       ],
       isError: true,
@@ -231,7 +231,7 @@ export async function listTestCasesTool(
           type: "text",
           text: `Failed to list test cases: ${
             err instanceof Error ? err.message : "Unknown error"
-          }. Please open an issue on GitHub if the problem persists`,
+          }. Please open an issue on GitHub if the problem persists.`,
         },
       ],
       isError: true,
@@ -263,7 +263,7 @@ export async function listFoldersTool(
           type: "text",
           text: `Failed to list folders: ${
             err instanceof Error ? err.message : "Unknown error"
-          }. Please open an issue on GitHub if the problem persists`,
+          }. Please open an issue on GitHub if the problem persists.`,
         },
       ],
       isError: true,
@@ -300,7 +300,7 @@ export async function listTemplatesTool(
           type: "text",
           text: `Failed to list templates: ${
             err instanceof Error ? err.message : "Unknown error"
-          }. Please open an issue on GitHub if the problem persists`,
+          }. Please open an issue on GitHub if the problem persists.`,
         },
       ],
       isError: true,
@@ -332,7 +332,7 @@ export async function createTestRunTool(
           type: "text",
           text: `Failed to create test run: ${
             err instanceof Error ? err.message : "Unknown error"
-          }. Please open an issue on GitHub if the problem persists`,
+          }. Please open an issue on GitHub if the problem persists.`,
         },
       ],
       isError: true,
@@ -364,7 +364,7 @@ export async function listTestRunsTool(
           type: "text",
           text: `Failed to list test runs: ${
             err instanceof Error ? err.message : "Unknown error"
-          }. Please open an issue on GitHub if the problem persists`,
+          }. Please open an issue on GitHub if the problem persists.`,
         },
       ],
       isError: true,
@@ -398,7 +398,7 @@ export async function updateTestRunTool(
           type: "text",
           text: `Failed to update test run: ${
             err instanceof Error ? err.message : "Unknown error"
-          }. Please open an issue on GitHub if the problem persists`,
+          }. Please open an issue on GitHub if the problem persists.`,
         },
       ],
       isError: true,
@@ -430,7 +430,7 @@ export async function addTestResultTool(
           type: "text",
           text: `Failed to add test result: ${
             err instanceof Error ? err.message : "Unknown error"
-          }. Please open an issue on GitHub if the problem persists`,
+          }. Please open an issue on GitHub if the problem persists.`,
         },
       ],
       isError: true,
@@ -467,7 +467,7 @@ export async function uploadProductRequirementFileTool(
           type: "text",
           text: `Failed to upload file: ${
             err instanceof Error ? err.message : "Unknown error"
-          }. Please open an issue on GitHub if the problem persists`,
+          }. Please open an issue on GitHub if the problem persists.`,
         },
       ],
       isError: true,
@@ -505,7 +505,7 @@ export async function createTestCasesFromFileTool(
           type: "text",
           text: `Failed to create test cases from file: ${
             err instanceof Error ? err.message : "Unknown error"
-          }. Please open an issue on GitHub if the problem persists`,
+          }. Please open an issue on GitHub if the problem persists.`,
         },
       ],
       isError: true,
@@ -586,7 +586,7 @@ export async function createLCAStepsTool(
           type: "text",
           text: `Failed to create LCA steps: ${
             err instanceof Error ? err.message : "Unknown error"
-          }. Please open an issue on GitHub if the problem persists`,
+          }. Please open an issue on GitHub if the problem persists.`,
         },
       ],
       isError: true,
@@ -619,7 +619,7 @@ export async function listTestPlansTool(
           type: "text",
           text: `Failed to list test plans: ${
             err instanceof Error ? err.message : "Unknown error"
-          }. Please open an issue on GitHub if the problem persists`,
+          }. Please open an issue on GitHub if the problem persists.`,
         },
       ],
       isError: true,
@@ -652,7 +652,7 @@ export async function getTestPlanTool(
           type: "text",
           text: `Failed to fetch test plan: ${
             err instanceof Error ? err.message : "Unknown error"
-          }. Please open an issue on GitHub if the problem persists`,
+          }. Please open an issue on GitHub if the problem persists.`,
         },
       ],
       isError: true,
@@ -690,7 +690,7 @@ export async function listSubTestPlansTool(
           type: "text",
           text: `Failed to list sub-test-plans: ${
             err instanceof Error ? err.message : "Unknown error"
-          }. Please open an issue on GitHub if the problem persists`,
+          }. Please open an issue on GitHub if the problem persists.`,
         },
       ],
       isError: true,
@@ -723,7 +723,7 @@ export async function getSubTestPlanTool(
           type: "text",
           text: `Failed to fetch sub-test-plan: ${
             err instanceof Error ? err.message : "Unknown error"
-          }. Please open an issue on GitHub if the problem persists`,
+          }. Please open an issue on GitHub if the problem persists.`,
         },
       ],
       isError: true,

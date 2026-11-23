@@ -50,6 +50,7 @@ export function withFeedbackHint<T>(toolName: string, result: T): T {
   if (!Array.isArray(r.content) || SELF_FIXABLE.test(textOf(r))) return result;
   return {
     ...r,
-    content: [...r.content, { type: "text", text: FEEDBACK_HINT }],
+    // Clients that join blocks without a separator would run the hint into the error.
+    content: [...r.content, { type: "text", text: `\n${FEEDBACK_HINT}` }],
   } as T;
 }

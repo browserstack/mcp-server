@@ -306,7 +306,7 @@ describe('createProjectOrFolderTool', () => {
     const result = await createProjectOrFolderTool(validProjectArgs, mockConfig, mockServer);
     expect(result.isError).toBe(true);
     expect(result.content?.[0]?.text).toContain(
-      'Failed to create project/folder: Failed to create project/folder. Please open an issue on GitHub if the problem persists'
+      'Failed to create project/folder: Failed to create project/folder. Please open an issue on GitHub if the problem persists.'
     );
   });
   it('should handle unknown error while creating project or folder', async () => {
@@ -314,7 +314,7 @@ describe('createProjectOrFolderTool', () => {
     const result = await createProjectOrFolderTool(validProjectArgs, mockConfig, mockServer);
     expect(result.isError).toBe(true);
     expect(result.content?.[0]?.text).toContain(
-      'Failed to create project/folder: Unknown error. Please open an issue on GitHub if the problem persists'
+      'Failed to create project/folder: Unknown error. Please open an issue on GitHub if the problem persists.'
     );
   });
 });

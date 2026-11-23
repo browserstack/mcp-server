@@ -99,7 +99,7 @@ describe("getTestIds — failure signature extraction", () => {
     expect(row.test_id).toBe("101");
     expect(row.failure).toEqual({
       category: "Assertion, Timeout",
-      error_summary: "Expected 200 but got 500",
+      error_summary: "Expected 200 but got 500\nat line 42",
       file_path: "spec/login.rb",
       is_flaky: true,
       is_always_failing: false,
@@ -107,12 +107,13 @@ describe("getTestIds — failure signature extraction", () => {
     });
   });
 
-  it("error_summary is the first non-empty line, capped at 200 chars", async () => {
-    const longLine = "E".repeat(500);
+  it("error_summary keeps a message longer than 200 chars whole", async () => {
+    const message =
+      'Error: AI executor error for step "Tap on the Inputs bottom navigation menu and swipe left across the main screen until you find the screen with the textbox, then type \'Sample\' into the textfield": TC step timed out after 60s';
     mockFetchOnce({
       hierarchy: [
-        failedNode(102, "long error", {
-          retries: [{ logs: { TEST_FAILURE: [`\n\n${longLine}\nsecond`] } }],
+        failedNode(106, "ai step", {
+          retries: [{ logs: { TEST_FAILURE: [message] } }],
         }),
       ],
       pagination: { has_next: false, next_page: null },
@@ -120,7 +121,97 @@ describe("getTestIds — failure signature extraction", () => {
 
     const [row] = await getTestIds("build-1", AUTH, TestStatus.FAILED, true);
 
-    expect(row.failure?.error_summary).toBe("E".repeat(200));
+    expect(row.failure?.error_summary).toBe(message);
+  });
+
+  it("error_summary keeps a multi-line message and the first frame outside libraries", async () => {
+    const log = [
+      "AssertionError: expected 'Limit 500' to equal 'Limit 1000'",
+      "+ expected - actual",
+      "-Limit 500",
+      "+Limit 1000",
+      "    at Context.<anonymous> (node_modules/expect-webdriverio/lib/matchers.js:12:3)",
+      "    at Context.<anonymous> (test/specs/payment-limits.spec.js:42:15)",
+      "    at processTicksAndRejections (node:internal/process/task_queues:95:5)",
+    ].join("\n");
+    mockFetchOnce({
+      hierarchy: [
+        failedNode(107, "limits", {
+          retries: [{ logs: { TEST_FAILURE: [log] } }],
+        }),
+      ],
+      pagination: { has_next: false, next_page: null },
+    });
+
+    const [row] = await getTestIds("build-1", AUTH, TestStatus.FAILED, true);
+
+    expect(row.failure?.error_summary).toBe(
+      [
+        "AssertionError: expected 'Limit 500' to equal 'Limit 1000'",
+        "+ expected - actual",
+        "-Limit 500",
+        "+Limit 1000",
+        "at Context.<anonymous> (test/specs/payment-limits.spec.js:42:15)",
+      ].join("\n"),
+    );
+  });
+
+  it("error_summary caps a very long message and still keeps the frame", async () => {
+    mockFetchOnce({
+      hierarchy: [
+        failedNode(102, "long error", {
+          retries: [
+            {
+              logs: {
+                TEST_FAILURE: [`\n\n${"E".repeat(1500)}\n    at spec.js:1:1`],
+              },
+            },
+          ],
+        }),
+      ],
+      pagination: { has_next: false, next_page: null },
+    });
+
+    const [row] = await getTestIds("build-1", AUTH, TestStatus.FAILED, true);
+
+    expect(row.failure?.error_summary).toBe(`${"E".repeat(1000)}…\nat spec.js:1:1`);
+  });
+
+  it("error_summary shares a fixed budget when a build has many failures", async () => {
+    const message = "M".repeat(900);
+    mockFetchOnce({
+      hierarchy: Array.from({ length: 600 }, (_, i) =>
+        failedNode(1000 + i, `test ${i}`, {
+          retries: [{ logs: { TEST_FAILURE: [message] } }],
+        }),
+      ),
+      pagination: { has_next: false, next_page: null },
+    });
+
+    const rows = await getTestIds("build-1", AUTH, TestStatus.FAILED, true);
+    const total = rows.reduce(
+      (sum, row) => sum + (row.failure?.error_summary?.length ?? 0),
+      0,
+    );
+
+    expect(rows[0].failure?.error_summary).toBe(`${"M".repeat(200)}…`);
+    expect(total).toBe(600 * 201);
+  });
+
+  it("error_summary is not trimmed when the failures fit the budget", async () => {
+    const message = "M".repeat(900);
+    mockFetchOnce({
+      hierarchy: Array.from({ length: 100 }, (_, i) =>
+        failedNode(2000 + i, `test ${i}`, {
+          retries: [{ logs: { TEST_FAILURE: [message] } }],
+        }),
+      ),
+      pagination: { has_next: false, next_page: null },
+    });
+
+    const rows = await getTestIds("build-1", AUTH, TestStatus.FAILED, true);
+
+    expect(rows.every((row) => row.failure?.error_summary === message)).toBe(true);
   });
 
   it("handles object-shaped TEST_FAILURE entries ({ text })", async () => {

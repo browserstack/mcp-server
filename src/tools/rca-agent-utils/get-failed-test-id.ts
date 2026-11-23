@@ -9,6 +9,7 @@ import {
   TestFailureSignature,
 } from "./types.js";
 import { trackedFetch } from "../../lib/upstream-status.js";
+import { isTransientResponse, retryRead } from "../../lib/read-retry.js";
 
 // Keeps the response payload lean — never full stack traces.
 const ERROR_SUMMARY_MAX = 200;
@@ -16,15 +17,8 @@ const ERROR_SUMMARY_MAX = 200;
 // Safety bound on pagination; hitting it is logged, never silent.
 const MAX_PAGES = 100;
 
-async function fetchWithRetry(
-  url: string,
-  init: RequestInit,
-): Promise<Response> {
-  try {
-    return await trackedFetch(url, init);
-  } catch {
-    return await trackedFetch(url, init);
-  }
+function fetchWithRetry(url: string, init: RequestInit): Promise<Response> {
+  return retryRead(() => trackedFetch(url, init), isTransientResponse);
 }
 
 export async function getTestIds(

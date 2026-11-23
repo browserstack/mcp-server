@@ -3,6 +3,7 @@ import { HttpError } from "../../lib/error.js";
 import { getBrowserStackAuth } from "../../lib/get-auth.js";
 import { BrowserStackConfig } from "../../lib/types.js";
 import { getAutomationBaseUrl } from "./constants.js";
+import { isTransientResponse, retryRead } from "../../lib/read-retry.js";
 
 // TRA matches /builds/latest on `original_name`, the build name the SDK sent;
 // the dashboard shows a shortened `name`, which the build-number capability takes.
@@ -27,11 +28,7 @@ async function getWithRetry(
       ...(params ? { params } : {}),
       raise_error: false,
     });
-  try {
-    return await request();
-  } catch {
-    return await request();
-  }
+  return retryRead(request, isTransientResponse);
 }
 
 function httpError(what: string, status: number, statusText: string): Error {

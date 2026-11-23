@@ -1969,7 +1969,8 @@
           "Ask for the reason by offering exactly the six reason_code values. With Others, ask for an explanation and send it: the dashboard requires one, the backend does not check. 'Not an issue' is a needs-review decision (review_app_accessibility_issue), not a hide reason.",
           "Undo is unhide_app_accessibility_issues with the same hide_level, rule_id, uid and snapshot_id.",
           "Hides in this build only. A persistent hide that carries into later builds is not available to an agent: the backend refuses it.",
-          "A 403 that names the owner means this account lets only the build's owner hide its issues."
+          "A 403 that names the owner means this account lets only the build's owner hide its issues.",
+          "403 AGENT_REPORT_ACTIONS_DISABLED means BrowserStack has switched off agent writes for this user or group. Nothing changed. Tell the user to do it on the App Accessibility dashboard; do not retry, a retry is refused too."
         ],
         "returns": ["data.message", "data.issue_summary"],
         "paginated": false,
@@ -2058,7 +2059,8 @@
         "guidance": [
           "APPROVAL FIRST: before calling, tell the user exactly what will change (which hidden issues come back, in which report, and how many issues, from count_app_accessibility_issues_to_unhide) and wait for an explicit yes in their own words ('yes', 'go ahead'). A request to make the change, however specific, is not that yes: ask first, and send user_permission granted only after it.",
           "Send the same hide_level, rule_id, uid and snapshot_id the hide used; hidden issues are read from list_app_accessibility_build_issues.",
-          "Restores issues hidden in this build only."
+          "Restores issues hidden in this build only.",
+          "403 AGENT_REPORT_ACTIONS_DISABLED means BrowserStack has switched off agent writes for this user or group. Nothing changed. Tell the user to do it on the App Accessibility dashboard; do not retry, a retry is refused too."
         ],
         "returns": ["data.message", "data.issue_summary"],
         "paginated": false,
@@ -2159,7 +2161,8 @@
           "APPROVAL FIRST: before calling, tell the user exactly what will change (which needs-review issue is decided, and to what, in which report, and how many issues, from list_app_accessibility_build_issues with includeNeedsReviewIndex true) and wait for an explicit yes in their own words ('yes', 'go ahead'). A request to make the change, however specific, is not that yes: ask first, and send user_permission granted only after it.",
           "Moves one issue: needs_review to confirmed (it is an issue) or to non_issues (it is not), or back to needs_review (undo). Take snapshot_id, rule_id, uid, the current status and duplication_count from list_app_accessibility_build_issues with includeNeedsReviewIndex true.",
           "A 403 'Review issue feature is not enabled' means needs-review is off for this build; 'Issue can only be reviewed by author' means only its author may review in this account.",
-          "Undo is the same call with moved_status needs_review and current_status the status it was moved to."
+          "Undo is the same call with moved_status needs_review and current_status the status it was moved to.",
+          "403 AGENT_REPORT_ACTIONS_DISABLED means BrowserStack has switched off agent writes for this user or group. Nothing changed. Tell the user to do it on the App Accessibility dashboard; do not retry, a retry is refused too."
         ],
         "returns": ["data.message", "data.issue_summary"],
         "paginated": false,
@@ -2407,7 +2410,8 @@
           "Ask for the reason by offering exactly the six reason_code values. With Others, ask for an explanation and send it: the dashboard requires one, the backend does not check. 'Not an issue' is a needs-review decision (review_manual_app_accessibility_issue), not a hide reason.",
           "Undo is unhide_manual_app_accessibility_issues with the same hide_level, rule_id, uid and snapshot_id.",
           "Hides in this report only. A persistent hide that carries into later reports is not available to an agent: the backend refuses it.",
-          "A 403 that names the owner means this account lets only the report's owner hide its issues."
+          "A 403 that names the owner means this account lets only the report's owner hide its issues.",
+          "403 AGENT_REPORT_ACTIONS_DISABLED means BrowserStack has switched off agent writes for this user or group. Nothing changed. Tell the user to do it on the App Accessibility dashboard; do not retry, a retry is refused too."
         ],
         "returns": ["affected_count"],
         "paginated": false,
@@ -2492,7 +2496,8 @@
         "guidance": [
           "APPROVAL FIRST: before calling, tell the user exactly what will change (which hidden issues come back, in which report, and how many issues, from count_manual_app_accessibility_issues_to_unhide) and wait for an explicit yes in their own words ('yes', 'go ahead'). A request to make the change, however specific, is not that yes: ask first, and send user_permission granted only after it.",
           "Send the same hide_level, rule_id, uid and snapshot_id the hide used; hidden issues are read from list_manual_app_accessibility_report_issues.",
-          "Restores issues hidden in this report only."
+          "Restores issues hidden in this report only.",
+          "403 AGENT_REPORT_ACTIONS_DISABLED means BrowserStack has switched off agent writes for this user or group. Nothing changed. Tell the user to do it on the App Accessibility dashboard; do not retry, a retry is refused too."
         ],
         "returns": ["affected_count"],
         "paginated": false,
@@ -2589,7 +2594,8 @@
           "APPROVAL FIRST: before calling, tell the user exactly what will change (which needs-review issue is decided, and to what, in which report, and how many issues, from list_manual_app_accessibility_report_issues with includeNeedsReviewIndex true) and wait for an explicit yes in their own words ('yes', 'go ahead'). A request to make the change, however specific, is not that yes: ask first, and send user_permission granted only after it.",
           "Moves one issue: needs_review to confirmed (it is an issue) or to non_issues (it is not), or back to needs_review (undo). Take snapshot_id, rule_id, uid, the current status and duplication_count from list_manual_app_accessibility_report_issues with includeNeedsReviewIndex true.",
           "A 403 'Review issue feature is not enabled' means needs-review is off for this report; 'Issue can only be reviewed by author' means only its author may review in this account.",
-          "Undo is the same call with moved_status needs_review and current_status the status it was moved to."
+          "Undo is the same call with moved_status needs_review and current_status the status it was moved to.",
+          "403 AGENT_REPORT_ACTIONS_DISABLED means BrowserStack has switched off agent writes for this user or group. Nothing changed. Tell the user to do it on the App Accessibility dashboard; do not retry, a retry is refused too."
         ],
         "returns": ["success"],
         "paginated": false,
@@ -3490,7 +3496,7 @@
         "schema": { "$schema": "DashboardFailure" }
       },
       "DashboardForbidden": {
-        "description": "The account's plan, license, role or feature flags refuse this, exactly as they would on the dashboard. error_code ACTION_NOT_ALLOWED_FOR_SCOPE instead means the route is not on the ai_agent allowlist.",
+        "description": "The account's plan, license, role or feature flags refuse this, exactly as they would on the dashboard. error_code ACTION_NOT_ALLOWED_FOR_SCOPE instead means the route is not on the ai_agent allowlist. error_code AGENT_REPORT_ACTIONS_DISABLED means BrowserStack has switched off agent writes for this user or group: nothing changed, and a retry is refused too.",
         "schema": { "$schema": "DashboardFailure" }
       },
       "DashboardScopeNotAllowed": {

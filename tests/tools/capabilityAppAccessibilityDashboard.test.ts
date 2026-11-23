@@ -184,6 +184,19 @@ describe("the App Accessibility dashboard capabilities", () => {
     ).toMatch(/unhide_manual_app_accessibility_issues/);
   });
 
+  it("tell an agent a switched-off write is final, not something to retry", () => {
+    // app-accessibility answers 403 AGENT_REPORT_ACTIONS_DISABLED when ops blacklist the
+    // user or group for agent writes; nothing changed and a retry is refused too.
+    expect(app.responses.DashboardForbidden.description).toMatch(
+      /AGENT_REPORT_ACTIONS_DISABLED/,
+    );
+    for (const name of WRITES) {
+      const guidance = byName(name).guidance.join(" ");
+      expect(guidance, name).toMatch(/AGENT_REPORT_ACTIONS_DISABLED/);
+      expect(guidance, name).toMatch(/do not retry/i);
+    }
+  });
+
   it("point issue actions at the reads that carry uid and snapshot_id", () => {
     // fetchAccessibilityIssues does not return them, so an agent must read these first.
     expect(byName("hide_app_accessibility_issues").guidance.join(" ")).toMatch(

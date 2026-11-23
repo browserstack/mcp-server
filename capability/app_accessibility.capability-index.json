@@ -2159,14 +2159,23 @@
           "A 403 'Review issue feature is not enabled' means needs-review is off for this build; 'Issue can only be reviewed by author' means only its author may review in this account.",
           "Undo is the same call with moved_status needs_review and current_status the status it was moved to."
         ],
-        "returns": ["success"],
+        "returns": ["data.message", "data.issue_summary"],
         "paginated": false,
         "responses": {
           "200": {
-            "description": "Decided.",
+            "description": "Decided; issue_summary is the build's new counts.",
             "schema": {
               "type": "object",
-              "properties": { "success": { "type": "boolean" } }
+              "properties": {
+                "success": { "type": "boolean" },
+                "data": {
+                  "type": "object",
+                  "properties": {
+                    "message": { "type": "string" },
+                    "issue_summary": { "$schema": "IssueSummary" }
+                  }
+                }
+              }
             }
           },
           "400": { "$response": "DashboardBadRequest" },

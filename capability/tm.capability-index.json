@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "version": "1.46",
-  "build_id": "06326134_2026-11-18T07:08:47Z",
+  "build_id": "f1a4f17e_2026-11-23T06:37:09Z",
   "tm": {
     "routing_terms": [
       "team",
@@ -3905,9 +3905,9 @@
             "name": "field_name",
             "type": "string",
             "required": true,
-            "maxLength": 256,
+            "maxLength": 255,
             "example": "Test Environment",
-            "description": "Display label. Stripped of surrounding whitespace before the reserved-name check and before storage. Blank or longer than 256 characters → 400 'Invalid Params'."
+            "description": "Display label. Stripped of surrounding whitespace before the reserved-name check and before storage. Blank or longer than 255 characters → 400 'Invalid Params'."
           },
           {
             "name": "field_type",
@@ -5811,6 +5811,11 @@
           "project_count",
           "created_at",
           "updated_at",
+          "scope",
+          "project",
+          "is_project_default",
+          "editable",
+          "cloned_from",
           "description_fields",
           "properties_fields",
           "step_fields"
@@ -10101,7 +10106,8 @@
           "Paging is per dataset row and is controlled only by `p`; the page size is fixed at 30 and `per_page` is ignored. `info` carries the page metadata.",
           "`linked_to_all_projects` on a dataset is computed by comparing its linked project count against the workspace project count — it is derived, not a stored flag.",
           "A field id that does not exist comes back as a bare 404 {success:false} with no message; id 0 is a 400 'Invalid Params'.",
-          "`jira_binding` appears only on a `jira_lookup` field and is left out for every other type. Read it here before editing such a field: the edit call replaces the stored binding when you send one and keeps it when you do not."
+          "`jira_binding` appears only on a `jira_lookup` field and is left out for every other type. Read it here before editing such a field: the edit call replaces the stored binding when you send one and keeps it when you do not.",
+          "`scope` is always present and reads `global` unless the field is project-scoped. `project`, `editable` and `template_usage` are conditional: `editable` comes back only when the field is read through a project route, and `template_usage` only when the backend has a value for it, so treat a missing key as unknown rather than false. A dataset carries its own `jira_binding` when it has one."
         ],
         "query": [
           {
@@ -10126,6 +10132,10 @@
           "place_holder_text",
           "is_bulk_editable",
           "is_filterable",
+          "scope",
+          "project",
+          "editable",
+          "template_usage",
           "default_value",
           "datasets",
           "levels",
@@ -10813,13 +10823,25 @@
             "name": "q[assignee]",
             "type": "string",
             "example": "3700",
-            "description": "Comma-separated TM user ids. Resolved for entity=trtc only."
+            "description": "Comma-separated TM user ids. Resolved for entity=trtc and entity=test-runs."
           },
           {
             "name": "q[last_executed_by]",
             "type": "string",
             "example": "3700",
             "description": "Comma-separated TM user ids. Resolved for entity=trtc only."
+          },
+          {
+            "name": "q[created_by]",
+            "type": "string",
+            "example": "3700",
+            "description": "Comma-separated TM user ids. Resolved for entity=test-runs only; returned under filter_details.created_by."
+          },
+          {
+            "name": "q[updated_by]",
+            "type": "string",
+            "example": "3700",
+            "description": "Comma-separated TM user ids. Resolved for entity=test-runs only; returned under filter_details.updated_by."
           },
           {
             "name": "q[test_case_tags]",
@@ -10884,7 +10906,9 @@
           "owner",
           "reviewers",
           "assignee",
-          "last_executed_by"
+          "last_executed_by",
+          "created_by",
+          "updated_by"
         ],
         "responses": {
           "200": {
@@ -10994,7 +11018,7 @@
                     },
                     "assignee": {
                       "type": "array",
-                      "description": "Resolved users for q[assignee] — trtc only.",
+                      "description": "Resolved users for q[assignee] — trtc and test-runs.",
                       "items": {
                         "$schema": "User"
                       }
@@ -11004,6 +11028,20 @@
                       "description": "Resolved users for q[last_executed_by] — trtc only.",
                       "items": {
                         "$schema": "User"
+                      }
+                    },
+                    "created_by": {
+                      "type": "array",
+                      "description": "Resolved users for q[created_by] — test-runs only.",
+                      "items": {
+                        "$schema": "User__ListEntityFilterDetails"
+                      }
+                    },
+                    "updated_by": {
+                      "type": "array",
+                      "description": "Resolved users for q[updated_by] — test-runs only.",
+                      "items": {
+                        "$schema": "User__ListEntityFilterDetails"
                       }
                     },
                     "folders": {
@@ -11034,7 +11072,7 @@
           "This is an echo/hydration endpoint, not a discovery one. It returns only the keys you actually passed under `q`: send q[status]=9319 and you get back `status` resolved; send nothing and you get {success:true, filter_details:{}} with a 200. To enumerate the options a project offers, use the system/custom field value capabilities instead.",
           "The result is nested one level down under `filter_details` — read filter_details.status, filter_details.priority, filter_details.folders. The keys are not at the top level.",
           "Only three entity values work here: test-cases, trtc and test-runs. 'test-plans' passes the route constraint but is not in the handler's map and returns 400 — the route and the handler disagree.",
-          "Which user fields get resolved depends on the entity: owner and reviewers for test-cases, assignee and last_executed_by for trtc, owner for test-runs. A user id sent under the wrong key for that entity is ignored without comment.",
+          "Which user fields get resolved depends on the entity: owner and reviewers for test-cases, assignee and last_executed_by for trtc, owner, assignee, created_by and updated_by for test-runs. A user id sent under the wrong key for that entity is ignored without comment.",
           "Filter keys are renamed internally (q[priority] -> priority_id, q[status] -> status_id, q[case_type] -> category_id) but you send the un-suffixed names. q[automation_state] additionally accepts the literal words 'automated' / 'manual'.",
           "q[test_case_tags] must be a JSON-ENCODED STRING of an array; it is JSON.parse'd and echoed back verbatim. `q[tags]` is not a key this endpoint knows and is dropped silently.",
           "q[created_at] and q[updated_at] are echoed back exactly as sent — they are not parsed or normalised here.",
@@ -12944,6 +12982,11 @@
           "project_count",
           "created_at",
           "updated_at",
+          "scope",
+          "project",
+          "is_project_default",
+          "editable",
+          "cloned_from",
           "description_fields",
           "properties_fields",
           "step_fields"
@@ -15653,7 +15696,7 @@
         },
         "guidance": [
           "This is where option ids come from. The dataset read returns options only when asked and without a stable contract; this call always returns them with their ids.",
-          "Each row is {id, option_value, is_default, colour, parent_option_id}. When any row carries a parent_option_id the whole list is rebuilt as a tree and children appear under a `children` key on their parent instead of at the top level — a flat scan of `data` then misses them.",
+          "Each row is {id, option_value, is_default, colour, icon, parent_option_id}. When any row carries a parent_option_id the whole list is rebuilt as a tree and children appear under a `children` key on their parent instead of at the top level — a flat scan of `data` then misses them.",
           "Exception: if every row in the page has a parent (a single level of a nested_dropdown read on its own), the tree build finds no root and falls back to returning the rows flat.",
           "Paging is `p` only; the page size is fixed at 30 and `per_page` is ignored. `info` carries the page metadata. On a nested field the tree is built per page, so a parent and its children can land on different pages.",
           "Neither path id is validated here, so a wrong field/dataset pair reaches storage and returns a bare 404 {success:false} with no message."
@@ -15677,6 +15720,7 @@
           "option_value",
           "is_default",
           "colour",
+          "icon",
           "parent_option_id",
           "children"
         ]
@@ -16787,7 +16831,12 @@
           "linked_to_all_projects",
           "project_count",
           "created_at",
-          "updated_at"
+          "updated_at",
+          "scope",
+          "project",
+          "is_project_default",
+          "editable",
+          "cloned_from"
         ],
         "max_page_size": 300,
         "paginated": true,
@@ -16894,6 +16943,18 @@
             "description": "Fuzzy match on template name (not an exact match)."
           },
           {
+            "name": "scope",
+            "type": "string",
+            "values": [
+              "all",
+              "global",
+              "project"
+            ],
+            "default": "all",
+            "example": "project",
+            "description": "Restrict the list to one tier of template: global (workspace-wide), project (owned by a single project), or all. Leaving it out is the same as all. Any other value is rejected with a 400."
+          },
+          {
             "name": "paginated",
             "type": "boolean",
             "default": false,
@@ -16912,10 +16973,7 @@
         "paginated": true,
         "responses": {
           "200": {
-            "description": "`{success, templates: [{id, name, entity, enabled, step_type, is_default, is_system, future_projects_applicable, field_count, linked_to_all_projects, project_count, created_at, updated_at}]}`. `info` is present only when paginated=true was sent.",
-            "schema": {
-              "type": "object"
-            }
+            "$response": "TemplateListResponse"
           },
           "400": {
             "$response": "BadRequest"
@@ -16936,7 +16994,8 @@
           "Paging is opt-in and easy to miss: `p` is IGNORED unless `paginated=true` is sent alongside it. With paging on, page size is fixed at 10 and `info` appears in the response; with it off you get every matching template in one array and no `info`.",
           "`project` narrows to templates linked to that integer project id; `name` is a fuzzy match on the template name, not an exact one.",
           "Rows are the summary shape — id, name, entity, step_type, is_system, is_default, enabled, project_count, field_count, linked_to_all_projects. The field layout itself is not here; read a single template for that.",
-          "Templates belong to the workspace, not to a project: the same id is valid in every linked project, so do not look for a per-project id.",
+          "Global templates belong to the workspace, not to a project: the same id is valid in every linked project, so do not look for a per-project id. A project-scoped template belongs to one project, named in its `project` field.",
+          "Each row carries `scope` (global or project) and `project` (the owning project, null for a global template); `editable` and `cloned_from` appear only on some rows, so do not rely on them being present. Use the `scope` query parameter to filter by tier.",
           "Responses are served from a short-lived per-group cache, so a template created or edited through a different surface can take a moment to show up here.",
           "A validation failure from the backing service is passed through raw at its original status rather than being reshaped into the usual {success:false} envelope."
         ],
@@ -16957,7 +17016,12 @@
           "linked_to_all_projects",
           "project_count",
           "created_at",
-          "updated_at"
+          "updated_at",
+          "scope",
+          "project",
+          "is_project_default",
+          "editable",
+          "cloned_from"
         ]
       },
       {
@@ -17196,6 +17260,17 @@
             "description": "Case-insensitive. `system` returns every system field on a single page (total_pages 1) and no custom fields; `custom` skips the system fields entirely. Anything else is a 400 naming the valid values."
           },
           {
+            "name": "scope",
+            "type": "string",
+            "values": [
+              "all",
+              "global",
+              "project"
+            ],
+            "default": "all",
+            "description": "Which tier of custom fields to list. `project` also forces field_source to `custom`, so no system fields come back. Anything else is a 400 naming the three valid values."
+          },
+          {
             "name": "field_type",
             "type": "string",
             "description": "Filter custom fields by data type, using the canonical vocabulary (string, text, user, dropdown, multi_dropdown, url, boolean, int, date, nested_dropdown). System fields all report as `dropdown`, so any other value silently excludes every one of them."
@@ -17267,7 +17342,8 @@
           "An unsupported field_source is a 400 naming the three valid values; an unsupported entity_type is a 400 'Invalid Params'. entity_type=TestCaseStep returns an empty list (not an error) when the group lacks the step-custom-fields flag.",
           "sort_by also accepts a combined form like `name-desc`; `name` is an alias for field_name. Sorting is applied in this layer AFTER the system fields are merged in, so it reorders only the rows on the page you asked for.",
           "`q` matches on field name only, case-insensitively, and is applied to both system and custom fields.",
-          "Rows carry `dataset_count` and a derived `linked_to_all_projects`, but no option values and no project list — read the field, then its datasets, for those."
+          "Rows carry `dataset_count` and a derived `linked_to_all_projects`, but no option values and no project list — read the field, then its datasets, for those.",
+          "`scope` narrows custom fields to `global` or `project` ones; the default `all` returns both. `scope=project` drops the system rows even when field_source says otherwise, and an unsupported value is a 400. Custom-field rows carry `scope`, `project` and (on project-route reads only) `editable`; injected system-field rows carry none of the three."
         ],
         "max_page_size": 10,
         "returns": [
@@ -17287,6 +17363,9 @@
           "field_values",
           "linked_to_all_projects",
           "jira_binding",
+          "scope",
+          "project",
+          "editable",
           "count",
           "page",
           "page_size",
@@ -20703,7 +20782,7 @@
         "guidance": [
           "This EDITS the latest existing result; it never creates one. With nothing logged yet it answers 404 {success:false, message:'No test results found'} — log a result first, then amend it.",
           "A closed test run is refused with 400 {success:false, error:'Cannot Update Closed Test Run'} before any field is written. A closed run cannot be reopened, so its results are final — record new results in a clone of the run instead.",
-          "Send the fields flat. The `test_result` wrapper is added for you from each field's json_path, and sending your own `test_result` object is rejected before the call as an unknown body key. Sending no fields at all is legal and re-saves the current values unchanged.",
+          "Send the fields flat. The `test_result` wrapper is added for you from each field's json_path, and sending your own `test_result` object is rejected before the call as an unknown body key. Send at least one test_result field (description, status_id, custom_fields, attachments or issues): a request carrying none is refused with 400 for a missing test_result, so an empty body cannot be used to re-save the current values.",
           "Only description, status_id, custom_fields, attachments and issues survive to the write. `status` (the name) and `elapsed_time` are accepted by the parameter filter and then dropped on this path — set the status by id here, and use the v2 result surface if you only have a status name.",
           "Keys you omit keep their current values (the handler re-reads the result and fills them in), so this is a genuine partial update.",
           "configuration_id and mapping_id are read at the TOP level — query string or body root, never from inside `test_result`. Without one of them 'latest' means latest across all configurations, which on a configuration matrix is usually not the row you meant.",
@@ -22083,7 +22162,25 @@
             "type": "file",
             "required": true,
             "form_name": "attachments[]",
-            "accept": [".png", ".jpg", ".jpeg", ".gif", ".webp", ".log", ".pdf", ".txt", ".md", ".doc", ".docx", ".csv", ".xls", ".xlsx", ".json", ".html", ".zip"],
+            "accept": [
+              ".png",
+              ".jpg",
+              ".jpeg",
+              ".gif",
+              ".webp",
+              ".log",
+              ".pdf",
+              ".txt",
+              ".md",
+              ".doc",
+              ".docx",
+              ".csv",
+              ".xls",
+              ".xlsx",
+              ".json",
+              ".html",
+              ".zip"
+            ],
             "max_bytes": 52428800,
             "description": "Path to the file on this machine, inside MCP_UPLOAD_BASE_DIR. One file per call.",
             "example": "/Users/me/screenshots/login-step-3.png"
@@ -24457,7 +24554,7 @@
           {
             "name": "jira_binding",
             "type": "object",
-            "description": "Required when field_type is `jira_lookup`; omit for every other type. Names the Jira field the lookup reads from. All keys except options_path and search_path are mandatory and non-empty.",
+            "description": "Required when field_type is `jira_lookup`; omit for every other type. Names the Jira field the lookup reads from. All keys except options_path, search_path, board_id and board_name are mandatory and non-empty; ticket_type_id or a non-empty board_id must be present.",
             "fields": [
               {
                 "name": "integration_key",
@@ -24483,9 +24580,8 @@
               {
                 "name": "ticket_type_id",
                 "type": "string",
-                "required": true,
                 "minLength": 1,
-                "description": "Jira ticket (issue) type the lookup is scoped to."
+                "description": "Jira ticket (issue) type the lookup is scoped to. Required unless a non-empty board_id is sent."
               },
               {
                 "name": "jira_field_key",
@@ -24516,6 +24612,16 @@
                 "type": "boolean",
                 "required": true,
                 "description": "Whether the Jira field accepts several values."
+              },
+              {
+                "name": "board_id",
+                "type": "string",
+                "description": "Optional Jira board id; may be null. A non-empty value satisfies the ticket_type_id-or-board_id requirement."
+              },
+              {
+                "name": "board_name",
+                "type": "string",
+                "description": "Optional Jira board name; may be null."
               }
             ]
           }
@@ -24533,7 +24639,8 @@
           "Same stored fields as the admin-settings create capability, different contract: this route covers TestCase, TestResult and TestPlan fields only, takes PR-NNN project identifiers rather than numeric ids, and answers with a serialized custom_field object instead of the raw upstream record.",
           "Needs the field-write permission; 403 otherwise. The new field can be removed again, but any values captured on test cases in the meantime go with it.",
           "The reply is built by one shared serializer that omits any field without a value, so several keys are simply absent rather than null — and two booleans, `is_bulk_editable` and `is_filterable`, are omitted when FALSE as well as when unset, so you cannot tell those apart from the response.",
-          "A `jira_lookup` field carries a `jira_binding` instead of options. Without a valid binding the call is 400 'A valid jira_binding is required for jira_lookup custom fields.', and a workspace without Jira lookup fields enabled gets 400 'Jira Lookup custom fields are not enabled for this group.'."
+          "A `jira_lookup` field carries a `jira_binding` instead of options. Without a valid binding the call is 400 'A valid jira_binding is required for jira_lookup custom fields.', and a workspace without Jira lookup fields enabled gets 400 'Jira Lookup custom fields are not enabled for this group.'.",
+          "In `jira_binding`, one of `ticket_type_id` or `board_id` must be sent; a binding with neither (or with an empty board_id and no ticket_type_id) is a 400."
         ],
         "returns": [
           "success",
@@ -33628,7 +33735,7 @@
           },
           "entity": {
             "type": "string",
-            "description": "What the template applies to. Always TestCase on this surface.",
+            "description": "What the template applies to. TestCase for test-case templates; a listing filtered to test-result templates reports TestRunResult.",
             "example": "TestCase"
           },
           "enabled": {
@@ -33673,6 +33780,49 @@
           "updated_at": {
             "type": "string",
             "format": "date-time"
+          },
+          "scope": {
+            "type": "string",
+            "enum": [
+              "global",
+              "project"
+            ],
+            "description": "Which tier the template belongs to: global (workspace-wide) or project (owned by a single project). Reported as global when the backing service does not say."
+          },
+          "project": {
+            "type": "object",
+            "nullable": true,
+            "description": "The project that owns a project-scoped template; null for a global template.",
+            "properties": {
+              "id": {
+                "type": "integer",
+                "description": "Integer project id."
+              },
+              "name": {
+                "type": "string"
+              }
+            }
+          },
+          "is_project_default": {
+            "type": "boolean",
+            "nullable": true,
+            "description": "True when the template is the default for a project. Null or false otherwise."
+          },
+          "editable": {
+            "type": "boolean",
+            "description": "Whether the caller can edit this template. Only sometimes present; absent when the backing service does not report it."
+          },
+          "cloned_from": {
+            "type": "object",
+            "description": "The template this one was cloned from. Only present on a cloned template.",
+            "properties": {
+              "id": {
+                "type": "integer"
+              },
+              "name": {
+                "type": "string"
+              }
+            }
           }
         }
       },
@@ -47913,6 +48063,10 @@
                             }
                           }
                         }
+                      },
+                      "jira_binding": {
+                        "$schema": "JiraLookupBinding",
+                        "description": "The Jira field this dataset reads from; present only when the dataset has a binding."
                       }
                     }
                   }
@@ -47920,6 +48074,21 @@
                 "jira_binding": {
                   "$schema": "JiraLookupBinding",
                   "description": "Present only on a jira_lookup field; omitted for every other type."
+                },
+                "scope": {
+                  "type": "string",
+                  "description": "Scope of the field; `global` when the field is not project-scoped."
+                },
+                "project": {
+                  "nullable": true,
+                  "description": "The project the field is scoped to; null unless the field is project-scoped."
+                },
+                "editable": {
+                  "type": "boolean",
+                  "description": "Present only when the field is read through a project route."
+                },
+                "template_usage": {
+                  "description": "Present only when the backend supplies it."
                 }
               }
             }
@@ -48026,6 +48195,18 @@
                   "jira_binding": {
                     "$schema": "JiraLookupBinding",
                     "description": "Present only on a jira_lookup custom field; omitted on every other row."
+                  },
+                  "scope": {
+                    "type": "string",
+                    "description": "Scope of the custom field; `global` when it is not project-scoped. Absent on injected system-field rows."
+                  },
+                  "project": {
+                    "nullable": true,
+                    "description": "The project a project-scoped field belongs to; null otherwise. Absent on injected system-field rows."
+                  },
+                  "editable": {
+                    "type": "boolean",
+                    "description": "Present only on project-route reads of custom fields; absent on system-field rows."
                   }
                 }
               }
@@ -48219,6 +48400,11 @@
                   "colour": {
                     "type": "string",
                     "nullable": true
+                  },
+                  "icon": {
+                    "type": "string",
+                    "nullable": true,
+                    "description": "Icon name; null when the option has none."
                   },
                   "parent_option_id": {
                     "type": "integer",
@@ -51491,6 +51677,6 @@
         ]
       }
     },
-    "version": "1.43"
+    "version": "1.44"
   }
 }

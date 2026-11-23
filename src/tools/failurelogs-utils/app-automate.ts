@@ -189,6 +189,36 @@ const APPIUM_HTTP_REQUEST = /\[HTTP\] --> (GET|POST|PUT|PATCH|DELETE) (\S+)/;
 const APPIUM_HTTP_BODY = /\[HTTP\] (\{.*\})\s*$/;
 const MAX_APPIUM_FAILURES = 50;
 const MAX_APPIUM_TEXT = 600;
+const APPIUM_FAILURES_BUDGET = 30_000;
+
+// Commands whose first argument is text typed into the app, such as a password.
+const TYPING_COMMANDS = new Set([
+  "setValue",
+  "replaceValue",
+  "setValueImmediate",
+  "keys",
+]);
+const TYPING_PATH = /\/(value|keys|actions)$/;
+const TYPED_FIELD = /"(text|value)"\s*:\s*("(?:[^"\\]|\\.)*"|\[[^\]]*\])/g;
+const REDACTED = "[redacted]";
+
+function redactTypedFields(json: string): string {
+  return json.replace(TYPED_FIELD, `"$1":"${REDACTED}"`);
+}
+
+function redactCallArgs(method: string, args: string): string {
+  if (method === "performActions") return redactTypedFields(args);
+  if (!TYPING_COMMANDS.has(method)) return args;
+  try {
+    const parsed = JSON.parse(args);
+    if (Array.isArray(parsed) && parsed.length > 0) {
+      return JSON.stringify([REDACTED, ...parsed.slice(1)]);
+    }
+  } catch {
+    // unparseable, e.g. cut off by Appium: hide all of it
+  }
+  return REDACTED;
+}
 
 function cap(text: string): string {
   return text.length > MAX_APPIUM_TEXT
@@ -231,12 +261,15 @@ export function summarizeAppiumFailures(logText: string): {
     }
     const requestBody = body.match(APPIUM_HTTP_BODY);
     if (requestBody && fromRequest) {
-      command = cap(`${command} ${requestBody[1]}`);
+      const json = TYPING_PATH.test(command ?? "")
+        ? redactTypedFields(requestBody[1])
+        : requestBody[1];
+      command = cap(`${command} ${json}`);
       continue;
     }
     const call = body.match(APPIUM_CALL);
     if (call) {
-      const next = cap(`${call[1]}(${call[2]})`);
+      const next = cap(`${call[1]}(${redactCallArgs(call[1], call[2])})`);
       if (fromRequest) command = next;
       else startCommand(next);
       fromRequest = false;
@@ -266,12 +299,16 @@ export function summarizeAppiumFailures(logText: string): {
     });
   }
 
-  const failures = [...groups.values()];
-  return {
-    failures: failures.slice(0, MAX_APPIUM_FAILURES),
-    totalLines,
-    omitted: Math.max(0, failures.length - MAX_APPIUM_FAILURES),
-  };
+  const all = [...groups.values()];
+  const failures: AppiumFailure[] = [];
+  let size = 0;
+  for (const failure of all) {
+    size += JSON.stringify(failure).length;
+    if (failures.length >= MAX_APPIUM_FAILURES || size > APPIUM_FAILURES_BUDGET)
+      break;
+    failures.push(failure);
+  }
+  return { failures, totalLines, omitted: all.length - failures.length };
 }
 
 export function filterCrashFailures(logText: string): string[] {

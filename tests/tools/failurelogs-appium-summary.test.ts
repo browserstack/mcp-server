@@ -74,6 +74,47 @@ describe("summarizeAppiumFailures", () => {
     expect(failures[0]).not.toHaveProperty("last_seen");
   });
 
+  it("hides text typed into the app", () => {
+    const log = [
+      '2026-11-23 05:54:20:100 - [debug] [W3C (f30db832)] Calling AppiumDriver.setValue() with args: [["s","3","c","r","3","t"],"0A01","f30db832"]',
+      "2026-11-23 05:54:20:300 - [W3C] Encountered internal error running command: InvalidElementStateError: element is not editable",
+      "2026-11-23 05:54:21:100 - [HTTP] --> POST /wd/hub/session/f30db832/element/0A02/value",
+      '2026-11-23 05:54:21:101 - [HTTP] {"text":"s3cr3t","value":["s","3","c","r","3","t"]}',
+      "2026-11-23 05:54:21:300 - [W3C] Command failed: element is not editable",
+      '2026-11-23 05:54:22:100 - [debug] [W3C (f30db832)] Calling AppiumDriver.performActions() with args: [[{"type":"key","id":"k","actions":[{"type":"keyDown","value":"s"}]}],"f30db832"]',
+      "2026-11-23 05:54:22:300 - [W3C] Command failed: no keyboard",
+    ].join("\n");
+
+    const { failures } = summarizeAppiumFailures(log);
+
+    expect(JSON.stringify(failures)).not.toMatch(/s3cr3t|"s","3"|"value":"s"/);
+    expect(failures[0].command).toBe('setValue(["[redacted]","0A01","f30db832"])');
+    expect(failures[1].command).toBe(
+      'POST /wd/hub/session/f30db832/element/0A02/value {"text":"[redacted]","value":"[redacted]"}',
+    );
+    expect(failures[2].command).toContain('"type":"keyDown","value":"[redacted]"');
+  });
+
+  it("keeps the locator of a find command", () => {
+    const { failures } = summarizeAppiumFailures(findAttempt(11).join("\n"));
+
+    expect(failures[0].command).toContain(SELECTOR);
+  });
+
+  it("stops adding failures at the total size budget", () => {
+    const log = Array.from(
+      { length: 50 },
+      (_, i) =>
+        `2026-11-23 05:54:11:${String(i).padStart(3, "0")} - [W3C] Command failed: ${String(i).padStart(3, "0")} ${"y".repeat(900)}`,
+    ).join("\n");
+
+    const { failures, omitted } = summarizeAppiumFailures(log);
+
+    expect(JSON.stringify(failures).length).toBeLessThanOrEqual(30_000);
+    expect(failures.length + omitted).toBe(50);
+    expect(omitted).toBeGreaterThan(0);
+  });
+
   it("caps the number of distinct failures and reports the rest", () => {
     const log = Array.from(
       { length: 60 },

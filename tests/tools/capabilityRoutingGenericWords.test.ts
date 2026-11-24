@@ -11,7 +11,7 @@ for (const file of readdirSync("capability")) {
       products[name] = index;
 }
 
-describe("summary is shared by Load Testing and TRA", () => {
+describe("summary does not decide the product", () => {
   it.each([
     "Give me a triage summary of today's nightly functional builds",
     "Fetch today's nightly functional builds and produce a TRA triage summary",
@@ -27,11 +27,15 @@ describe("summary is shared by Load Testing and TRA", () => {
     expect(ambiguousProducts(products, query).settled).toBe("loadtesting");
   });
 
-  it("asks when nothing else in the request names a product", () => {
-    expect(ambiguousProducts(products, "show me the summary").products).toEqual([
-      "loadtesting",
-      "tra",
-    ]);
+  it("leaves a request with no other product word unrouted", () => {
+    expect(ambiguousProducts(products, "show me the summary").unknown).toBe(true);
+  });
+
+  it.each([
+    "summary of test run TR-12 in test management",
+    "build status of my App Automate build",
+  ])("%s does not settle on tra", (query) => {
+    expect(ambiguousProducts(products, query).settled).not.toBe("tra");
   });
 });
 

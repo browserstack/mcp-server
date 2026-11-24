@@ -257,14 +257,12 @@ export async function getFailureLogs(
       `This session ran through the ${framework.framework.name} framework API, so its logs come from each test's results.`,
     );
   }
-  if (notes.length > 0) {
-    results.unshift({ type: "text", text: notes.join("\n") });
-  }
-  if (errors.length > 0) {
-    results.push({
-      type: "text",
-      text: `Errors encountered:\n${errors.join("\n")}`,
-    });
+  const preface = [
+    ...notes,
+    ...(errors.length > 0 ? [`Errors encountered:\n${errors.join("\n")}`] : []),
+  ];
+  if (preface.length > 0) {
+    results.unshift({ type: "text", text: preface.join("\n") });
   }
 
   return { content: results };

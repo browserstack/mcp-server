@@ -95,6 +95,30 @@ describe("summarizeAppiumFailures", () => {
     expect(failures[2].command).toContain('"type":"keyDown","value":"[redacted]"');
   });
 
+  it("hides text typed through execute", () => {
+    const log = [
+      "2026-11-23 05:54:30:100 - [HTTP] --> POST /wd/hub/session/f30db832/execute/sync",
+      '2026-11-23 05:54:30:101 - [HTTP] {"script":"mobile: type","args":[{"text":"otp-482913"}]}',
+      '2026-11-23 05:54:30:102 - [debug] [W3C (f30db832)] Calling AppiumDriver.execute() with args: ["mobile: type",[{"text":"otp-482913"}],"f30db832"]',
+      "2026-11-23 05:54:30:300 - [W3C] Command failed: no focused element",
+      '2026-11-23 05:54:31:102 - [debug] [W3C (f30db832)] Calling AppiumDriver.execute() with args: ["mobile: keys",{"keys":["p","4","s","s"]},"f30db832"]',
+      "2026-11-23 05:54:31:300 - [W3C] Command failed: keyboard not shown",
+    ].join("\n");
+
+    const { failures } = summarizeAppiumFailures(log);
+    const text = JSON.stringify(failures);
+
+    expect(text).not.toContain("otp-482913");
+    expect(text).not.toMatch(/"p","4"/);
+    expect(failures[0].command).toBe(
+      'execute(["mobile: type",[{"text":"[redacted]"}],"f30db832"])',
+    );
+    expect(failures[1].command).toBe(
+      'execute(["mobile: keys",{"keys":"[redacted]"},"f30db832"])',
+    );
+    expect(failures[1].previous_command).toBe(failures[0].command);
+  });
+
   it("keeps the locator of a find command", () => {
     const { failures } = summarizeAppiumFailures(findAttempt(11).join("\n"));
 

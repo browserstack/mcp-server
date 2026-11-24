@@ -199,25 +199,33 @@ const TYPING_COMMANDS = new Set([
   "keys",
 ]);
 const TYPING_PATH = /\/(value|keys|actions)$/;
-const TYPED_FIELD = /"(text|value)"\s*:\s*("(?:[^"\\]|\\.)*"|\[[^\]]*\])/g;
+const JSON_VALUE = String.raw`("(?:[^"\\]|\\.)*"|\[[^\]]*\])`;
+const TYPED_TEXT = new RegExp(
+  String.raw`"(text|keys)"\s*:\s*` + JSON_VALUE,
+  "g",
+);
+const TYPED_VALUE = new RegExp(String.raw`"(value)"\s*:\s*` + JSON_VALUE, "g");
 const REDACTED = "[redacted]";
 
-function redactTypedFields(json: string): string {
-  return json.replace(TYPED_FIELD, `"$1":"${REDACTED}"`);
+function redactTypedFields(json: string, valuesAreTyped: boolean): string {
+  const redacted = json.replace(TYPED_TEXT, `"$1":"${REDACTED}"`);
+  return valuesAreTyped
+    ? redacted.replace(TYPED_VALUE, `"$1":"${REDACTED}"`)
+    : redacted;
 }
 
 function redactCallArgs(method: string, args: string): string {
-  if (method === "performActions") return redactTypedFields(args);
-  if (!TYPING_COMMANDS.has(method)) return args;
+  if (!TYPING_COMMANDS.has(method))
+    return redactTypedFields(args, method === "performActions");
   try {
     const parsed = JSON.parse(args);
     if (Array.isArray(parsed) && parsed.length > 0) {
       return JSON.stringify([REDACTED, ...parsed.slice(1)]);
     }
+    return REDACTED;
   } catch {
-    // unparseable, e.g. cut off by Appium: hide all of it
+    return REDACTED;
   }
-  return REDACTED;
 }
 
 function cap(text: string): string {
@@ -261,9 +269,10 @@ export function summarizeAppiumFailures(logText: string): {
     }
     const requestBody = body.match(APPIUM_HTTP_BODY);
     if (requestBody && fromRequest) {
-      const json = TYPING_PATH.test(command ?? "")
-        ? redactTypedFields(requestBody[1])
-        : requestBody[1];
+      const json = redactTypedFields(
+        requestBody[1],
+        TYPING_PATH.test(command ?? ""),
+      );
       command = cap(`${command} ${json}`);
       continue;
     }

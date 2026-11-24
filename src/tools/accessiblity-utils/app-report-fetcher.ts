@@ -756,10 +756,19 @@ function appAutomateIds(
   };
 }
 
+/** A regional dashboard host, or this deployment's own, which its answers link to. */
+function isAppDashboardHost(hostname: string): boolean {
+  if (isRegionalHostname("appAccessibilityDashboard", hostname)) return true;
+  try {
+    return new URL(appDashboard()).hostname === hostname;
+  } catch {
+    return false;
+  }
+}
+
 /** The id a manual report's dashboard link names (`/report/{uuid}`), if it is one. */
 export function manualReportIdFromDashboardLink(url: URL): string | undefined {
-  if (!isRegionalHostname("appAccessibilityDashboard", url.hostname))
-    return undefined;
+  if (!isAppDashboardHost(url.hostname)) return undefined;
   return url.pathname.match(/^\/report\/([0-9a-f-]{36})\/?$/i)?.[1];
 }
 
@@ -869,8 +878,7 @@ export class AppAccessibilityApi {
    * carries TestHub's name for the build, which the filter does not match.)
    */
   async buildIdFromDashboardLink(url: URL): Promise<string | undefined> {
-    if (!isRegionalHostname("appAccessibilityDashboard", url.hostname))
-      return undefined;
+    if (!isAppDashboardHost(url.hostname)) return undefined;
     const build = buildOfDashboardLink(url);
     if (!build) return undefined;
     // The name in the link is TestHub's, which can differ from the build's own: with no

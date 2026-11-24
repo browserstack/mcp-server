@@ -145,8 +145,11 @@ export async function invoke(
     capability.encoding === "multipart"
       ? await multipartBody(capability, bound.body)
       : undefined;
+  // A capability may sign in differently from its product (see Capability.auth). Headers,
+  // the 401 replay and the token it discards must all use this one scheme.
+  const effectiveAuth = capability.auth ?? auth;
   const send = async () => {
-    const headers = await authHeaders(credentials, auth, product);
+    const headers = await authHeaders(credentials, effectiveAuth, product);
     if (multipart) {
       // fetch writes its own Content-Type with the boundary. Leaving the JSON one on sends
       // a body the product cannot parse, under a header that says it should be able to.
@@ -178,10 +181,10 @@ export async function invoke(
    * fails identically, and a loop here would hammer the token endpoint on every wrong
    * password.
    */
-  if (response.status === 401 && auth?.type === "oauth2") {
+  if (response.status === 401 && effectiveAuth?.type === "oauth2") {
     invalidateToken(
-      resolveTokenUrl(product ?? "this product", auth),
-      resolveScope(auth),
+      resolveTokenUrl(product ?? "this product", effectiveAuth),
+      resolveScope(effectiveAuth),
       credentials,
     );
     response = await send();

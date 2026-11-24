@@ -1083,6 +1083,8 @@ export function addCapabilityRegistryTools(
           send_empty_body,
           local_only,
           disabled,
+          // How the server signs in for this capability: plumbing, like host.
+          auth: signIn,
           ...contract
         } = capability;
         void unresolved;
@@ -1091,6 +1093,7 @@ export function addCapabilityRegistryTools(
         void send_empty_body;
         void local_only;
         void disabled;
+        void signIn;
         return ok({
           // No build_id here either, same reason. `product` stays: describeCapability
           // resolves by NAME and its product argument is optional, so the answer has to

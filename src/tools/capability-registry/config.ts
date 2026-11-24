@@ -79,7 +79,12 @@ const REGIONAL_HOSTS: Record<
 > = {
   tm: { base: "testManagement" },
   tra: { base: "observabilityApi" },
-  app_accessibility: { base: "appAccessibilityApi" },
+  // `dashboard`: the dashboard's own routes, read and written with an ai_agent token on the
+  // routes app-accessibility's allowlist admits.
+  app_accessibility: {
+    base: "appAccessibilityApi",
+    hosts: { dashboard: "appAccessibilityDashboard" },
+  },
   web_accessibility: { base: "accessibilityApi" },
   devicecontrol: { base: "automateHubUrl", hosts: { api: "automateApi" } },
   mobiledevicecontrol: {
@@ -152,6 +157,13 @@ function credentialsFrom(config: BrowserStackConfig): Credentials {
  * that reads like the caller's problem, when it is our missing configuration.
  */
 /**
+ * Products whose named hosts refuse to fall back to the regional host when only the
+ * product-level override is set: a preprod override must never send dashboard calls to
+ * production.
+ */
+const STRICT_NAMED_HOST_PRODUCTS: ReadonlySet<string> = new Set(["app_accessibility"]);
+
+/**
  * The host a capability named, as opposed to the product's own.
  *
  * `_HOST_` is in the override variable deliberately. The environment-suffixed form is
@@ -175,6 +187,20 @@ function resolveNamedHost(
   const suffix = `${key}_HOST_${host.toUpperCase().replace(/[^A-Z0-9]+/g, "_")}`;
   const override = process.env[`CAPABILITY_REGISTRY_BASE_URL_${suffix}`];
   if (override) return trim(override);
+
+  // An override of the product's own host says "not production", but it does not say where
+  // this host lives. Falling through to the regional (production) host would send a preprod
+  // session's dashboard calls to production. Scoped to STRICT_NAMED_HOST_PRODUCTS so other
+  // products' named hosts (devicecontrol / mobiledevicecontrol `api`) keep their fall-through.
+  if (
+    STRICT_NAMED_HOST_PRODUCTS.has(product) &&
+    process.env[`CAPABILITY_REGISTRY_BASE_URL_${key}`]
+  ) {
+    throw new InvocationError(
+      `CAPABILITY_REGISTRY_BASE_URL_${key} overrides product '${product}', but not its ` +
+        `'${host}' host. Set CAPABILITY_REGISTRY_BASE_URL_${suffix} as well.`,
+    );
+  }
 
   if (environment) {
     throw new InvocationError(

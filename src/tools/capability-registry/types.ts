@@ -214,6 +214,15 @@ export interface Capability {
    * return a 404 that reads like the caller's mistake.
    */
   host?: string;
+  /**
+   * How THIS capability signs in, when it differs from the product's `auth`.
+   *
+   * The same reason as `host`: one product can be served by surfaces that accept different
+   * credentials. App Accessibility's public API takes Basic; its dashboard routes admit only an
+   * `ai_agent`-scoped Bearer. Unset means the product's own `auth`, so every existing index is
+   * unaffected.
+   */
+  auth?: AuthScheme;
   mode: Mode;
   entity: string;
   path_params?: WireParam[];

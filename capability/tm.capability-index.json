@@ -970,13 +970,12 @@
           {
             "name": "q",
             "type": "object",
-            "description": "SCOPE for `select_all`, and a SIBLING of `test_case` at top level, not a field inside it. Same filter shape as the search-and-filter flow's `q`. With `select_all: true` the target set comes from this `q` merged with `source_folder_id` and `ids` is ignored; with explicit ids it is unused. An unrecognised key here is dropped, not rejected, so a typo widens the selection to the whole scope."
+            "description": "SCOPE for `select_all`, and a SIBLING of `test_case` at top level, not a field inside it. Same filter shape as the search-and-filter flow's `q`. With `select_all: true` the target set comes from this `q` merged with top-level `folder_id` and `ids` is ignored; with explicit ids it is unused. An unrecognised key here is dropped, not rejected, so a typo widens the selection to the whole scope."
           },
           {
-            "name": "source_folder_id",
+            "name": "folder_id",
             "type": "integer",
-            "description": "SOURCE folder that scopes the selection. Merged into the search scope, and it overwrites `q.folder_id` when both are sent. This is never the destination.",
-            "json_path": "/folder_id"
+            "description": "SOURCE folder that scopes the selection, at TOP level (outside `test_case`). Merged into the search scope and it overwrites `q.folder_id` when both are sent. Do not confuse it with the destination: for copy that is top-level `destination_folder_id`, for move it is `test_case.destination_folder_id`, and for bulk edit a `test_case.folder_id` MOVES the cases."
           },
           {
             "name": "p",
@@ -986,7 +985,7 @@
           {
             "name": "include_subfolders_tc",
             "type": "boolean",
-            "description": "Extend the selection into subfolders of the `source_folder_id`. Compared as the string `true`. Merged into the search scope, so it also changes what `select_all` resolves to."
+            "description": "Extend the selection into subfolders of the top-level `folder_id`. Compared as the string `true`. Merged into the search scope, so it also changes what `select_all` resolves to."
           },
           {
             "name": "ids",
@@ -1003,7 +1002,7 @@
           {
             "name": "select_all",
             "type": "boolean",
-            "description": "Edit every case the scope resolves to, minus `de_selected_ids`. Compared as the string `true`; anything else means \"use `ids`\". The scope is top-level `q` + `source_folder_id` (+ `include_subfolders_tc`), NOT the whole project by default.",
+            "description": "Edit every case the scope resolves to, minus `de_selected_ids`. Compared as the string `true`; anything else means \"use `ids`\". The scope is top-level `q` + `folder_id` (+ `include_subfolders_tc`), NOT the whole project by default.",
             "json_path": "/test_case/select_all"
           },
           {
@@ -1103,6 +1102,12 @@
             "description": "Free-text note carried with the bulk edit."
           },
           {
+            "name": "folder_id",
+            "type": "integer",
+            "json_path": "/test_case/folder_id",
+            "description": "DANGER — inside `test_case` this MOVES every selected case into that folder. The top-level `folder_id` of the same name only scopes the selection. Omit this unless you mean to move them."
+          },
+          {
             "name": "folders",
             "type": "object",
             "description": "Cross-folder selection: a map keyed by folder id, each value `{select_all, ids, de_selected_ids}`. When present it REPLACES the flat `ids`/`select_all` selection and the union is resolved per folder. Unknown keys inside an entry are dropped.",
@@ -1175,7 +1180,7 @@
           "ALWAYS send `test_case.custom_fields`, `{}` when you are changing none. Omitting the key dereferences a nil hash and returns 500 — this is the single most common failure on this route.",
           "priority, status, case_type and automation_state must be NUMERIC option ids here. The single-case edit accepts a display name for some of them; this path does not, and a name is written through as a broken id rather than rejected.",
           "`tags` REPLACES the whole tag list on every selected case. Read the existing tags and send the union if you mean to add. The same is true of `issues`, which is sent as `[]` when you omit it.",
-          "This call does not move cases. Use the move capability for that.",
+          "`test_case.folder_id` moves the cases; the top-level `folder_id` only scopes the selection. Two different meanings for one name in one body.",
           "The editable set is narrow and everything outside it is dropped without error: owner, priority, status, case_type, automation_state/status, preconditions, template, review_status, reviewers, comment, custom_fields, tags, issues. `name`, `description`, `expected_result` and `test_case_steps` are NOT bulk-editable on this route.",
           "An empty selection is a bare 400 `{success:false}` with no message — that is what you get when `ids` is empty, or when `select_all` is true but `q` matched nothing.",
           "Above 100 selected cases the work is handed to a background job and you get 200 `{success:true, async:true, unique_id:\"<uuid>\"}` with NO `test_cases` — treat that body as an acknowledgement, not a result, and re-read afterwards.",
@@ -1764,13 +1769,12 @@
           {
             "name": "q",
             "type": "object",
-            "description": "SCOPE for `select_all`, and a SIBLING of `test_case` at top level, not a field inside it. Same filter shape as the search-and-filter flow's `q`. With `select_all: true` the target set comes from this `q` merged with `source_folder_id` and `ids` is ignored; with explicit ids it is unused. An unrecognised key here is dropped, not rejected, so a typo widens the selection to the whole scope."
+            "description": "SCOPE for `select_all`, and a SIBLING of `test_case` at top level, not a field inside it. Same filter shape as the search-and-filter flow's `q`. With `select_all: true` the target set comes from this `q` merged with top-level `folder_id` and `ids` is ignored; with explicit ids it is unused. An unrecognised key here is dropped, not rejected, so a typo widens the selection to the whole scope."
           },
           {
-            "name": "source_folder_id",
+            "name": "folder_id",
             "type": "integer",
-            "description": "SOURCE folder that scopes the selection. Merged into the search scope, and it overwrites `q.folder_id` when both are sent. This is never the destination.",
-            "json_path": "/folder_id"
+            "description": "SOURCE folder that scopes the selection, at TOP level (outside `test_case`). Merged into the search scope and it overwrites `q.folder_id` when both are sent. Do not confuse it with the destination: for copy that is top-level `destination_folder_id`, for move it is `test_case.destination_folder_id`, and for bulk edit a `test_case.folder_id` MOVES the cases."
           },
           {
             "name": "p",
@@ -1780,7 +1784,7 @@
           {
             "name": "include_subfolders_tc",
             "type": "boolean",
-            "description": "Extend the selection into subfolders of the `source_folder_id`. Compared as the string `true`. Merged into the search scope, so it also changes what `select_all` resolves to."
+            "description": "Extend the selection into subfolders of the top-level `folder_id`. Compared as the string `true`. Merged into the search scope, so it also changes what `select_all` resolves to."
           },
           {
             "name": "ids",
@@ -1797,14 +1801,20 @@
           {
             "name": "select_all",
             "type": "boolean",
-            "description": "Move every case the scope resolves to, minus `de_selected_ids`. Compared as the string `true`; anything else means \"use `ids`\". The scope is top-level `q` + `source_folder_id` (+ `include_subfolders_tc`), NOT the whole project by default.",
+            "description": "Move every case the scope resolves to, minus `de_selected_ids`. Compared as the string `true`; anything else means \"use `ids`\". The scope is top-level `q` + `folder_id` (+ `include_subfolders_tc`), NOT the whole project by default.",
             "json_path": "/test_case/select_all"
           },
           {
             "name": "destination_folder_id",
             "type": "integer",
-            "description": "Target folder's integer id, INSIDE `test_case` (bulk-copy puts its destination at top level instead). Always send it: without it the move is issued with no destination.",
+            "description": "Target folder's integer id, INSIDE `test_case` (bulk-copy puts its destination at top level instead). Falls back to `test_case.folder_id` when omitted; if neither is sent the move is issued with no destination.",
             "json_path": "/test_case/destination_folder_id"
+          },
+          {
+            "name": "folder_id",
+            "type": "integer",
+            "description": "Legacy alias for `test_case.destination_folder_id`, used only when that is absent. Note this is the folder the cases move TO — the identically named TOP-LEVEL `folder_id` is the source scope.",
+            "json_path": "/test_case/folder_id"
           },
           {
             "name": "destination_project_id",
@@ -1848,7 +1858,7 @@
         },
         "guidance": [
           "The destination lives INSIDE `test_case` on this route (`test_case.destination_folder_id`) — bulk-copy puts it at top level. Swapping the two bodies is the usual cause of a move that reports success and changes nothing.",
-          "`source_folder_id` scopes the SOURCE selection; `destination_folder_id` is the folder the cases move TO.",
+          "The top-level `folder_id` scopes the SOURCE selection; `test_case.folder_id` is a legacy alias for the DESTINATION. Same name, opposite meaning, decided by nesting.",
           "`destination_project_id` must be a real JSON integer. A string like \"42\" is rejected before anything runs, as a missing-parameter 400.",
           "A cross-project move of shared cases is blocked by the backend: the response is 422 with `type: \"shared_tc_error\"` and a `shared_count`, and nothing moved.",
           "An empty selection is a bare 400 `{success:false}` with no message — that is what you get when `ids` is empty, or when `select_all` is true but `q` matched nothing.",
@@ -18583,11 +18593,10 @@
             "json_path": "/required/fields"
           },
           {
-            "name": "required_custom_fields",
+            "name": "custom_fields",
             "type": "string",
             "example": "121,119",
-            "json_path": "/required/custom_fields",
-            "description": "Comma-separated custom field ids to include in each returned row. Distinct from `custom_fields`, which filters by custom field values."
+            "json_path": "/required/custom_fields"
           },
           {
             "name": "result_custom_fields",

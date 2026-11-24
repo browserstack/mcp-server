@@ -1581,7 +1581,7 @@
                       "label": { "type": "string" },
                       "value": { "type": "string" },
                       "version": { "type": "string" },
-                      "level": { "type": "string" },
+                      "level": { "type": "string", "nullable": true },
                       "count": { "type": "integer" }
                     }
                   }
@@ -3398,7 +3398,7 @@
           "report_id": { "type": "string", "format": "uuid", "description": "The report id the accessibility issue tools read." },
           "report_name": { "type": "string" },
           "created_at": { "type": "string", "format": "date-time" },
-          "end_time": { "type": "string", "format": "date-time", "description": "Null while the session is still recording." },
+          "end_time": { "type": "string", "format": "date-time", "nullable": true, "description": "Null while the session is still recording." },
           "status": { "type": "string", "description": "in_progress while the session records, complete once it has ended." },
           "report_type": { "type": "string", "description": "standard, or consolidated for a report merged from others." },
           "app_details": {

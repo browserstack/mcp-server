@@ -8,11 +8,10 @@ import type { TokenTransport } from "../../src/lib/central-oauth.js";
 
 // The App Accessibility dashboard's own routes read the dashboard session cookie, or a
 // central-auth Bearer carrying the `ai_agent` scope for the routes on app-accessibility's
-// allowlist (SCOPED_BEARER_SCOPE_POLICIES in browserstack/app-accessibility). They live in
-// the App Accessibility product with `host: dashboard` and `auth: oauth2`, next to the
-// public-API lists that keep Basic. What has to hold: they mint, they reach the regional
-// DASHBOARD host, they are reads on the backend's allowlist, and they leave out what
-// fetchAccessibilityIssues already serves.
+// allowlist (SCOPED_BEARER_SCOPE_POLICIES in browserstack/app-accessibility). Every App
+// Accessibility capability lives on them, with `host: dashboard` and `auth: oauth2`; none is
+// left on the access-key public API. What has to hold: they mint, they reach the regional
+// DASHBOARD host, and they stay on the backend's allowlist.
 
 vi.mock("../../src/logger.js", () => ({
   default: { error: vi.fn(), info: vi.fn(), debug: vi.fn(), warn: vi.fn() },
@@ -92,7 +91,8 @@ const WRITES = [
 ];
 
 describe("the App Accessibility dashboard capabilities", () => {
-  it("ship the dashboard reads and issue actions the public API does not serve", () => {
+  it("ship every App Accessibility capability on the dashboard", () => {
+    expect(dash).toHaveLength(app.capabilities.length);
     expect(dash.map((c: any) => c.name).sort()).toEqual([
       "compare_app_accessibility_builds",
       "count_app_accessibility_issues_to_hide",
@@ -113,8 +113,10 @@ describe("the App Accessibility dashboard capabilities", () => {
       "list_app_accessibility_build_issues",
       "list_app_accessibility_build_names",
       "list_app_accessibility_build_tests",
+      "list_app_accessibility_builds",
       "list_app_accessibility_bundle_ids",
       "list_app_accessibility_comparable_builds",
+      "list_app_accessibility_projects",
       "list_app_accessibility_screen_reader_build_issues",
       "list_app_accessibility_screen_reader_builds",
       "list_app_accessibility_test_issues",
@@ -123,6 +125,7 @@ describe("the App Accessibility dashboard capabilities", () => {
       "list_manual_app_accessibility_report_issues",
       "list_manual_app_accessibility_report_rules",
       "list_manual_app_accessibility_report_wcag_levels",
+      "list_manual_app_accessibility_reports",
       "review_app_accessibility_issue",
       "review_manual_app_accessibility_issue",
       "unhide_app_accessibility_issues",
@@ -130,16 +133,11 @@ describe("the App Accessibility dashboard capabilities", () => {
     ]);
   });
 
-  it("sign in with a minted token while the public-API lists keep Basic", () => {
-    expect(app.auth).toEqual({ type: "http", scheme: "basic" });
-    for (const c of dash) expect(c.auth, c.name).toEqual({ type: "oauth2" });
-    const publicApi = app.capabilities.filter((c: any) => !c.host);
-    expect(publicApi.map((c: any) => c.name).sort()).toEqual([
-      "list_app_accessibility_builds",
-      "list_app_accessibility_projects",
-      "list_manual_app_accessibility_reports",
-    ]);
-    for (const c of publicApi) expect(c.auth, c.name).toBeUndefined();
+  it("each sign in with a minted token, so none falls back to the product's access key", () => {
+    for (const c of app.capabilities) {
+      expect(c.host, c.name).toBe("dashboard");
+      expect(c.auth, c.name).toEqual({ type: "oauth2" });
+    }
   });
 
   it("stay on the backend's ai_agent allowlist and never delete", () => {
@@ -231,11 +229,10 @@ describe("the App Accessibility dashboard capabilities", () => {
     }
   });
 
-  it("leave out what the public-API lists already serve", () => {
-    const paths = dash.map((c: any) => c.path);
-    expect(paths).not.toContain("/automate/api/v1/project");
-    expect(paths).not.toContain("/automate/api/v1/project/{project_id}/build");
-    expect(paths).not.toContain("/api/v1/app_scanner");
+  it("never reach the access-key Reports API, which takes no agent token", () => {
+    for (const c of app.capabilities) {
+      expect(c.path, c.name).not.toMatch(/^\/api\/v1\/reports/);
+    }
   });
 
   it("declare no object-typed query parameter, which cannot reach the wire", () => {

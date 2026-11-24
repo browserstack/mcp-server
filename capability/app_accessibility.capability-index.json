@@ -27,6 +27,8 @@
         "name": "list_app_accessibility_projects",
         "method": "GET",
         "path": "/automate/api/v1/project",
+        "host": "dashboard",
+        "auth": { "type": "oauth2" },
         "mode": "read",
         "entity": "project",
         "query": [
@@ -67,15 +69,17 @@
         "paginated": true,
         "responses": {
           "200": { "$response": "ListAppAccessibilityProjects" },
-          "401": { "$response": "Unauthorized" },
-          "403": { "$response": "Forbidden" },
-          "500": { "$response": "InternalServerError" }
+          "401": { "$response": "DashboardUnauthorized" },
+          "403": { "$response": "DashboardForbidden" },
+          "500": { "$response": "DashboardUpstreamFailure" }
         }
       },
       {
         "name": "list_app_accessibility_builds",
         "method": "GET",
         "path": "/automate/api/v1/project/{project_id}/build",
+        "host": "dashboard",
+        "auth": { "type": "oauth2" },
         "mode": "read",
         "entity": "build",
         "path_params": [
@@ -161,79 +165,81 @@
         "responses": {
           "200": { "$response": "ListAppAccessibilityBuilds" },
           "400": { "$response": "BadRequest" },
-          "401": { "$response": "Unauthorized" },
-          "403": { "$response": "Forbidden" },
+          "401": { "$response": "DashboardUnauthorized" },
+          "403": { "$response": "DashboardForbidden" },
           "404": { "$response": "EmptyList" },
-          "500": { "$response": "InternalServerError" }
+          "500": { "$response": "DashboardUpstreamFailure" }
         }
       },
       {
         "name": "list_manual_app_accessibility_reports",
         "method": "GET",
-        "path": "/api/v1/reports",
+        "path": "/api/v1/app_scanner",
+        "host": "dashboard",
+        "auth": { "type": "oauth2" },
         "mode": "read",
         "entity": "manual_report",
         "query": [
           {
             "name": "report_name",
             "type": "string",
-            "description": "Keeps reports whose name, app name, app version, package name, or creator's name or email contains this text.",
+            "description": "Keeps reports whose name, app name, app version, package name or bundle id, or owner's name, username or email contains this text.",
             "example": "Checkout"
           },
           {
-            "name": "status",
+            "name": "os",
             "type": "string",
-            "values": ["in_progress", "completed"],
-            "description": "Keeps reports still being recorded (in_progress) or finished (completed)."
+            "description": "Keeps reports from devices of these platforms, as a JSON array: [\"android\"], [\"ios\"] or both.",
+            "example": "[\"android\"]"
           },
           {
-            "name": "bundle_id",
+            "name": "created_after",
             "type": "string",
-            "description": "Keeps reports of one app: its Android package name or iOS bundle id.",
-            "example": "com.example.checkout"
+            "description": "Keeps reports that ended after this date, as a JSON string with its quotes, such as \"2026-01-01\".",
+            "example": "\"2026-01-01\""
           },
           {
             "name": "page",
             "type": "integer",
+            "required": true,
             "minimum": 1,
-            "default": 1,
-            "description": "Page number, from 1."
+            "description": "Page number, from 1. Always send it with page_size: without both the whole list comes back at once, with no info.",
+            "example": 1
           },
           {
             "name": "page_size",
             "type": "integer",
+            "required": true,
             "minimum": 1,
             "maximum": 100,
-            "default": 10,
-            "description": "Reports per page, at most 100. A larger value is refused, with a 404 that names the limit.",
-            "example": 50
+            "description": "Reports per page, at most 100.",
+            "example": 20
           }
         ],
-        "intent": "List manual App Accessibility reports (App Live sessions scanned with Workflow Analyzer) newest first, with each report's id, app, status and issue counts - use this to find a report QA shared or the latest manual scan of an app.",
+        "intent": "List manual App Accessibility reports (App Live sessions scanned with Workflow Analyzer) newest first, with each report's id, app, device, status and issue counts - use this to find a report QA shared or the latest manual scan of an app.",
         "guidance": [
-          "id is a UUID: the accessibility issue tools read a manual report by it, or by its dashboard link.",
-          "issue_summary.total is the dashboard's count, duplicates left out; severity_count.duplicate_issues counts the repeats.",
-          "An empty result answers 404 with the message 'No reports found': that is an empty list, not an error. A refused parameter also answers 404, with the reason.",
-          "There is no date filter that works, and narrowing to one person's reports is not available to most callers: page through newest first, or search by report_name."
+          "report_id is a UUID: the accessibility issue tools read a manual report by it, or by its dashboard link.",
+          "issues.total is the dashboard's count, duplicates left out; issues.duplicate_issues counts the repeats.",
+          "info.next is the following page, null on the last.",
+          "There is no status filter: status is in_progress while the App Live session is still recording."
         ],
         "returns": [
-          "reports.id",
-          "reports.name",
-          "reports.created_at",
-          "reports.status",
-          "reports.app_details",
-          "reports.issue_summary",
-          "reports.a11y_score",
+          "data.report_id",
+          "data.report_name",
+          "data.created_at",
+          "data.status",
+          "data.app_details",
+          "data.device",
+          "data.issues",
           "info.next"
         ],
         "paginated": true,
         "max_page_size": 100,
         "responses": {
           "200": { "$response": "ListManualAppAccessibilityReports" },
-          "401": { "$response": "Unauthorized" },
-          "403": { "$response": "Forbidden" },
-          "404": { "$response": "ManualReportsRefusedOrEmpty" },
-          "500": { "$response": "InternalServerError" }
+          "401": { "$response": "DashboardUnauthorized" },
+          "403": { "$response": "DashboardForbidden" },
+          "500": { "$response": "DashboardUpstreamFailure" }
         }
       },
       {
@@ -3136,7 +3142,7 @@
           "list_manual_app_accessibility_report_issues"
         ],
         "key_facts": [
-          "A report is in_progress while its session is still recording, and completed once it has ended.",
+          "A report is in_progress while its session is still recording, and complete once it has ended.",
           "Its issue counts are the dashboard's, duplicates left out; the duplicate count says how many repeats were folded in."
         ]
       },
@@ -3370,12 +3376,12 @@
       "ManualReport": {
         "type": "object",
         "properties": {
-          "id": { "type": "string", "format": "uuid", "description": "The report id the accessibility issue tools read." },
-          "name": { "type": "string" },
+          "report_id": { "type": "string", "format": "uuid", "description": "The report id the accessibility issue tools read." },
+          "report_name": { "type": "string" },
           "created_at": { "type": "string", "format": "date-time" },
-          "started_at": { "type": "string", "format": "date-time" },
-          "created_by": { "$schema": "User" },
-          "status": { "type": "string", "description": "in_progress while the session records, completed once it has ended." },
+          "end_time": { "type": "string", "format": "date-time", "description": "Null while the session is still recording." },
+          "status": { "type": "string", "description": "in_progress while the session records, complete once it has ended." },
+          "report_type": { "type": "string", "description": "standard, or consolidated for a report merged from others." },
           "app_details": {
             "type": "object",
             "properties": {
@@ -3385,8 +3391,9 @@
               "framework": { "type": "string" }
             }
           },
-          "issue_summary": { "$schema": "IssueSummary" },
-          "a11y_score": { "$schema": "AccessibilityScore" }
+          "device": { "type": "object", "description": "The device the session ran on." },
+          "user": { "type": "object", "description": "The report's owner." },
+          "issues": { "type": "object", "description": "The dashboard's counts: total (duplicates left out), per severity, needs_review, hidden_issues and duplicate_issues." }
         }
       },
       "Failure": {
@@ -3444,12 +3451,8 @@
           "type": "object",
           "properties": {
             "success": { "type": "boolean" },
-            "reports": { "type": "array", "items": { "$schema": "ManualReport" } },
-            "info": { "$schema": "PageInfo" },
-            "filters": {
-              "type": "object",
-              "description": "An open map echoing the filters the request sent, keyed by parameter name."
-            }
+            "data": { "type": "array", "items": { "$schema": "ManualReport" } },
+            "info": { "$schema": "PageInfo" }
           }
         }
       },
@@ -3457,38 +3460,8 @@
         "description": "A filter value was refused; message names the allowed values.",
         "schema": { "$schema": "Failure" }
       },
-      "Unauthorized": {
-        "description": "The username or access key was not accepted.",
-        "schema": { "$schema": "Failure" }
-      },
-      "Forbidden": {
-        "description": "The account's plan or the caller's role does not include this list.",
-        "schema": { "$schema": "Failure" }
-      },
       "EmptyList": {
         "description": "Nothing matched: message is 'No builds found'. An empty list, not a missing project.",
-        "schema": { "$schema": "Failure" }
-      },
-      "ManualReportsRefusedOrEmpty": {
-        "description": "Nothing matched (message 'No reports found'), or a parameter was refused: message, or errors for a refused status, says why.",
-        "schema": {
-          "allOf": [{ "$schema": "Failure" }],
-          "properties": {
-            "errors": {
-              "type": "array",
-              "items": {
-                "type": "object",
-                "properties": {
-                  "key": { "type": "string" },
-                  "message": { "type": "string" }
-                }
-              }
-            }
-          }
-        }
-      },
-      "InternalServerError": {
-        "description": "The service failed to answer.",
         "schema": { "$schema": "Failure" }
       },
       "DashboardUnauthorized": {

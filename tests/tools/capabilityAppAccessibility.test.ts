@@ -8,8 +8,8 @@ import {
 } from "../../src/tools/capability-registry/search.js";
 
 // App Accessibility's lists (its projects, a project's builds, manual reports) are reached
-// through the capability registry rather than a dedicated tool: they are documented,
-// access-key reads with nothing to add on top. What has to hold is that an agent finds
+// through the capability registry rather than a dedicated tool, on the dashboard's routes
+// like every other App Accessibility capability. What has to hold is that an agent finds
 // them from the words users say, and that they do not pull other products' questions in.
 
 const DIR = new URL("../../capability/", import.meta.url);
@@ -33,16 +33,14 @@ const products = shipped();
 const app = products.app_accessibility;
 
 describe("the App Accessibility capability index", () => {
-  // The dashboard reads (host: dashboard) are covered in capabilityAppAccessibilityDashboard.
-  it("ships the three public-API lists, as reads, each on an entity that names it", () => {
-    const publicApi = app.capabilities.filter((c: any) => !c.host);
-    const names = publicApi.map((c: any) => c.name).sort();
-    expect(names).toEqual([
+  // Host and auth for every capability are covered in capabilityAppAccessibilityDashboard.
+  it("ships the three lists, as paginated reads, each on an entity that names it", () => {
+    const lists = [
       "list_app_accessibility_builds",
       "list_app_accessibility_projects",
       "list_manual_app_accessibility_reports",
-    ]);
-    for (const capability of publicApi) {
+    ].map((name) => app.capabilities.find((c: any) => c.name === name));
+    for (const capability of lists) {
       expect(capability.mode).toBe("read");
       expect(capability.paginated).toBe(true);
       expect(app.entities[capability.entity].capabilities).toContain(
@@ -59,12 +57,18 @@ describe("the App Accessibility capability index", () => {
     const manual = app.capabilities.find(
       (c: any) => c.name === "list_manual_app_accessibility_reports",
     );
-    // created_between is echoed back but never narrows the list, and user_id applies to
-    // account admins only: offered, either would return a wider list that looks filtered.
-    expect(manual.query.map((q: any) => q.name)).not.toContain(
-      "created_between",
-    );
-    expect(manual.query.map((q: any) => q.name)).not.toContain("user_id");
+    // app_package_names is parsed and then ignored by the dashboard's list: offered, it
+    // would return the whole list looking filtered. report_name covers the package.
+    const names = manual.query.map((q: any) => q.name);
+    expect(names).not.toContain("app_package_names");
+    expect(names).toContain("report_name");
+    // Without both, the list comes back whole and unpaged.
+    for (const name of ["page", "page_size"]) {
+      expect(
+        manual.query.find((q: any) => q.name === name).required,
+        name,
+      ).toBe(true);
+    }
     const projects = app.capabilities.find(
       (c: any) => c.name === "list_app_accessibility_projects",
     );

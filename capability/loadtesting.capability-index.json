@@ -2841,6 +2841,7 @@
           "results",
           "metrics report",
           "run report",
+          "summary",
           "kpis"
         ],
         "id_convention": "A report is not independently identified — it is addressed by the run's runId (jobId). Fetch it only after a run reaches a terminal state.",
@@ -2867,7 +2868,9 @@
           "ai insight",
           "root cause",
           "rca",
-          "recommendation"
+          "analysis",
+          "recommendation",
+          "summary"
         ],
         "id_convention": "Addressed by the run's runId (jobId). Insights are AI-generated after a run completes; a non-terminal run returns an in_progress state rather than a report.",
         "parents": [
@@ -2980,6 +2983,7 @@
         "description": "Health status of the Load Testing service and its dependencies; a singleton probe with no id.",
         "aliases": [
           "platform",
+          "status",
           "health",
           "service status",
           "availability",

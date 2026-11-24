@@ -11,7 +11,7 @@ for (const file of readdirSync("capability")) {
       products[name] = index;
 }
 
-describe("generic words do not route to Load Testing", () => {
+describe("summary is shared by Load Testing and TRA", () => {
   it.each([
     "Give me a triage summary of today's nightly functional builds",
     "Fetch today's nightly functional builds and produce a TRA triage summary",
@@ -20,17 +20,18 @@ describe("generic words do not route to Load Testing", () => {
     expect(ambiguousProducts(products, query).settled).toBe("tra");
   });
 
-  it("still settles a summary that names a load test", () => {
-    expect(
-      ambiguousProducts(products, "start a load test run and show its summary")
-        .settled,
-    ).toBe("loadtesting");
+  it.each([
+    "start a load test run and show its summary",
+    "summarize my last load test",
+  ])("%s -> loadtesting", (query) => {
+    expect(ambiguousProducts(products, query).settled).toBe("loadtesting");
   });
 
-  it("does not raise a clash over `status`", () => {
-    expect(
-      ambiguousProducts(products, "What's the status of my latest build?").terms,
-    ).not.toContain("statu");
+  it("asks when nothing else in the request names a product", () => {
+    expect(ambiguousProducts(products, "show me the summary").products).toEqual([
+      "loadtesting",
+      "tra",
+    ]);
   });
 });
 

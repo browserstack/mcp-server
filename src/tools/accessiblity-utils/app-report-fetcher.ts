@@ -33,9 +33,7 @@ const AGENT_AUTH = { type: "oauth2" } as const;
  * override and regional rules apply here too.
  */
 export const appDashboard = () =>
-  namedHostUrl(
-    APP_ACCESSIBILITY,
-    "dashboard",
+  namedHostUrl(APP_ACCESSIBILITY, "dashboard", () =>
     getRegionalHost("appAccessibilityDashboard"),
   );
 export const appApiBase = () => `${appDashboard()}/automate/api/v1`;

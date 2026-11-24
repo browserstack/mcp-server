@@ -1988,7 +1988,7 @@
         ],
         "intent": "Hide accessibility issues in an App Accessibility build at issue, element or rule level, with a reason - the dashboard's Hide issue action. Changes the build's issue counts and score.",
         "guidance": [
-          "APPROVAL FIRST: before calling, tell the user exactly what will change (which issues are hidden, in which report, and how many issues, from count_app_accessibility_issues_to_hide) and wait for an explicit yes in their own words ('yes', 'go ahead'). A request to make the change, however specific, is not that yes: ask first, and send user_permission granted only after it.",
+          "APPROVAL FIRST: before calling, tell the user exactly what will change (which issues are hidden, in which report, and how many issues: for hide_level rule or component, from count_app_accessibility_issues_to_hide; for hide_level issue, the issue and its duplicates, 1 + its rule_issues[].duplication_count from list_app_accessibility_build_issues) and wait for an explicit yes in their own words ('yes', 'go ahead'). A request to make the change, however specific, is not that yes: ask first, and send user_permission granted only after it.",
           "Read the ids first: list_app_accessibility_build_issues (or list_app_accessibility_test_issues for one test) gives details[].meta.snapshot_id and, per rule, rule_issues[].uid and .status. fetchAccessibilityIssues does not return them.",
           "Ask for the reason by offering exactly the six reason_code values. With Others, ask for an explanation and send it: the dashboard requires one, the backend does not check. 'Not an issue' is a needs-review decision (review_app_accessibility_issue), not a hide reason.",
           "Undo is unhide_app_accessibility_issues with the same hide_level, rule_id, uid and snapshot_id.",
@@ -2081,7 +2081,7 @@
         ],
         "intent": "Unhide accessibility issues hidden in an App Accessibility build, at issue, element or rule level - undoes hide_app_accessibility_issues.",
         "guidance": [
-          "APPROVAL FIRST: before calling, tell the user exactly what will change (which hidden issues come back, in which report, and how many issues, from count_app_accessibility_issues_to_unhide) and wait for an explicit yes in their own words ('yes', 'go ahead'). A request to make the change, however specific, is not that yes: ask first, and send user_permission granted only after it.",
+          "APPROVAL FIRST: before calling, tell the user exactly what will change (which hidden issues come back, in which report, and how many issues: for hide_level rule or component, from count_app_accessibility_issues_to_unhide; for hide_level issue, the issue and its duplicates, 1 + its rule_issues[].duplication_count from list_app_accessibility_build_issues) and wait for an explicit yes in their own words ('yes', 'go ahead'). A request to make the change, however specific, is not that yes: ask first, and send user_permission granted only after it.",
           "Send the same hide_level, rule_id, uid and snapshot_id the hide used; hidden issues are read from list_app_accessibility_build_issues.",
           "Restores issues hidden in this build only.",
           "403 AGENT_REPORT_ACTIONS_DISABLED means BrowserStack has switched off agent writes for this user or group. Nothing changed. Tell the user to do it on the App Accessibility dashboard; do not retry, a retry is refused too."
@@ -2429,7 +2429,7 @@
         ],
         "intent": "Hide accessibility issues in a manual App Accessibility report at issue, element or rule level, with a reason - the dashboard's Hide issue action. Changes the report's issue counts and score.",
         "guidance": [
-          "APPROVAL FIRST: before calling, tell the user exactly what will change (which issues are hidden, in which report, and how many issues, from count_manual_app_accessibility_issues_to_hide) and wait for an explicit yes in their own words ('yes', 'go ahead'). A request to make the change, however specific, is not that yes: ask first, and send user_permission granted only after it.",
+          "APPROVAL FIRST: before calling, tell the user exactly what will change (which issues are hidden, in which report, and how many issues: for hide_level rule or component, from count_manual_app_accessibility_issues_to_hide; for hide_level issue, the issue and its duplicates, 1 + its rule_issues[].duplication_count from list_manual_app_accessibility_report_issues) and wait for an explicit yes in their own words ('yes', 'go ahead'). A request to make the change, however specific, is not that yes: ask first, and send user_permission granted only after it.",
           "Read the ids first: list_manual_app_accessibility_report_issues gives details[].meta.snapshot_id and, per rule, rule_issues[].uid and .status. fetchAccessibilityIssues does not return them.",
           "Ask for the reason by offering exactly the six reason_code values. With Others, ask for an explanation and send it: the dashboard requires one, the backend does not check. 'Not an issue' is a needs-review decision (review_manual_app_accessibility_issue), not a hide reason.",
           "Undo is unhide_manual_app_accessibility_issues with the same hide_level, rule_id, uid and snapshot_id.",
@@ -2518,7 +2518,7 @@
         ],
         "intent": "Unhide accessibility issues hidden in a manual App Accessibility report, at issue, element or rule level - undoes hide_manual_app_accessibility_issues.",
         "guidance": [
-          "APPROVAL FIRST: before calling, tell the user exactly what will change (which hidden issues come back, in which report, and how many issues, from count_manual_app_accessibility_issues_to_unhide) and wait for an explicit yes in their own words ('yes', 'go ahead'). A request to make the change, however specific, is not that yes: ask first, and send user_permission granted only after it.",
+          "APPROVAL FIRST: before calling, tell the user exactly what will change (which hidden issues come back, in which report, and how many issues: for hide_level rule or component, from count_manual_app_accessibility_issues_to_unhide; for hide_level issue, the issue and its duplicates, 1 + its rule_issues[].duplication_count from list_manual_app_accessibility_report_issues) and wait for an explicit yes in their own words ('yes', 'go ahead'). A request to make the change, however specific, is not that yes: ask first, and send user_permission granted only after it.",
           "Send the same hide_level, rule_id, uid and snapshot_id the hide used; hidden issues are read from list_manual_app_accessibility_report_issues.",
           "Restores issues hidden in this report only.",
           "403 AGENT_REPORT_ACTIONS_DISABLED means BrowserStack has switched off agent writes for this user or group. Nothing changed. Tell the user to do it on the App Accessibility dashboard; do not retry, a retry is refused too."

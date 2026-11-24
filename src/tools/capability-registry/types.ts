@@ -100,10 +100,8 @@ export interface WireParam extends WireConstraints {
   /** Field names/types one level inside an array item or nested object. */
   fields?: WireField[];
   /**
-   * Where a body field sits in the JSON, when that differs from its name. Published
-   * because the nesting is not guessable and getting it wrong fails silently — tm's folder
-   * create really wants `{folder: {name}}` while the spec's flat `{name}` is what a reader
-   * would assume.
+   * Where a body field sits in the JSON, when that differs from its name — tm's folder
+   * create takes `{folder: {name}}`. The body is bound by this position.
    */
   json_path?: string;
   /** `file` parameters only. Absent means app builds and the app-build size limit. */

@@ -6,11 +6,14 @@ import {
   replacedFixed,
   withoutFixed,
 } from "../../src/tools/capability-registry/bind.js";
-import { Capability, WireParam } from "../../src/tools/capability-registry/types.js";
+import {
+  Capability,
+  WireParam,
+} from "../../src/tools/capability-registry/types.js";
 
 /**
  * The body is the JSON the API takes, and each value is matched to the field declared at
- * its position. One name declared at two depths is two fields.
+ * its position.
  */
 
 const MOVE: Capability = {
@@ -87,7 +90,9 @@ describe("walking the body", () => {
   it("reports a missing required wrapped field by its position", () => {
     const required = {
       ...MOVE,
-      body: [{ name: "ids", type: "array", required: true, json_path: "/thing/ids" }],
+      body: [
+        { name: "ids", type: "array", required: true, json_path: "/thing/ids" },
+      ],
     } as Capability;
     expect(() =>
       bind(required, { path_params: { project_id: 1 }, body: {} }),
@@ -100,14 +105,23 @@ describe("a bare name two wrapped fields share", () => {
     ...MOVE,
     body: [
       { name: "custom_fields", type: "array", json_path: "/q/custom_fields" },
-      { name: "custom_fields", type: "array", json_path: "/required/custom_fields" },
+      {
+        name: "custom_fields",
+        type: "array",
+        json_path: "/required/custom_fields",
+      },
     ],
   } as Capability;
 
   it("is refused rather than given to one of them", () => {
     expect(() =>
-      bind(SEARCH, { path_params: { project_id: 1 }, body: { custom_fields: [1] } }),
-    ).toThrow(/unknown body: custom_fields\. accepted: q\.custom_fields, required\.custom_fields/);
+      bind(SEARCH, {
+        path_params: { project_id: 1 },
+        body: { custom_fields: [1] },
+      }),
+    ).toThrow(
+      /unknown body: custom_fields\. accepted: q\.custom_fields, required\.custom_fields/,
+    );
   });
 
   it("binds each when sent at its position", () => {
@@ -179,7 +193,9 @@ describe("the shipped indexes", () => {
     return raw[product] ?? raw.products[product];
   };
   const find = (product: string, name: string) =>
-    load(product).capabilities.find((c: Capability) => c.name === name) as Capability;
+    load(product).capabilities.find(
+      (c: Capability) => c.name === name,
+    ) as Capability;
 
   it("tm bulk move: a top-level folder_id is the source scope", () => {
     const bound = bind(find("tm", "bulk_move_test_cases"), {

@@ -2,15 +2,11 @@
  * Turn grouped caller arguments into a path, a query and a body.
  *
  * Arguments arrive GROUPED — {path_params, query, body} — because spec parameter names
- * collide across locations: four tm operations declare one name in two places (`bulk-move`
- * has `folder_id` as both a path parameter and a body field). A flat map cannot say which
- * one is meant, which is exactly why the Python side used to rename body fields `body_*`.
- * Grouping removes the collision AND the rename, so a caller sends the spec's own names.
+ * can repeat across locations (a path parameter and a body field of the same name), and
+ * the group says which one is meant, so a caller sends the spec's own names.
  *
- * The body is the request body as the API defines it: `{folder_id, test_case: {ids}}`
- * is sent nested, and each value is matched to the field declared at that position
- * (`json_path`). A field is published under its dotted position (`test_case.ids`), so
- * two fields that share a name at different depths stay two fields.
+ * The body is the request body as the API defines it, e.g. `{test_case: {ids}}`, and
+ * each value is matched to the field declared at that position (`json_path`).
  */
 
 import appConfig from "../../config.js";
@@ -473,10 +469,6 @@ export function replacedFixed(
  * when it sits inside an object the API wraps it in (`test_case.ids` for
  * `/test_case/ids`), and its own name otherwise.
  *
- * Position rather than bare name because a body can declare one name twice at different
- * depths — a top-level `folder_id` and a `test_case.folder_id` that mean different
- * things — and only the position tells them apart.
- *
  * A body that RENAMES any field keeps plain names for all of them: a `json_path` ending
  * in a different name (`browser_name` for `/capabilities/alwaysMatch/browserName`) is a
  * deliberate readable surface over a wire shape, and its siblings stay on that surface.
@@ -516,7 +508,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
  * where it was (`test_case.nmae`). Top-level keys that match no position are left as sent,
  * for `normalise` to resolve by name.
  */
-function flattenBody(
+function fieldsByPosition(
   params: WireParam[],
   sent: Record<string, unknown>,
 ): Record<string, unknown> {
@@ -652,7 +644,7 @@ export function normalise(
   const bodyParams = capability.body || [];
   const args: GroupedArguments =
     isRecord(given.body) && !keyedParam("body", bodyParams)
-      ? { ...given, body: flattenBody(bodyParams, given.body) }
+      ? { ...given, body: fieldsByPosition(bodyParams, given.body) }
       : given;
 
   const declared = new Map<
@@ -690,8 +682,8 @@ export function normalise(
         }
       }
     }
-    // A wrapped field sent under its bare name (`ids` for `test_case.ids`), which is how
-    // callers sent it before bodies were nested. Kept only where the name is unique.
+    // A wrapped field sent under its bare name (`ids` for `test_case.ids`). Kept only
+    // where the name is unique.
     const byLeaf = new Map<string, string>();
     const leafCount = new Map<string, number>();
     for (const param of params.filter(wrapped))
@@ -799,8 +791,7 @@ export function bind(
     );
     if (unknown.length > 0) {
       // A dotted name is a position in the body: `test_case.ids` is sent as
-      // `{"test_case": {"ids": …}}`. Said once, in the refusal, because an accepted list
-      // of dotted names reads as flat keys to a caller who has not met the convention.
+      // `{"test_case": {"ids": …}}`, so the refusal says how to read the accepted list.
       const nested =
         group === "body" &&
         [...byName.keys()].some((name) => name.includes("."));

@@ -854,6 +854,18 @@ describe("AccessibilityReportFetcher and App Accessibility manual reports", () =
     expect(get).not.toHaveBeenCalled();
   });
 
+  it("takes a link on this deployment's own dashboard host, the one its answers link to", async () => {
+    const host = "https://app-accessibility-preprod.example.com";
+    vi.stubEnv("CAPABILITY_REGISTRY_BASE_URL_APP_ACCESSIBILITY_HOST_DASHBOARD", host);
+    try {
+      await expect(
+        fetcher().sourceFromReportUrl(`${host}/report/${REPORT_ID}`),
+      ).resolves.toEqual({ kind: "appReport", reportId: REPORT_ID });
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
   it("reads a manual report's status from whether its session has ended", async () => {
     // A session still recording answers with its raw session row.
     get.mockResolvedValueOnce({

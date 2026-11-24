@@ -161,7 +161,9 @@ function credentialsFrom(config: BrowserStackConfig): Credentials {
  * product-level override is set: a preprod override must never send dashboard calls to
  * production.
  */
-const STRICT_NAMED_HOST_PRODUCTS: ReadonlySet<string> = new Set(["app_accessibility"]);
+const STRICT_NAMED_HOST_PRODUCTS: ReadonlySet<string> = new Set([
+  "app_accessibility",
+]);
 
 /**
  * The host a capability named, as opposed to the product's own.

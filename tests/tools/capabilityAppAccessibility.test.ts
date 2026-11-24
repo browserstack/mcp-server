@@ -33,14 +33,16 @@ const products = shipped();
 const app = products.app_accessibility;
 
 describe("the App Accessibility capability index", () => {
-  it("ships the three lists, as reads, each on an entity that names it", () => {
-    const names = app.capabilities.map((c: any) => c.name).sort();
+  // The dashboard reads (host: dashboard) are covered in capabilityAppAccessibilityDashboard.
+  it("ships the three public-API lists, as reads, each on an entity that names it", () => {
+    const publicApi = app.capabilities.filter((c: any) => !c.host);
+    const names = publicApi.map((c: any) => c.name).sort();
     expect(names).toEqual([
       "list_app_accessibility_builds",
       "list_app_accessibility_projects",
       "list_manual_app_accessibility_reports",
     ]);
-    for (const capability of app.capabilities) {
+    for (const capability of publicApi) {
       expect(capability.mode).toBe("read");
       expect(capability.paginated).toBe(true);
       expect(app.entities[capability.entity].capabilities).toContain(

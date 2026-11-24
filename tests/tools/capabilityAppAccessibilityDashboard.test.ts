@@ -161,6 +161,29 @@ describe("the App Accessibility dashboard capabilities", () => {
       expect(c.mode, c.name).toBe("read");
   });
 
+  it("wire each issue action to its own route, never to its inverse", () => {
+    const routes = Object.fromEntries(
+      WRITES.map((name) => [
+        name,
+        `${byName(name).method} ${byName(name).path}`,
+      ]),
+    );
+    expect(routes).toEqual({
+      hide_app_accessibility_issues:
+        "POST /automate/api/v1/scan/{th_build_id}/hide-issue",
+      hide_manual_app_accessibility_issues:
+        "POST /api/v1/app_scanner/{report_id}/hide-issue",
+      review_app_accessibility_issue:
+        "POST /automate/api/v1/build/{th_build_id}/review-issue",
+      review_manual_app_accessibility_issue:
+        "POST /api/v1/app_scanner/{report_id}/review-issue",
+      unhide_app_accessibility_issues:
+        "POST /automate/api/v1/scan/{th_build_id}/unhide-issue",
+      unhide_manual_app_accessibility_issues:
+        "POST /api/v1/app_scanner/{report_id}/unhide-issue",
+    });
+  });
+
   it("never offer a persistent hide, which the backend refuses an agent", () => {
     for (const c of app.capabilities) {
       const names = [...(c.body ?? []), ...(c.query ?? [])].map(
@@ -342,6 +365,29 @@ describe("the App Accessibility dashboard follows the account's region", () => {
     ["in", "https://app-accessibility-in.browserstack.com"],
   ])("sends a %s account's dashboard calls to %s", async (region, host) => {
     expect(await resolveIn(region, "dashboard")).toBe(host);
+  });
+
+  it("takes the dashboard override for report reads even when the account region is unknown", async () => {
+    process.env[OVERRIDE] = "https://app-accessibility-preprod.example.com";
+    const { withAccountRegion } =
+      await import("../../src/lib/region-context.js");
+    const { appDashboard } =
+      await import("../../src/tools/accessiblity-utils/app-report-fetcher.js");
+
+    expect(withAccountRegion("unknown" as any, () => appDashboard())).toBe(
+      "https://app-accessibility-preprod.example.com",
+    );
+  });
+
+  it("still refuses report reads for an unknown region without an override", async () => {
+    const { withAccountRegion } =
+      await import("../../src/lib/region-context.js");
+    const { appDashboard } =
+      await import("../../src/tools/accessiblity-utils/app-report-fetcher.js");
+
+    expect(() =>
+      withAccountRegion("unknown" as any, () => appDashboard()),
+    ).toThrow(/region/i);
   });
 
   it("keeps the product's own base host on the API host", async () => {

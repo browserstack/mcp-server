@@ -239,18 +239,23 @@ function resolveNamedHost(
 /**
  * A product's named host for code outside the registry that calls the same routes: the same
  * override, strict check and regional rules as a capability on that host. `declared` stands
- * in for the index's `hosts` entry, the US default.
+ * in for the index's `hosts` entry, the US default; it is only called when no override or
+ * regional host answers first, so an override works even while the account region is unknown.
  */
 export function namedHostUrl(
   product: string,
   host: string,
-  declared: string,
+  declared: () => string,
 ): string {
+  const hosts = Object.defineProperty({}, host, {
+    get: declared,
+    enumerable: true,
+  });
   return resolveNamedHost(
     product,
     product.toUpperCase(),
     host,
-    { hosts: { [host]: declared } } as HostSource,
+    { hosts } as HostSource,
     selectedEnvironment(),
   );
 }

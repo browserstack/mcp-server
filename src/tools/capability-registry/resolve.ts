@@ -15,7 +15,13 @@
 
 import { invalidateToken } from "../../lib/central-oauth.js";
 import { bind, GroupedArguments } from "./bind.js";
-import { authHeaders, Credentials, Transport } from "./egress.js";
+import {
+  authHeaders,
+  Credentials,
+  PRODUCT_UNREACHABLE,
+  Transport,
+} from "./egress.js";
+import { retryRead } from "../../lib/read-retry.js";
 import { resolveScope, resolveTokenUrl } from "./oauth.js";
 import { AuthScheme } from "./types.js";
 import { openAsBlob } from "node:fs";
@@ -164,7 +170,15 @@ export async function invoke(
     });
   };
 
-  let response = await send();
+  // Only an unanswered read is retried; a product's own error status is returned as sent.
+  let response =
+    capability.mode === "read"
+      ? await retryRead(
+          send,
+          (r) => r.status === 0 && r.error === PRODUCT_UNREACHABLE,
+          { retryOnError: false },
+        )
+      : await send();
 
   /**
    * One replay, for a minted token the product rejected.
@@ -195,7 +209,7 @@ export async function invoke(
       status: response.status,
       body: response.body,
       ...(response.status === 0
-        ? { error: response.error || "the product could not be reached" }
+        ? { error: response.error || PRODUCT_UNREACHABLE }
         : {}),
     },
   };

@@ -122,7 +122,7 @@ describe("withFeedbackHint", () => {
       "listBuildId",
       err("Failed: Request failed with status code 502"),
     );
-    expect(out.content.at(-1).text).toBe(FEEDBACK_HINT);
+    expect(out.content.at(-1).text).toBe(`\n${FEEDBACK_HINT}`);
   });
 
   it.each([
@@ -159,7 +159,7 @@ describe("withFeedbackHint", () => {
     instrumentToolLatency(tools, () => clientInfo, config);
     const out: any = await tools.listBuildId.handler({}, {});
 
-    expect(out.content.at(-1).text).toBe(FEEDBACK_HINT);
+    expect(out.content.at(-1).text).toBe(`\n${FEEDBACK_HINT}`);
     expect(rows()[0].error_message).not.toContain("submitFeedback");
   });
 });

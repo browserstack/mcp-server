@@ -1187,7 +1187,9 @@ export function addCapabilityRegistryTools(
       body: z
         .record(z.string(), z.any())
         .optional()
-        .describe("Body fields, under the spec's names."),
+        .describe(
+          'Request body JSON. A dotted name a.b is sent as {"a":{"b":…}}.',
+        ),
       product: productArg()
         .optional()
         .describe("Owning product; needed only when names or paths collide."),

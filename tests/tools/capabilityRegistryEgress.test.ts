@@ -94,12 +94,9 @@ describe("the transport never silently drops a response body", () => {
   });
 });
 
-describe("a caller who hand-builds the wrapper is told what happened", () => {
-  // The registry assembles the Rails-style body wrapper itself from each field's
-  // json_path, so a caller sends fields flat. When one nests them by hand — which the
-  // published guidance was telling 25 tm capabilities' callers to do — the key is never a
-  // declared param, and the bare "unknown body" message reads as "no such field" when the
-  // truth is the reverse: the field exists and building it is this layer's job.
+describe("a nested body is matched to its fields by position", () => {
+  // Rails-style endpoints want the fields inside a wrapper (`params.require(:thing)`),
+  // declared as `json_path: /thing/name`. The caller sends that body as the API takes it.
   const capability = {
     name: "update_thing",
     method: "PATCH",
@@ -114,22 +111,30 @@ describe("a caller who hand-builds the wrapper is told what happened", () => {
     ],
   } as any;
 
-  it("names the wrapper and says to send the fields directly", async () => {
+  it("accepts the wrapper the API defines", async () => {
     const { bind } = await import("../../src/tools/capability-registry/bind.js");
-    expect(() =>
-      bind(capability, { path_params: { id: "1" }, body: { thing: { name: "x" } } }),
-    ).toThrow(/wrapper this surface builds for you|builds for you from each field/);
+    const bound = bind(capability, {
+      path_params: { id: "1" },
+      body: { thing: { name: "x" } },
+    });
+    expect(bound.body).toEqual({ thing: { name: "x" } });
   });
 
-  it("still reports an ordinary typo as an ordinary unknown field", async () => {
+  it("names a misspelled field by its position", async () => {
     const { bind } = await import("../../src/tools/capability-registry/bind.js");
-    // `nmae` is not a wrapper — the hint must not fire and mislead.
+    expect(() =>
+      bind(capability, { path_params: { id: "1" }, body: { thing: { nmae: "x" } } }),
+    ).toThrow(/unknown body: thing\.nmae\. accepted: thing\.name, thing\.priority\./);
+  });
+
+  it("still reports an ordinary top-level typo as an unknown field", async () => {
+    const { bind } = await import("../../src/tools/capability-registry/bind.js");
     expect(() =>
       bind(capability, { path_params: { id: "1" }, body: { nmae: "x" } }),
-    ).toThrow(/unknown body: nmae\. accepted: name, priority$/);
+    ).toThrow(/unknown body: nmae\. accepted: thing\.name, thing\.priority\./);
   });
 
-  it("accepts the flat body it asked for", async () => {
+  it("still accepts a field sent under its bare name", async () => {
     const { bind } = await import("../../src/tools/capability-registry/bind.js");
     const bound = bind(capability, { path_params: { id: "1" }, body: { name: "x" } });
     expect(bound.body).toEqual({ thing: { name: "x" } });

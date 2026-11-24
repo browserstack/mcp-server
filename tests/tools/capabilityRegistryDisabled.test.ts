@@ -324,12 +324,18 @@ describe("bulk operations in every shipped index", () => {
    * - every capability whose name, route or intent says "bulk" is disabled, and
    * - no published write takes a selector — `select_all`, `shared_selection`, or a
    *   `/selection/...` field — so the same blast radius cannot come in under another name.
+   * - no published write that changes an EXISTING record takes a case-set selector
+   *   (`include_all`, `folder_ids`, `include_sub_folders`, `filter_test_cases`). On a run
+   *   update these replace the whole case list, dropping results and assignees with a 200.
+   *   A `create_*` capability may keep them: it only fills a record that did not exist.
    *
    * A new bulk capability or selector param added to any index fails here until it is
    * flagged or removed, so the rule cannot erode one onboarding at a time.
    */
   const SELECTOR =
     /^(select_all|test_case_select_all|shared_selection|selection)$/;
+  const CASE_SET =
+    /^(include_all|folder_ids|include_sub_folders|filter_test_cases)$/;
 
   function shipped() {
     const files = readdirSync("capability").filter((f) =>
@@ -367,9 +373,12 @@ describe("bulk operations in every shipped index", () => {
           // A report's case selection only scopes what the report reads; it changes no
           // records, so it is not a bulk write.
           if (path.startsWith("/report_filters/")) continue;
+          const name = String(p?.name);
+          const creates = String(c.name).startsWith("create_");
           if (
-            SELECTOR.test(String(p?.name)) ||
-            path.startsWith("/selection/")
+            SELECTOR.test(name) ||
+            path.startsWith("/selection/") ||
+            (CASE_SET.test(name) && !creates)
           ) {
             live.push(`${product}.${c.name}: ${group}.${p.name}`);
           }

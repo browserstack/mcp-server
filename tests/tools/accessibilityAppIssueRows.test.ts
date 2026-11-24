@@ -6,7 +6,14 @@ import { beforeEach, describe, expect, it, Mock, vi } from "vitest";
 // fix and each screen's screenshot, which were two thirds of an issue's length.
 
 vi.mock("../../src/lib/apiClient.js", () => ({
-  apiClient: { get: vi.fn() },
+  apiClient: {
+    get: vi.fn(),
+    // The App Accessibility dashboard's token.
+    post: vi.fn(async () => ({
+      status: 200,
+      data: { access_token: "agent-token", expires_in: 3600 },
+    })),
+  },
 }));
 
 import { apiClient } from "../../src/lib/apiClient.js";

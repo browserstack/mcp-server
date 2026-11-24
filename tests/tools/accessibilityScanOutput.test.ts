@@ -718,8 +718,6 @@ describe("fetchAccessibilityIssues and App Accessibility manual reports", () => 
       next_page: 140,
       remaining: 143,
       summary: { by_severity: { serious: 144 }, by_rule: [], by_screen: [] },
-      deduplicated: false,
-      dashboard_count: 97,
       duplicate_occurrences: 47,
       hidden_issues: 0,
       scan_count: 7,
@@ -741,8 +739,6 @@ describe("fetchAccessibilityIssues and App Accessibility manual reports", () => 
       next_page: 140,
       remaining: 96,
       summary: { by_severity: { serious: 97 }, by_rule: [], by_screen: [] },
-      deduplicated: true,
-      dashboard_count: 97,
       duplicate_occurrences: 47,
       hidden_issues: 0,
       scan_count: 7,
@@ -793,10 +789,10 @@ describe("fetchAccessibilityIssues and App Accessibility manual reports", () => 
     expect(m.appReportIssues).toHaveBeenCalledWith(REPORT_ID, 0);
     const body = text(result);
     expect(body).toContain(
-      "Retrieved 1 accessibility issue occurrences (Total: 144) from the App Accessibility manual report below (7 screens scanned on iPhone 15 Pro, ios 17.0)",
+      "Retrieved 1 accessibility issues (Total: 144) from the App Accessibility manual report below (7 screens scanned on iPhone 15 Pro, ios 17.0)",
     );
     expect(body).toContain(
-      "The dashboard counts 97 issues for this report: 47 of the occurrences are duplicates it folds, which the API does not mark.",
+      "47 duplicate occurrences are left out, as the dashboard leaves them out of its count.",
     );
     const block = body.indexOf("«UNTRUSTED App Accessibility manual report");
     expect(block).toBeGreaterThan(-1);

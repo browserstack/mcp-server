@@ -236,6 +236,25 @@ function resolveNamedHost(
   );
 }
 
+/**
+ * A product's named host for code outside the registry that calls the same routes: the same
+ * override, strict check and regional rules as a capability on that host. `declared` stands
+ * in for the index's `hosts` entry, the US default.
+ */
+export function namedHostUrl(
+  product: string,
+  host: string,
+  declared: string,
+): string {
+  return resolveNamedHost(
+    product,
+    product.toUpperCase(),
+    host,
+    { hosts: { [host]: declared } } as HostSource,
+    selectedEnvironment(),
+  );
+}
+
 export async function resolveBaseUrl(
   product: string,
   config: BrowserStackConfig,

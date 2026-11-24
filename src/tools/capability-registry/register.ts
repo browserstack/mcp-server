@@ -33,6 +33,7 @@ import { Credentials, Transport, fetchTransport } from "./egress.js";
 import {
   CapabilityRegistry,
   InvocationError,
+  isReadOnly,
   ResponseSelection,
   resolveResponses,
 } from "./index-loader.js";
@@ -1141,9 +1142,13 @@ export function addCapabilityRegistryTools(
     },
   );
 
+  const readOnly = isReadOnly();
   tools.invokeCapability = server.tool(
     "invokeCapability",
-    "Run a capability after describeCapability, by `name` (or `method` + `path` if unnamed); args go in path_params / query / body. `select` narrows the response only where the contract carries `narrowable`. If `completed` is false, fetch the next page with the capability's own page parameter, not `offset`. Writes: ask the user first, then resend with user_permission='granted' and a change_summary. Deletes are refused; archive, close and merge are writes.",
+    "Run a capability after describeCapability, by `name` (or `method` + `path` if unnamed); args go in path_params / query / body. `select` narrows the response only where the contract carries `narrowable`. If `completed` is false, fetch the next page with the capability's own page parameter, not `offset`." +
+      (readOnly
+        ? " Read-only: writes and deletes are not available."
+        : " Writes: ask the user first, then resend with user_permission='granted' and a change_summary. Deletes are refused; archive, close and merge are writes."),
     {
       name: z
         .string()
@@ -1178,16 +1183,20 @@ export function addCapabilityRegistryTools(
       product: productArg()
         .optional()
         .describe("Owning product; needed only when names or paths collide."),
-      user_permission: z
-        .enum(PERMISSION_VALUES)
-        .optional()
-        .describe(
-          "Set to 'granted' only after the user has confirmed a write.",
-        ),
-      change_summary: z
-        .string()
-        .optional()
-        .describe("What will change. Required for writes."),
+      ...(readOnly
+        ? {}
+        : {
+            user_permission: z
+              .enum(PERMISSION_VALUES)
+              .optional()
+              .describe(
+                "Set to 'granted' only after the user has confirmed a write.",
+              ),
+            change_summary: z
+              .string()
+              .optional()
+              .describe("What will change. Required for writes."),
+          }),
       select: z
         .object({
           where: z
@@ -1221,9 +1230,10 @@ export function addCapabilityRegistryTools(
       // destructive endpoints are refused before binding — the refusal is enforced here,
       // not merely hinted at. Not idempotent: it creates, clones and starts runs. Closed
       // world: it reaches BrowserStack products the index describes, nothing else.
-      readOnlyHint: false,
+      // Under CAPABILITY_REGISTRY_READ_ONLY every write is withheld at load, so it reads only.
+      readOnlyHint: readOnly,
       destructiveHint: false,
-      idempotentHint: false,
+      idempotentHint: readOnly,
       openWorldHint: false,
     },
     async (input): Promise<CallToolResult> => {

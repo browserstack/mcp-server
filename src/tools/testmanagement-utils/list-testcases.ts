@@ -12,15 +12,15 @@ import { markCallerFault } from "../../lib/upstream-status.js";
  * Schema for listing test cases with optional filters.
  */
 export const ListTestCasesSchema = z.object({
-  project_identifier: z
-    .string()
-    .describe(
-      "Identifier of the project to fetch test cases from. This id starts with a PR- and is followed by a number.",
-    ),
+  project_identifier: z.string().describe("Project identifier (PR-<number>)."),
   folder_id: z
     .string()
     .optional()
     .describe("Only this folder's cases (ids from listFolders). Omit for all."),
+  id: z
+    .string()
+    .optional()
+    .describe("Comma-separated test case ids, e.g. TC-12,TC-34."),
   case_type: z
     .string()
     .optional()
@@ -48,6 +48,7 @@ export async function listTestCases(
     // Build query string
     const params = new URLSearchParams();
     if (args.folder_id) params.append("folder_id", args.folder_id);
+    if (args.id) params.append("id", args.id);
     if (args.case_type) params.append("case_type", args.case_type);
     if (args.priority) params.append("priority", args.priority);
     if (args.p !== undefined) params.append("p", args.p.toString());

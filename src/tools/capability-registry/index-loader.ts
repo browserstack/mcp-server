@@ -85,7 +85,19 @@ export function endpointKey(method: string, path: string): string {
  */
 export function isDisabled(capability: Capability): boolean {
   if (capability.disabled) return true;
+  if (isWriteWithheld(capability)) return true;
   return Boolean(capability.local_only) && Boolean(appConfig.REMOTE_MCP);
+}
+
+/** CAPABILITY_REGISTRY_READ_ONLY=true withholds every capability that is not a read. */
+export function isReadOnly(): boolean {
+  return (
+    (process.env.CAPABILITY_REGISTRY_READ_ONLY || "").toLowerCase() === "true"
+  );
+}
+
+function isWriteWithheld(capability: Capability): boolean {
+  return isReadOnly() && capability.mode !== "read";
 }
 
 /**
@@ -97,7 +109,7 @@ export function isDisabled(capability: Capability): boolean {
  * question it was asked.
  */
 export function isReferenceOnly(capability: Capability): boolean {
-  if (capability.disabled) return false;
+  if (capability.disabled || isWriteWithheld(capability)) return false;
   return Boolean(capability.local_only) && Boolean(appConfig.REMOTE_MCP);
 }
 

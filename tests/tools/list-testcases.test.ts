@@ -182,3 +182,30 @@ describe("listTestCases — linked issues in summary", () => {
     expect(inside(json, note)).toBe(true);
   });
 });
+
+describe("listTestCases — id filter", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    (apiClient.get as any).mockResolvedValue({
+      data: { success: true, info: { count: 0 }, test_cases: [] },
+    });
+  });
+
+  const requestedUrl = () =>
+    new URL((apiClient.get as any).mock.calls[0][0].url);
+
+  it("sends the id filter to the API", async () => {
+    await listTestCases(
+      { project_identifier: "PR-1", id: "TC-61870435,TC-2" },
+      mockConfig,
+    );
+
+    expect(requestedUrl().searchParams.get("id")).toBe("TC-61870435,TC-2");
+  });
+
+  it("omits the id filter when not given", async () => {
+    await listTestCases({ project_identifier: "PR-1" }, mockConfig);
+
+    expect(requestedUrl().searchParams.has("id")).toBe(false);
+  });
+});

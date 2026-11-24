@@ -27,7 +27,7 @@ const CREATE_FOLDER: Capability = {
   method: "POST", path: "/api/v1/projects/{project_id}/folders",
   mode: "write", entity: "folder",
   path_params: [{ name: "project_id", type: "integer", required: true }],
-  // the nesting the product really wants, which a reader of the flat spec would miss
+  // the body nests its fields inside `folder`
   body: [
     { name: "name", type: "string", required: true, json_path: "/folder/name" },
     { name: "notes", type: "string", json_path: "/folder/notes" },
@@ -48,7 +48,7 @@ const BULK_MOVE: Capability = {
   method: "POST", path: "/api/v1/projects/{project_id}/test-cases/bulk-move",
   mode: "write", entity: "test_case",
   path_params: [{ name: "project_id", type: "integer", required: true }],
-  // the collision that makes a flat argument map ambiguous
+  // a name that is also a path parameter elsewhere
   body: [{ name: "folder_id", type: "integer" }],
 };
 

@@ -10,7 +10,7 @@ import { Capability, WireParam } from "../../src/tools/capability-registry/types
 
 /**
  * The body is the JSON the API takes, and each value is matched to the field declared at
- * its position. One name declared at two depths is two fields.
+ * its position.
  */
 
 const MOVE: Capability = {

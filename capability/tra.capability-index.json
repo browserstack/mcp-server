@@ -12815,7 +12815,8 @@
           "Needs the caller's own BrowserStack username + Selenium access key, resolved server-side from the caller's user record; a caller whose record lacks them gets 400 'User details are not available'.",
           "Disabled entirely in the demo-sandbox environment.",
           "The body is optional \u2014 POST with no body queues the build's failures with no extra filtering."
-        ]
+        ],
+        "disabled": true
       },
       {
         "name": "get_test_rca_data",
@@ -15705,7 +15706,8 @@
           "500": {
             "$response": "InternalServerError"
           }
-        }
+        },
+        "disabled": true
       },
       {
         "name": "list_projects_for_sidebar",
@@ -18062,7 +18064,8 @@
           "500": {
             "$response": "InternalServerError"
           }
-        }
+        },
+        "disabled": true
       },
       {
         "name": "list_build_bstack_error_sessions",

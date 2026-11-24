@@ -221,7 +221,8 @@
           "report_id is a UUID: the accessibility issue tools read a manual report by it, or by its dashboard link.",
           "issues.total is the dashboard's count, duplicates left out; issues.duplicate_issues counts the repeats.",
           "info.next is the following page, null on the last.",
-          "There is no status filter: status is in_progress while the App Live session is still recording."
+          "There is no status filter: status is in_progress while the App Live session is still recording.",
+          "Each row also carries the report's whole test configuration: pass select.fields to keep only what is needed."
         ],
         "returns": [
           "data.report_id",
@@ -235,6 +236,24 @@
         ],
         "paginated": true,
         "max_page_size": 100,
+        "narrowable": {
+          "path": "data",
+          "fields": [
+            "report_id",
+            "report_name",
+            "created_at",
+            "end_time",
+            "status",
+            "report_type",
+            "app_details",
+            "device",
+            "user",
+            "issues",
+            "snapshots",
+            "a11y_score"
+          ],
+          "note": "Applied after the call, to the page that came back; info.next still pages through the list."
+        },
         "responses": {
           "200": { "$response": "ListManualAppAccessibilityReports" },
           "401": { "$response": "DashboardUnauthorized" },
@@ -3393,7 +3412,8 @@
           },
           "device": { "type": "object", "description": "The device the session ran on." },
           "user": { "type": "object", "description": "The report's owner." },
-          "issues": { "type": "object", "description": "The dashboard's counts: total (duplicates left out), per severity, needs_review, hidden_issues and duplicate_issues." }
+          "issues": { "type": "object", "description": "The dashboard's counts: total (duplicates left out), per severity, needs_review, hidden_issues and duplicate_issues." },
+          "snapshots": { "type": "object", "description": "scan_count: how many screens were scanned." }
         }
       },
       "Failure": {

@@ -1,4 +1,15 @@
 import { apiClient } from "../../lib/apiClient.js";
+import {
+  fetchTokenTransport,
+  invalidateToken,
+  type TokenTransport,
+} from "../../lib/central-oauth.js";
+import { namedHostUrl } from "../capability-registry/config.js";
+import {
+  authHeaders,
+  type Credentials,
+} from "../capability-registry/egress.js";
+import { resolveScope, resolveTokenUrl } from "../capability-registry/oauth.js";
 import { SessionType } from "../../lib/constants.js";
 import { sessionsListUrl } from "../automate-utils/list-session-ids.js";
 import { getAutomationBaseUrl } from "../rca-agent-utils/constants.js";
@@ -14,12 +25,22 @@ import { CallerError } from "../../lib/error.js";
  * accessibility on. Unlike the web products there is no CSV export behind an access key,
  * so the issues come inline, one API page per batch of scanned screens.
  */
-export const appApiBase = () =>
-  `${getRegionalHost("appAccessibilityApi")}/automate/api/v1`;
-export const appDashboard = () => getRegionalHost("appAccessibilityDashboard");
-/** Manual (Workflow Analyzer) reports recorded on the dashboard: a separate, older route. */
-export const manualApiBase = () =>
-  `${getRegionalHost("appAccessibilityApi")}/api/v1`;
+const APP_ACCESSIBILITY = "app_accessibility";
+/** The dashboard's routes take a central-auth token minted with the ai_agent scope. */
+const AGENT_AUTH = { type: "oauth2" } as const;
+/**
+ * The App Accessibility dashboard, the host its registry capabilities call: their host
+ * override and regional rules apply here too.
+ */
+export const appDashboard = () =>
+  namedHostUrl(
+    APP_ACCESSIBILITY,
+    "dashboard",
+    getRegionalHost("appAccessibilityDashboard"),
+  );
+export const appApiBase = () => `${appDashboard()}/automate/api/v1`;
+/** Manual (Workflow Analyzer) reports, on the dashboard's own routes. */
+export const manualApiBase = () => `${appDashboard()}/api/v1`;
 
 /** Screens per API page, and how many pages a build or report is read across (1,000 screens). */
 const SNAPSHOT_PAGE_SIZE = 50;
@@ -34,11 +55,20 @@ const MANUAL_REPORT_PAGE_SIZE = 100;
 
 /** A manual report as the report list gives it. */
 interface ManualReportRow {
-  id: string;
+  report_id: string;
   created_at?: string;
-  /** complete | in_progress */
-  status?: string;
+  /** Unset while the session is still recording. */
+  end_time?: string | null;
   app_details?: { name?: string; package_name?: string };
+}
+
+/** A manual report's details, as the dashboard's report page reads them. */
+export interface ManualReportDetail extends ManualReportRow {
+  /** The session is still recording: the route answers with its raw session row. */
+  recording?: boolean;
+  report_name?: string;
+  scan_count?: number;
+  device?: { model?: string; os?: string; os_version?: string };
 }
 
 /** An earlier manual report of the same app. */
@@ -200,18 +230,12 @@ export interface AppBuildReport extends AppIssuePageContext {
 export interface AppManualReport extends AppIssuePageContext {
   records: AppIssueRow[];
   page_length: number;
-  /**
-   * The issues, duplicates left out as the dashboard leaves them out when `deduplicated`;
-   * else every occurrence the Manual Reports API lists, which does not mark duplicates.
-   */
+  /** The issues, duplicates left out as the dashboard leaves them out. */
   total_issues: number;
-  /** Read from the dashboard's own screens: duplicates left out, issues with their element. */
-  deduplicated: boolean;
   next_page: number | null;
   /** How many issues the pages after this one hold. */
   remaining: number;
   summary: AppIssueSummary;
-  dashboard_count: number;
   duplicate_occurrences: number;
   hidden_issues: number;
   scan_count: number;
@@ -740,10 +764,8 @@ export function manualReportIdFromDashboardLink(url: URL): string | undefined {
 }
 
 /** A manual report has no status of its own; it is complete once it has ended. */
-export function manualReportStatus(detail: {
-  meta_data?: { ended_at?: string | null };
-}): string {
-  return detail.meta_data?.ended_at ? "complete" : "in_progress";
+export function manualReportStatus(detail: ManualReportDetail): string {
+  return !detail.recording && detail.end_time ? "complete" : "in_progress";
 }
 
 /** A link's CGI-escaped name ("+" for a space), read the same however it was escaped. */
@@ -786,19 +808,52 @@ export class BuildLookupError extends Error {
 
 export class AppAccessibilityApi {
   constructor(
+    /** Basic access-key headers, for App Automate's own API. */
     private readonly headers: () => Record<string, string> | undefined,
+    /** The caller's username and access key, from which the dashboard token is minted. */
+    private readonly credentials: () => Credentials | undefined = () =>
+      undefined,
+    private readonly tokenTransport: TokenTransport = fetchTokenTransport(),
   ) {}
+
+  /**
+   * A GET on the App Accessibility dashboard with a minted ai_agent token, minted again
+   * once when the dashboard refuses it (401), as the capability registry does.
+   */
+  private async dashboardGet(url: string) {
+    const credentials = this.credentials();
+    const send = async () =>
+      apiClient.get({
+        url,
+        // Without credentials this throws "not authenticated" before anything is sent.
+        headers: await authHeaders(
+          credentials as Credentials,
+          AGENT_AUTH,
+          APP_ACCESSIBILITY,
+          this.tokenTransport,
+        ),
+        raise_error: false,
+      });
+    let resp = await send();
+    if (resp.status === 401 && credentials) {
+      invalidateToken(
+        resolveTokenUrl(APP_ACCESSIBILITY, AGENT_AUTH),
+        resolveScope(AGENT_AUTH),
+        credentials,
+      );
+      resp = await send();
+    }
+    return resp;
+  }
 
   /**
    * The build's details, or undefined when the API does not know the id (its 404, which
    * it also gives a malformed id). Any other failure is thrown with its status.
    */
   async buildMeta(buildId: string): Promise<AppBuildMeta | undefined> {
-    const resp = await apiClient.get({
-      url: `${appApiBase()}/build/${encodeURIComponent(buildId)}`,
-      headers: this.headers(),
-      raise_error: false,
-    });
+    const resp = await this.dashboardGet(
+      `${appApiBase()}/build/${encodeURIComponent(buildId)}`,
+    );
     if (resp.status === 404) return undefined;
     if (!resp.ok) {
       throw new Error(
@@ -1045,16 +1100,12 @@ export class AppAccessibilityApi {
   }
 
   /**
-   * A listing's page. The API answers an empty list with 404 ("No builds found") for
-   * access-key callers, which is not an error here; any other failure is, a 404 from a
-   * wrong route or a missing permission included.
+   * A listing's page. The dashboard answers an empty build list with 404 ("No builds
+   * found"), which is not an error here; any other failure is, a 404 from a wrong route or
+   * a missing permission included.
    */
   private async listing(url: string, what: string): Promise<any> {
-    const resp = await apiClient.get({
-      url,
-      headers: this.headers(),
-      raise_error: false,
-    });
+    const resp = await this.dashboardGet(url);
     if (resp.ok) return resp.data ?? {};
     if (resp.status === 404 && /^No .+ found/i.test(resp.data?.message ?? "")) {
       return {};
@@ -1065,22 +1116,39 @@ export class AppAccessibilityApi {
   }
 
   /**
-   * A manual report's details, or undefined when the API does not know the id (its 404);
-   * any other failure is thrown with its status.
+   * A manual report's details (name, app, device, scan count, end time), or undefined when
+   * the id is not a report of the caller's group (its 404). Any other failure is thrown with
+   * its status.
    */
-  async manualReport(reportId: string): Promise<any | undefined> {
-    const resp = await apiClient.get({
-      url: `${manualApiBase()}/reports/${encodeURIComponent(reportId)}`,
-      headers: this.headers(),
-      raise_error: false,
-    });
+  async manualReport(
+    reportId: string,
+  ): Promise<ManualReportDetail | undefined> {
+    const resp = await this.dashboardGet(
+      `${manualApiBase()}/app_scanner/${encodeURIComponent(reportId)}/meta_data`,
+    );
     if (resp.status === 404) return undefined;
     if (!resp.ok) {
       throw new Error(
         `Could not read App Accessibility manual report ${reportId}: HTTP ${resp.status}`,
       );
     }
-    return resp.data;
+    // A session still recording answers success false, with its raw session row.
+    return {
+      ...(resp.data?.data ?? {}),
+      recording: resp.data?.success === false,
+    };
+  }
+
+  /** A manual report's issue counts as the dashboard shows them; none when unreadable. */
+  private async manualReportCounts(reportId: string): Promise<{
+    total?: number;
+    hidden_issues?: number;
+    duplicate_issues?: number;
+  }> {
+    const resp = await this.dashboardGet(
+      `${manualApiBase()}/app_scanner/${encodeURIComponent(reportId)}/overview`,
+    ).catch(() => undefined);
+    return (resp?.ok && resp.data?.data?.issues) || {};
   }
 
   /** The manual reports whose name, app or package contains `search`, newest first, a page at a time. */
@@ -1089,31 +1157,23 @@ export class AppAccessibilityApi {
   ): AsyncGenerator<ManualReportRow[]> {
     for (let page = 1; page <= MAX_MANUAL_REPORT_PAGES; page++) {
       const data = await this.listing(
-        `${manualApiBase()}/reports?report_name=${encodeURIComponent(search)}&page_size=${MANUAL_REPORT_PAGE_SIZE}&page=${page}`,
+        `${manualApiBase()}/app_scanner?report_name=${encodeURIComponent(search)}&page_size=${MANUAL_REPORT_PAGE_SIZE}&page=${page}`,
         `page ${page} of the manual App Accessibility reports`,
       );
-      yield data.reports ?? [];
+      yield data.data ?? [];
       if (!data.info?.next) return;
     }
   }
 
   /**
    * The newest finished manual report of the same app recorded before this one, or
-   * undefined when none is among the newest. The report's details do not name its app: the
-   * report list does, where the report is found by its name; the app's reports are then
-   * listed by its package (or, without one, its name).
+   * undefined when none is among the newest. The app's reports are listed by its package
+   * (or, without one, its name), which the list's search matches.
    */
   async previousManualReport(
     reportId: string,
   ): Promise<EarlierManualReport | undefined> {
-    const name: string | undefined = (await this.manualReport(reportId))
-      ?.meta_data?.name;
-    if (!name) return undefined;
-    let own: ManualReportRow | undefined;
-    for await (const rows of this.manualReports(name)) {
-      own = rows.find((row) => row.id === reportId);
-      if (own) break;
-    }
+    const own = await this.manualReport(reportId);
     const pkg = own?.app_details?.package_name;
     const app = pkg ?? own?.app_details?.name;
     if (!own || !app) return undefined;
@@ -1125,16 +1185,16 @@ export class AppAccessibilityApi {
     for await (const rows of this.manualReports(app)) {
       const earlier = rows.find(
         (row) =>
-          row.id !== reportId &&
+          row.report_id !== reportId &&
           sameApp(row) &&
-          row.status !== "in_progress" &&
+          Boolean(row.end_time) &&
           recorded(row) < recorded(own),
       );
       if (earlier) {
         return {
-          reportId: earlier.id,
+          reportId: earlier.report_id,
           time: earlier.created_at,
-          link: `${appDashboard()}/report/${earlier.id}`,
+          link: `${appDashboard()}/report/${earlier.report_id}`,
         };
       }
     }
@@ -1143,26 +1203,24 @@ export class AppAccessibilityApi {
 
   /**
    * A manual report's screens as the dashboard reads them, duplicates left out and each
-   * issue with its element, fix and measurements; undefined while that route answers an
-   * access key with a login redirect, as it does until it takes one (the redirect names
-   * no Location, so nothing follows it), and undefined too when a later page fails, so
-   * the Manual Reports API is read in full rather than part of this read as the whole.
+   * issue with its element, fix and measurements. A page that cannot be read fails the
+   * read: a count over some of the screens would read as the report's.
    */
-  private async dashboardScreens(
+  private async reportScreens(
     reportId: string,
-  ): Promise<{ details: AppSnapshot[]; more: boolean } | undefined> {
+  ): Promise<{ details: AppSnapshot[]; more: boolean }> {
     const details: AppSnapshot[] = [];
     let more = false;
     for (let page = 1; page <= MAX_SNAPSHOT_PAGES; page++) {
-      const resp = await apiClient
-        .get({
-          url: `${manualApiBase()}/app_scanner/${encodeURIComponent(reportId)}/snapshot?hide_duplicate_issues=true&page_size=${SNAPSHOT_PAGE_SIZE}&page=${page}`,
-          headers: this.headers(),
-          raise_error: false,
-        })
-        .catch(() => undefined);
-      const data = resp?.ok && resp.data?.success ? resp.data.data : undefined;
-      if (!Array.isArray(data?.details)) return undefined;
+      const resp = await this.dashboardGet(
+        `${manualApiBase()}/app_scanner/${encodeURIComponent(reportId)}/snapshot?hide_duplicate_issues=true&page_size=${SNAPSHOT_PAGE_SIZE}&page=${page}`,
+      );
+      const data = resp.ok && resp.data?.success ? resp.data.data : undefined;
+      if (!Array.isArray(data?.details)) {
+        throw new Error(
+          `Could not read page ${page} of manual report ${reportId}'s scanned screens from the App Accessibility dashboard: HTTP ${resp.status}`,
+        );
+      }
       details.push(...data.details);
       more = Boolean(data.info?.next);
       if (!more) break;
@@ -1170,43 +1228,7 @@ export class AppAccessibilityApi {
     return { details, more };
   }
 
-  /** Every occurrence the Manual Reports API lists, and the device the report ran on. */
-  private async manualApiScreens(reportId: string): Promise<{
-    details: AppSnapshot[];
-    more: boolean;
-    device?: { model?: string; os?: string; os_version?: string };
-  }> {
-    const details: AppSnapshot[] = [];
-    let more = false;
-    let device:
-      | { model?: string; os?: string; os_version?: string }
-      | undefined;
-    for (let page = 1; page <= MAX_SNAPSHOT_PAGES; page++) {
-      const resp = await apiClient.get({
-        url: `${manualApiBase()}/reports/${encodeURIComponent(reportId)}/issues?page_size=${SNAPSHOT_PAGE_SIZE}&page=${page}`,
-        headers: this.headers(),
-        raise_error: false,
-      });
-      // A count over some of the pages would read as the report's.
-      if (!resp.ok) {
-        throw new Error(
-          `Could not read page ${page} of manual report ${reportId}'s issues from the Manual Reports API: HTTP ${resp.status}`,
-        );
-      }
-      device ??= resp.data?.device;
-      details.push(...(resp.data?.data ?? []));
-      more = Boolean(resp.data?.pagination?.next);
-      if (!more) break;
-    }
-    return { details, more, device };
-  }
-
-  /**
-   * A manual report's issues, most severe first: from the dashboard's own screens when the
-   * route takes the access key, so the count is the dashboard's and each issue names its
-   * element; else every occurrence the Manual Reports API lists, which marks neither
-   * duplicates nor elements, with the dashboard's count stated next to it.
-   */
+  /** A manual report's issues, most severe first, as the dashboard counts them. */
   async appReportIssues(
     reportId: string,
     cursor = 0,
@@ -1218,26 +1240,22 @@ export class AppAccessibilityApi {
         `No App Accessibility manual report with id "${reportId}". Pass the report's dashboard link (app-accessibility.browserstack.com/report/…) as reportUrl, or an id from the capability functions' list of manual App Accessibility reports`,
       );
     }
-    const dashboard = await this.dashboardScreens(reportId);
-    const { details, more, device } = dashboard
-      ? { ...dashboard, device: undefined }
-      : await this.manualApiScreens(reportId);
-    const summary = detail.data?.issue_summary ?? {};
+    const counts = await this.manualReportCounts(reportId);
+    const { details, more } = await this.reportScreens(reportId);
     const all = flattenAppSnapshots(details);
     const { rows, context } = compactAppIssues(all);
     const page = appIssuePage(rows, context, cursor, maxCharacterLength);
+    const device = detail.device;
     return {
       ...page,
       ...contextOf(page.records, context),
       total_issues: all.length,
       summary: summarizeAppIssues(all),
-      deduplicated: dashboard !== undefined,
-      dashboard_count: summary.total ?? all.length,
-      duplicate_occurrences: summary.severity_count?.duplicate_issues ?? 0,
-      hidden_issues: summary.severity_count?.hidden_issues ?? 0,
-      scan_count: summary.scan_count ?? details.length,
+      duplicate_occurrences: counts.duplicate_issues ?? 0,
+      hidden_issues: counts.hidden_issues ?? 0,
+      scan_count: detail.scan_count ?? details.length,
       status: manualReportStatus(detail),
-      report_name: detail.meta_data?.name ?? reportId,
+      report_name: detail.report_name ?? reportId,
       ...(device?.model
         ? { device: `${device.model}, ${device.os} ${device.os_version}` }
         : {}),
@@ -1367,16 +1385,14 @@ export class AppAccessibilityApi {
     let hidden = 0;
     let more = false;
     for (let page = 1; page <= MAX_SNAPSHOT_PAGES; page++) {
-      const resp = await apiClient.get({
-        url: `${appApiBase()}/build/${encodeURIComponent(buildId)}/snapshot?hide_duplicate_issues=true&page_size=${SNAPSHOT_PAGE_SIZE}&page=${page}`,
-        headers: this.headers(),
-        raise_error: false,
-      });
+      const resp = await this.dashboardGet(
+        `${appApiBase()}/build/${encodeURIComponent(buildId)}/snapshot?hide_duplicate_issues=true&page_size=${SNAPSHOT_PAGE_SIZE}&page=${page}`,
+      );
       // A count over some of the screens would read as the build's, so a page that
       // cannot be read fails the read.
       if (!resp.ok) {
         throw new Error(
-          `Could not read page ${page} of build ${buildId}'s scanned screens from the App Accessibility API: HTTP ${resp.status}`,
+          `Could not read page ${page} of build ${buildId}'s scanned screens from the App Accessibility dashboard: HTTP ${resp.status}`,
         );
       }
       const data = resp.data?.data;

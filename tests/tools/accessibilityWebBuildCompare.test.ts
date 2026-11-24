@@ -7,7 +7,14 @@ import { beforeEach, describe, expect, it, Mock, vi } from "vitest";
 // The HTTP layer is mocked; the report fetcher and the CSV parser run as they do live.
 
 vi.mock("../../src/lib/apiClient.js", () => ({
-  apiClient: { get: vi.fn() },
+  apiClient: {
+    get: vi.fn(),
+    // The App Accessibility dashboard's token.
+    post: vi.fn(async () => ({
+      status: 200,
+      data: { access_token: "agent-token", expires_in: 3600 },
+    })),
+  },
 }));
 vi.mock("../../src/lib/get-auth.js", () => ({
   getBrowserStackAuth: vi.fn().mockReturnValue("fake-user:fake-key"),
@@ -36,7 +43,7 @@ const LATEST: Build = { id: "c4latestbuildeeeeeeeeeeeeeeeeeeeeeeeeeee", name: "c
 const BUILDS = [LATEST, EMPTY, OTHER, NEW, OLD]; // the project's build list: newest first
 const PROJECT = "Shop";
 const APP_BUILD = "a9appbuildgggggggggggggggggggggggggggggg";
-const APP_API = "https://api-app-accessibility.browserstack.com/automate/api/v1";
+const APP_API = "https://app-accessibility.browserstack.com/automate/api/v1";
 
 const PAGE_A = "http://localhost:8765/home.html";
 const PAGE_B = "http://localhost:8765/usage.html";

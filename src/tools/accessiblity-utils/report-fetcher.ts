@@ -441,7 +441,13 @@ function automateIds(
 
 export class AccessibilityReportFetcher {
   private auth: { username: string; password: string } | undefined;
-  private readonly app = new AppAccessibilityApi(() => this.authHeaders());
+  private readonly app = new AppAccessibilityApi(
+    () => this.authHeaders(),
+    () =>
+      this.auth
+        ? { username: this.auth.username, accessKey: this.auth.password }
+        : undefined,
+  );
   /** Web builds whose overview was read, by id, so a status check need not read it again. */
   private readonly webBuilds = new Map<string, WebBuild>();
 

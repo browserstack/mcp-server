@@ -4,10 +4,18 @@ import { afterEach, beforeEach, describe, expect, it, Mock, vi } from "vitest";
 // Accessibility API's per-screen snapshots, not from a CSV export.
 
 vi.mock("../../src/lib/apiClient.js", () => ({
-  apiClient: { get: vi.fn() },
+  apiClient: {
+    get: vi.fn(),
+    // The App Accessibility dashboard's token.
+    post: vi.fn(async () => ({
+      status: 200,
+      data: { access_token: "agent-token", expires_in: 3600 },
+    })),
+  },
 }));
 
 import { apiClient } from "../../src/lib/apiClient.js";
+import { resetTokenCache } from "../../src/lib/central-oauth.js";
 import {
   AccessibilityReportFetcher,
   MAX_APP_BUILD_LIST_PAGES,
@@ -21,7 +29,7 @@ import {
 const get = apiClient.get as Mock;
 const API = "https://api-accessibility.browserstack.com/api";
 const APP_API =
-  "https://api-app-accessibility.browserstack.com/automate/api/v1";
+  "https://app-accessibility.browserstack.com/automate/api/v1";
 const DASHBOARD = "https://app-accessibility.browserstack.com";
 const BUILD_ID = "m3k8p2q7w1x5c9v4b6n0z2r8t3y7u1i5o9a4s2df";
 
@@ -30,12 +38,6 @@ const ok = (body: Record<string, unknown>) => ({
   status: 200,
   data: { success: true, ...body },
 });
-/** What the dashboard's routes answer an access key with until they take one. */
-const REDIRECT_TO_LOGIN = {
-  ok: false,
-  status: 302,
-  data: { success: false, message: "redirect_to_login" },
-};
 const missing = () => ({
   ok: false,
   status: 404,
@@ -813,31 +815,37 @@ describe("AccessibilityReportFetcher and App Automate links", () => {
 
 describe("AccessibilityReportFetcher and App Accessibility manual reports", () => {
   const REPORT_ID = "6d1f0a2b-3c4d-4e5f-8a9b-0c1d2e3f4a5b";
+  const MANUAL_API = `${DASHBOARD}/api/v1`;
+  const META_URL = `${MANUAL_API}/app_scanner/${REPORT_ID}/meta_data`;
+  const OVERVIEW_URL = `${MANUAL_API}/app_scanner/${REPORT_ID}/overview`;
+  const screensUrl = (page: number) =>
+    `${MANUAL_API}/app_scanner/${REPORT_ID}/snapshot?hide_duplicate_issues=true&page_size=50&page=${page}`;
+  /** The report page's details (meta_data). */
   const DETAIL = {
-    meta_data: {
-      name: "Checkout walkthrough",
-      created_at: "2026-10-21T18:54:05.374Z",
-      ended_at: "2026-10-21T18:57:22.487Z",
-    },
-    wcag_version: "WCAG 2.2 AA",
-    data: {
-      issue_summary: {
-        total: 2,
-        severity_count: { critical: 1, serious: 1, hidden_issues: 1, duplicate_issues: 1 },
-        scan_count: 2,
-      },
-    },
+    report_id: REPORT_ID,
+    report_name: "Checkout walkthrough",
+    created_at: "2026-10-21T18:54:05.374Z",
+    end_time: "2026-10-21T18:57:22.487Z",
+    status: "complete",
+    scan_count: 2,
+    app_details: { name: "Checkout", package_name: "com.example.checkout" },
+    device: { model: "iPhone 15 Pro", os: "ios", os_version: "17.0" },
   };
-  /** A manual snapshot keeps its rules under meta, belongs to no test, and its issues carry no status. */
-  const manualSnapshot = (snapshot: (typeof SNAPSHOTS)[number]) => ({
-    meta: {
-      snapshot_id: snapshot.meta.snapshot_id,
-      screenshot_url: snapshot.meta.screenshot_url,
-      aggregated_results: snapshot.aggregated_results,
-    },
-  });
+  /** The report's overview: the dashboard's counts. */
+  const OVERVIEW = {
+    report_id: REPORT_ID,
+    status: "complete",
+    issues: { total: 2, critical: 1, serious: 1, hidden_issues: 1, duplicate_issues: 1 },
+  };
+  const screens = (snapshot: (typeof SNAPSHOTS)[number], next: number | null) =>
+    ok({ data: { details: [snapshot], info: { next } } });
+  const failed = (status: number) => ({ ok: false, status, data: {} });
+  const post = apiClient.post as Mock;
 
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    resetTokenCache();
+  });
 
   it("resolves a manual report's dashboard link to the report", async () => {
     await expect(
@@ -846,92 +854,66 @@ describe("AccessibilityReportFetcher and App Accessibility manual reports", () =
     expect(get).not.toHaveBeenCalled();
   });
 
-  it("reads a manual report's status from whether it has ended", async () => {
-    get.mockResolvedValueOnce(ok({ ...DETAIL, meta_data: { ...DETAIL.meta_data, ended_at: null } }));
+  it("reads a manual report's status from whether its session has ended", async () => {
+    // A session still recording answers with its raw session row.
+    get.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      data: { success: false, data: { session_id: "s1", status: "running" } },
+    });
     await expect(
       fetcher().reportStatus({ kind: "appReport", reportId: REPORT_ID }),
     ).resolves.toBe("in_progress");
 
-    get.mockResolvedValueOnce(ok(DETAIL));
+    get.mockResolvedValueOnce(ok({ data: { ...DETAIL, end_time: null } }));
+    await expect(
+      fetcher().reportStatus({ kind: "appReport", reportId: REPORT_ID }),
+    ).resolves.toBe("in_progress");
+
+    get.mockResolvedValueOnce(ok({ data: DETAIL }));
     await expect(
       fetcher().reportStatus({ kind: "appReport", reportId: REPORT_ID }),
     ).resolves.toBe("complete");
-    expect(urls()).toEqual([
-      `${APP_API.replace("/automate/api/v1", "")}/api/v1/reports/${REPORT_ID}`,
-      `${APP_API.replace("/automate/api/v1", "")}/api/v1/reports/${REPORT_ID}`,
-    ]);
+    expect(urls()).toEqual([META_URL, META_URL, META_URL]);
   });
 
-  it("falls back to the Manual Reports API's occurrences, with the dashboard's own count, while the dashboard's screens refuse the key", async () => {
-    const MANUAL_API = `${APP_API.replace("/automate/api/v1", "")}/api/v1`;
+  it("reads a manual report from the dashboard with a minted ai_agent token, never the access key", async () => {
     get
-      .mockResolvedValueOnce(ok(DETAIL))
-      .mockResolvedValueOnce(REDIRECT_TO_LOGIN)
-      .mockResolvedValueOnce(
-        ok({
-          device: { model: "iPhone 15 Pro", os: "ios", os_version: "17.0" },
-          data: [manualSnapshot(SNAPSHOTS[0])],
-          pagination: { page: 1, next: 2 },
-        }),
-      )
-      .mockResolvedValueOnce(
-        ok({
-          device: { model: "iPhone 15 Pro", os: "ios", os_version: "17.0" },
-          data: [manualSnapshot(SNAPSHOTS[1])],
-          pagination: { page: 2, next: null },
-        }),
-      );
+      .mockResolvedValueOnce(ok({ data: DETAIL }))
+      .mockResolvedValueOnce(ok({ data: OVERVIEW }))
+      .mockResolvedValueOnce(screens(SNAPSHOTS[0], 2))
+      .mockResolvedValueOnce(screens(SNAPSHOTS[1], null));
 
     const report = await fetcher().appReportIssues(REPORT_ID);
 
-    expect(urls()).toEqual([
-      `${MANUAL_API}/reports/${REPORT_ID}`,
-      `${MANUAL_API}/app_scanner/${REPORT_ID}/snapshot?hide_duplicate_issues=true&page_size=50&page=1`,
-      `${MANUAL_API}/reports/${REPORT_ID}/issues?page_size=50&page=1`,
-      `${MANUAL_API}/reports/${REPORT_ID}/issues?page_size=50&page=2`,
-    ]);
+    expect(urls()).toEqual([META_URL, OVERVIEW_URL, screensUrl(1), screensUrl(2)]);
+    for (const [options] of get.mock.calls) {
+      expect(options.headers.Authorization).toBe("Bearer agent-token");
+    }
+    expect(post).toHaveBeenCalledTimes(1);
+    expect(post.mock.calls[0][0].body).toContain("scope=ai_agent+oauth_user_profile");
     expect(report).toMatchObject({
-      deduplicated: false,
       report_name: "Checkout walkthrough",
       status: "complete",
       scan_count: 2,
       device: "iPhone 15 Pro, ios 17.0",
-      // Every occurrence the API lists; the hidden one is left out as its status says.
       total_issues: 3,
-      page_length: 3,
       next_page: null,
-      dashboard_count: 2,
       duplicate_occurrences: 1,
       hidden_issues: 1,
       dashboard_link: `${DASHBOARD}/report/${REPORT_ID}`,
     });
-    expect(report.records[0].screen).toBe("Screen 1");
-    expect(report.records.map((r) => r.severity)).toEqual([
-      "critical",
-      "serious",
-      "moderate",
-    ]);
   });
 
   it("reads a manual report's screens as the dashboard does: duplicates left out, each issue with its element and fix", async () => {
-    const MANUAL_API = `${APP_API.replace("/automate/api/v1", "")}/api/v1`;
     get
-      .mockResolvedValueOnce(ok(DETAIL))
-      .mockResolvedValueOnce(
-        ok({ data: { details: [SNAPSHOTS[0]], info: { page: 1, next: 2 } } }),
-      )
-      .mockResolvedValueOnce(
-        ok({ data: { details: [SNAPSHOTS[1]], info: { page: 2, next: null } } }),
-      );
+      .mockResolvedValueOnce(ok({ data: DETAIL }))
+      .mockResolvedValueOnce(ok({ data: OVERVIEW }))
+      .mockResolvedValueOnce(screens(SNAPSHOTS[0], 2))
+      .mockResolvedValueOnce(screens(SNAPSHOTS[1], null));
 
     const report = await fetcher().appReportIssues(REPORT_ID);
 
-    expect(urls()).toEqual([
-      `${MANUAL_API}/reports/${REPORT_ID}`,
-      `${MANUAL_API}/app_scanner/${REPORT_ID}/snapshot?hide_duplicate_issues=true&page_size=50&page=1`,
-      `${MANUAL_API}/app_scanner/${REPORT_ID}/snapshot?hide_duplicate_issues=true&page_size=50&page=2`,
-    ]);
-    expect(report.deduplicated).toBe(true);
     expect(report.total_issues).toBe(3);
     const pay = report.records.find((r) => r.component === "com.example:id/btn_pay");
     expect(pay?.element).toMatchObject({ className: "android.widget.Button" });
@@ -948,46 +930,27 @@ describe("AccessibilityReportFetcher and App Accessibility manual reports", () =
     );
   });
 
-  // Checked live: an unknown report is a 404 on its details and its issues, a bad key 401.
-  const failed = (status: number) => ({ ok: false, status, data: {} });
-  const MANUAL = `${APP_API.replace("/automate/api/v1", "")}/api/v1`;
-
   it("reports a failed report lookup as the failure, not as an unknown report", async () => {
-    get.mockResolvedValueOnce(failed(401));
+    get.mockResolvedValueOnce(failed(500));
 
     const failure = fetcher().appReportIssues(REPORT_ID);
-    await expect(failure).rejects.toThrow(/HTTP 401/);
+    await expect(failure).rejects.toThrow(/HTTP 500/);
     await expect(failure).rejects.not.toThrow(/No App Accessibility manual report/);
   });
 
-  it("reads the whole report from the Manual Reports API when a later dashboard page fails, rather than a part as the whole", async () => {
-    get
-      .mockResolvedValueOnce(ok(DETAIL))
-      .mockResolvedValueOnce(
-        ok({ data: { details: [SNAPSHOTS[0]], info: { page: 1, next: 2 } } }),
-      )
-      .mockResolvedValueOnce(failed(500))
-      .mockResolvedValueOnce(
-        ok({
-          data: [manualSnapshot(SNAPSHOTS[0]), manualSnapshot(SNAPSHOTS[1])],
-          pagination: { page: 1, next: null },
-        }),
-      );
+  it("mints again once when the dashboard refuses the token, and reports a second refusal", async () => {
+    get.mockResolvedValueOnce(failed(401)).mockResolvedValueOnce(failed(401));
 
-    const report = await fetcher().appReportIssues(REPORT_ID);
-
-    expect(urls()[3]).toBe(`${MANUAL}/reports/${REPORT_ID}/issues?page_size=50&page=1`);
-    expect(report.deduplicated).toBe(false);
-    expect(report.total_issues).toBe(3);
+    await expect(fetcher().appReportIssues(REPORT_ID)).rejects.toThrow(/HTTP 401/);
+    expect(urls()).toEqual([META_URL, META_URL]);
+    expect(post).toHaveBeenCalledTimes(2);
   });
 
-  it("fails with the page and status when an issues page cannot be read, rather than counting fewer issues", async () => {
+  it("fails with the page and status when a screens page cannot be read, rather than counting fewer issues", async () => {
     get
-      .mockResolvedValueOnce(ok(DETAIL))
-      .mockResolvedValueOnce(REDIRECT_TO_LOGIN)
-      .mockResolvedValueOnce(
-        ok({ data: [manualSnapshot(SNAPSHOTS[0])], pagination: { page: 1, next: 2 } }),
-      )
+      .mockResolvedValueOnce(ok({ data: DETAIL }))
+      .mockResolvedValueOnce(ok({ data: OVERVIEW }))
+      .mockResolvedValueOnce(screens(SNAPSHOTS[0], 2))
       .mockResolvedValueOnce(failed(502));
 
     await expect(fetcher().appReportIssues(REPORT_ID)).rejects.toThrow(
@@ -997,12 +960,47 @@ describe("AccessibilityReportFetcher and App Accessibility manual reports", () =
 
   it("says how many screens it read when the report has more than the page limit", async () => {
     get.mockImplementation(async ({ url }: { url: string }) => {
-      if (url.endsWith(REPORT_ID)) return ok(DETAIL);
-      return ok({ data: { details: [SNAPSHOTS[0]], info: { next: 2 } } });
+      if (url === META_URL) return ok({ data: DETAIL });
+      if (url === OVERVIEW_URL) return ok({ data: OVERVIEW });
+      return screens(SNAPSHOTS[0], 2);
     });
 
     const report = await fetcher().appReportIssues(REPORT_ID);
 
     expect(report.screens_read).toBe(MAX_SNAPSHOT_PAGES);
   });
+
+  it("finds the earlier finished report of the same app through the dashboard's report list", async () => {
+    const row = (id: string, extra: Record<string, unknown>) => ({
+      report_id: id,
+      created_at: "2026-10-20T10:00:00Z",
+      end_time: "2026-10-20T10:05:00Z",
+      app_details: { name: "Checkout", package_name: "com.example.checkout" },
+      ...extra,
+    });
+    get
+      .mockResolvedValueOnce(ok({ data: DETAIL }))
+      .mockResolvedValueOnce(
+        ok({
+          data: [
+            row(REPORT_ID, { created_at: DETAIL.created_at }),
+            row("recording", { end_time: null }),
+            row("other-app", { app_details: { package_name: "com.example.other" } }),
+            row("earlier", {}),
+          ],
+          info: { next: null },
+        }),
+      );
+
+    await expect(fetcher().previousManualReport(REPORT_ID)).resolves.toEqual({
+      reportId: "earlier",
+      time: "2026-10-20T10:00:00Z",
+      link: `${DASHBOARD}/report/earlier`,
+    });
+    expect(urls()).toEqual([
+      META_URL,
+      `${MANUAL_API}/app_scanner?report_name=com.example.checkout&page_size=100&page=1`,
+    ]);
+  });
 });
+

@@ -872,10 +872,8 @@ async function appBuildMessages(
 }
 
 /**
- * A manual report's issues come inline from its scanned screens: the dashboard's own, with
- * its duplicates left out, when its route takes the access key; else every occurrence the
- * Manual Reports API lists, which does not mark duplicates, so the dashboard's count is
- * stated next to the total rather than reproduced.
+ * A manual report's issues come inline from the dashboard's scanned screens, with its
+ * duplicates left out as the dashboard leaves them out of its count.
  */
 async function appReportMessages(
   reportFetcher: AccessibilityReportFetcher,
@@ -913,18 +911,13 @@ async function appReportMessages(
   const dashboardNote =
     report.duplicate_occurrences === 0
       ? []
-      : report.deduplicated
-        ? [
-            `${report.duplicate_occurrences} duplicate occurrences are left out, as the dashboard leaves them out of its count.`,
-          ]
-        : [
-            `The dashboard counts ${report.dashboard_count} issues for this report: ${report.duplicate_occurrences} of the occurrences are duplicates it folds, which the API does not mark.`,
-          ];
-  const counted = report.deduplicated ? "issues" : "issue occurrences";
+      : [
+          `${report.duplicate_occurrences} duplicate occurrences are left out, as the dashboard leaves them out of its count.`,
+        ];
   return [
     ...preface,
     ...processingNote(processing),
-    `Retrieved ${page_length} accessibility ${counted} (Total: ${total_issues}) from the App Accessibility manual report below (${where})`,
+    `Retrieved ${page_length} accessibility issues (Total: ${total_issues}) from the App Accessibility manual report below (${where})`,
     details,
     ...(cursor === 0 ? summaryNote(report.summary, total_issues) : []),
     ...(report.screens_read !== undefined

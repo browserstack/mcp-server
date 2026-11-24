@@ -19,7 +19,7 @@
 import { statSync } from "node:fs";
 
 import appConfig from "../../config.js";
-import { CapabilityRegistry } from "./index-loader.js";
+import { CapabilityRegistry, isReadOnly } from "./index-loader.js";
 
 let shared: { key: string; registry: CapabilityRegistry } | undefined;
 
@@ -41,7 +41,11 @@ function cacheKey(files: string[]): string {
       return `${file}:unreadable:${Date.now()}`;
     }
   });
-  return [`remote=${Boolean(appConfig.REMOTE_MCP)}`, ...parts].join("\n");
+  return [
+    `remote=${Boolean(appConfig.REMOTE_MCP)}`,
+    `readonly=${isReadOnly()}`,
+    ...parts,
+  ].join("\n");
 }
 
 function deepFreeze(value: unknown): void {

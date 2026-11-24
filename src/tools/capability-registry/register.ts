@@ -105,6 +105,11 @@ function announceLoad(registry: CapabilityRegistry): void {
   // WITHHELD CAPABILITIES ARE LOGGED, because they are otherwise undetectable from
   // outside: the flag's whole job is to make them invisible, so the count at startup is
   // the only place an operator can see that the surface is smaller than the artifact.
+  if (isReadOnly()) {
+    logger.info(
+      "capability registry is read-only (CAPABILITY_REGISTRY_READ_ONLY): writes and deletes are withheld",
+    );
+  }
   const withheld = registry.disabledCounts();
   if (Object.keys(withheld).length) {
     logger.info(

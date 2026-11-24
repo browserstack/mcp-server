@@ -191,7 +191,7 @@
           }
         },
         "guidance": [
-          "Send `owner` flat. The `test_run` wrapper is added for you from the field's json_path, and sending your own `test_run` object is rejected before the call as an unknown body key.",
+          "The fields go inside a `test_run` object: send {\"test_run\": {…}}.",
           "The reply's `tags` can be [] even though the run's stored tags are untouched — the owner assign does not clear them. Re-read the run before reporting its tags."
         ]
       },
@@ -2585,7 +2585,7 @@
         "guidance": [
           "This is ASYNC. A 200 means the clone job was queued, not that the plan exists — the body is {success: true, unique_id} and carries no plan id, no identifier and no name. The source plan is untouched either way.",
           "unique_id is only a correlation id for logs; there is no job-status capability for it in this profile. To find the new plan, poll the project's plan listing for the name you sent.",
-          "Send the fields flat. The `test_plan` wrapper is added for you from each field's json_path, and sending your own `test_plan` object is rejected before the call as an unknown body key.",
+          "The fields go inside a `test_plan` object: send {\"test_plan\": {…}}.",
           "name is REQUIRED even though this is a clone. There is no automatic 'Copy of ...' name.",
           "Nothing except the runs/sub-plans is inherited: description, dates, tags, owner and custom fields all come from THIS request, so a clone sent with only a name produces an otherwise empty plan.",
           "Choose the run scope explicitly — copy_all_runs: true, or an explicit test_runs list. With neither, the job creates the plan with no runs at all and still returns success.",
@@ -4061,7 +4061,7 @@
           }
         },
         "guidance": [
-          "Send the fields flat. The `dataset` wrapper is added for you from each field's json_path, and sending your own `dataset` object is rejected before the call as an unknown body key.",
+          "The fields go inside a `dataset` object: send {\"dataset\": {…}}.",
           "Nothing outside the declared keys is allowed: the request schema sets additionalProperties:false at the top level, inside `dataset`, and inside each variable and row object. A misspelled or extra key fails the whole call with 400 {error:'Invalid JSON data', details:[...]} rather than being ignored.",
           "Send Content-Type: application/json. The schema check is skipped for any other content type, and the handler then crashes on a missing `variables` instead of returning a clean 400.",
           "What you get back is not what you sent: blank rows and all-blank columns are stripped, duplicate rows collapsed, cells trimmed, and row_number renumbered 1..N. Read `dataset.variables` and `dataset.rows` from the response rather than assuming your payload was stored verbatim.",
@@ -4286,7 +4286,7 @@
           }
         },
         "guidance": [
-          "Send the fields flat. The `exploratory_session` wrapper is added for you from each field's json_path, and sending your own is rejected before the call as an unknown body key. A 400 naming a missing `exploratory_session` means the body reached the server empty, not that you must nest it.",
+          "The fields go inside an `exploratory_session` object: send {\"exploratory_session\": {…}}. A 400 naming a missing `exploratory_session` means the body reached the server empty.",
           "`title` is the only field the store requires. Everything else is optional.",
           "Set the assignee with `owner` (a TCM user id) — NOT with `assignee`. On this create path only `owner` is translated to the upstream user id; `assignee` is forwarded raw and lands as a wrong or invalid user. On update both are translated, so the two endpoints disagree.",
           "An `owner` that resolves to no user in this group does not fail: the session is created 201 with no assignee at all. Re-read the session if the assignment matters.",
@@ -4424,7 +4424,7 @@
           }
         },
         "guidance": [
-          "Send the fields flat. The `session_log` wrapper is added for you from each field's json_path, and sending your own is rejected before the call as an unknown body key. A 400 saying 'session_log is required' means the body was empty, not that you must nest it.",
+          "The fields go inside a `session_log` object: send {\"session_log\": {…}}. A 400 saying 'session_log is required' means the body was empty.",
           "This is a child of a session: the session_id in the path is the parent, and the `id` you get back is the log_id you must carry — together with the same session_id — into the update and delete calls. A log id from one session is not addressable under another.",
           "`status` accepts pass, fail, bug, retest, block, note and skipped. `skipped` is real and is missing from older declarations of this field; anything outside the seven is rejected by the request schema with 400.",
           "Every field is optional — a log with no content, status or elapsed_time is created successfully. Nothing here rejects an empty observation.",
@@ -4627,7 +4627,7 @@
           }
         },
         "guidance": [
-          "Send the fields flat. The `project` wrapper is added for you from each field's json_path, and sending your own `project` object is rejected before the call as an unknown body key.",
+          "The fields go inside a `project` object: send {\"project\": {…}}.",
           "`name` is the only field that must be present. It is stripped of surrounding whitespace, and name uniqueness is not enforced here — creating a second project with an existing name succeeds and gives you two projects that are indistinguishable by name.",
           "`description` is HTML-escaped server-side, so the stored value can differ from what you sent.",
           "`access_type` and `users` are read only when project-level RBAC is enabled for the group; with that off both keys are accepted and silently ignored, and the project is created with the group default. With it on, an access_type outside private/restricted/org_wide fails the whole call with 400 'Invalid access type'.",
@@ -5011,7 +5011,7 @@
             "required": true,
             "example": "Root Folder A",
             "json_path": "/folder/name",
-            "description": "Folder name. Send it flat — the `folder` wrapper is added for you from the field's json_path, and sending one yourself is refused before the call leaves."
+            "description": "Folder name. It goes inside the `folder` object."
           },
           {
             "name": "notes",
@@ -5080,7 +5080,7 @@
           }
         },
         "guidance": [
-          "Send `name` and `notes` flat. The `folder` wrapper is added for you from each field's json_path, and sending your own `folder` object is rejected before the call as an unknown body key.",
+          "The fields go inside a `folder` object: send {\"folder\": {…}}.",
           "Uniqueness is always enforced against sibling root folders. A duplicate name comes back with the entity store's own message and status relayed verbatim — this is one of the few folder endpoints that does NOT mask the upstream text. Send auto_rename:\"true\" if you want it renamed instead.",
           "The created folder is at `data.folder`, not at the top level. `data.project` carries the project it landed in. The id you carry forward is `data.folder.id`, a plain integer.",
           "Passing the literal path segment `new` as project_id CREATES a default project and puts the folder in it. Only do that deliberately.",
@@ -5331,7 +5331,7 @@
         },
         "guidance": [
           "Get `step_id` from list_test_run_test_cases with fetch_steps=true: each row's `steps[].id` is the numeric step id, scoped to this run. Do not read it from get_test_case_detail, whose response embeds the full template field layout and can run to megabytes.",
-          "Send the fields flat. The `test_run_step_result` wrapper is added for you from each field's json_path, and sending your own is rejected before the call as an unknown body key. That object is forwarded to the backing service essentially verbatim, so only the keys below are acted on locally and unrecognised keys are passed through rather than rejected.",
+          "The fields go inside a `test_run_step_result` object: send {\"test_run_step_result\": {…}}. That object is forwarded to the backing service essentially verbatim, so only the keys below are acted on locally and unrecognised keys are passed through rather than rejected.",
           "The step's status travels as a NAME inside the wrapper (`status`), not as the numeric status id the case-level result endpoints take. The supported names are untested, passed, failed, retest, blocked, skipped, in_progress.",
           "There is a decoy: a TOP-LEVEL `status` key is validated against that same list and 400s {error:'Validation error'} when it is not in it — but it is not the value that gets written. Sending only a top-level status passes validation and logs nothing.",
           "Repeat calls for the same project/run/case/step within one second are refused with 400 {success:false, message:'Request is already being processed'} by a one-second lock. That is a de-duplication guard, not a validation failure — pause and retry.",
@@ -5392,7 +5392,7 @@
             "type": "string",
             "required": true,
             "json_path": "/folder/name",
-            "description": "Name of the new subfolder. Send it flat — the `folder` wrapper is added for you from the field's json_path, and sending one yourself is refused before the call leaves."
+            "description": "Name of the new subfolder. It goes inside the `folder` object."
           },
           {
             "name": "notes",
@@ -5456,7 +5456,7 @@
           }
         },
         "guidance": [
-          "Send the fields flat. The `folder` wrapper is added for you from each field's json_path, and sending your own `folder` object is rejected before the call as an unknown body key.",
+          "The fields go inside a `folder` object: send {\"folder\": {…}}.",
           "`folder_id` in the path is the PARENT. It is fetched first, so a folder id from another project comes back as a bare 404 {success:false} with no message telling you which id was wrong.",
           "folder_id must be a positive integer. Literal 0 raises an unhandled ArgumentError and surfaces as a 500, not a 400.",
           "Sibling-name uniqueness is always checked and the upstream message is relayed verbatim on failure (unusually — most folder endpoints mask it). auto_rename:\"true\" turns the rejection into a silent rename.",
@@ -8300,7 +8300,7 @@
           "STATUS TAKES AN ID, NOT A NAME - and a name silently nulls it. Custom status ids write and read back correctly, while the string form returns 200 and leaves status null. `priority` and `case_type` accept either on this same call, which makes status easy to get wrong. If a custom state 'is not valid', check you sent the id.",
           "The response is `{success: true}` and NOTHING ELSE. It does not return the updated case, so re-read the case if you need to confirm or show the new values. (The POST .../edit sibling does return `data.test_case`.)",
           "Only the keys present in `test_case` are applied — this is the partial-update path. The POST .../edit on the same case rebuilds more of the record, including resetting `review_status`.",
-          "Send the fields flat. The `test_case` wrapper is added for you from each field's json_path, and sending your own `test_case` object is rejected before the call as an unknown body key.",
+          "The fields go inside a `test_case` object: send {\"test_case\": {…}}.",
           "`steps` is legacy and is read with a JSON parse, so it must be a JSON-encoded STRING. Sending a real JSON array parses to `[]` and WIPES the case's steps while still returning 200. Use `test_case_steps`.",
           "`attachments` is the complete set the case should end up with, not an append — anything currently attached and missing from the array is detached. `test_case_steps: []` and `tags: []` likewise clear; omit the key to keep what is there.",
           "A workflow that forbids the status transition comes back as 422 with `code: \"transition_not_allowed\"` and a `violations` list — that is a rule rejection, not bad input.",
@@ -8556,7 +8556,7 @@
           "STATUS TAKES AN ID, NOT A NAME - and a name silently nulls it. Custom status ids write and read back correctly, while the string form returns 200 and leaves status null. `priority` and `case_type` accept either on this same call, which makes status easy to get wrong. If a custom state 'is not valid', check you sent the id.",
           "This is the FULL edit path, not a patch: `review_status` is recomputed on every call (omitted, it falls back to the project's review-approve default), and `template` defaults to `test_case_text` when you omit it, which discards any `test_case_steps` you sent. Send the case's current template unless you mean to change it.",
           "For a targeted single-field change prefer the PATCH .../edit-v2 sibling, which applies only the keys you send.",
-          "Send the fields flat. The `test_case` wrapper is added for you from each field's json_path, and sending your own `test_case` object is rejected before the call as an unknown body key.",
+          "The fields go inside a `test_case` object: send {\"test_case\": {…}}.",
           "Array fields REPLACE rather than append: `attachments`, `tags` and `test_case_steps` are each the complete intended set, and `[]` clears. Read the case first and send the union.",
           "Reviewers and the owner cannot overlap: this path rejects it up front with 400 `code: \"OWNER_AS_REVIEWER\"`, and sending `send_for_review` with no reviewers is 400 `code: \"NO_REVIEWERS\"`. (Create, which skips that check, surfaces the same conflict as a 422.)",
           "If the project has e-signature enabled, an edit that sets `send_for_review` or `review_status: in_review` needs `test_case.reauth_token`; without it the answer is 401 `{success:false, error_code:\"reauth_required\"}`.",
@@ -8901,7 +8901,7 @@
           }
         },
         "guidance": [
-          "Send every field flat, including the case-selection keys. Each field's json_path decides where it lands — the run's own fields go inside a `test_run` object and the selection keys (test_case_ids, selection, shared_selection, filters, dynamic_filter, trtc_configuration_mappings, auto_assign, is_dynamic) stay beside it at the top level. Building either level yourself is rejected before the call as an unknown body key.",
+          "The run's own fields go inside a `test_run` object, and the case-selection keys (test_case_ids, selection, shared_selection, filters, dynamic_filter, trtc_configuration_mappings, auto_assign, is_dynamic) sit beside it at the top level. Send the body in that shape.",
           "run_state is mandatory on every call, including edits that only rename the run. It is validated first, so a bare 400 'invalid data' almost always means a missing or misspelled run_state — not a bad selection.",
           "NOT ADDITIVE: the case selection you send (test_case_ids + selection) REPLACES the run's membership, and run fields you omit — the owner among them — are cleared. The call still returns success. ALWAYS call get_test_run_edit_selection first and resend what it returns — `selection`, `shared_selection`, `trtc_configuration_mappings` and every run field — changing only what you mean to change, after checking the stored selection still matches the run's current cases (it is not updated by the add-only and remove calls, so a stale one re-adds removed cases); that read-then-resend is how the product UI edits a run without losing anything. To only add cases, use bulk_update_test_run_test_cases with add_test_cases instead, which adds without disturbing existing cases, their row ids or assignees. Results on removed cases cannot be restored.",
           "There is no undo. A test run keeps no version history, so an overwritten name, a replaced tag list or a cleared description cannot be restored — confirm destructive-looking edits with the user first.",
@@ -17169,7 +17169,7 @@
             "name": "name",
             "type": "string",
             "json_path": "/folder/name",
-            "description": "New folder name. Send it flat — the `folder` wrapper is added for you from the field's json_path, and sending one yourself is refused before the call leaves. Not strictly required: a notes-only edit is accepted, but the `folder` object itself must be present and non-empty."
+            "description": "New folder name. It goes inside the `folder` object. Not strictly required: a notes-only edit is accepted, but the `folder` object itself must be present and non-empty."
           },
           {
             "name": "notes",
@@ -17223,7 +17223,7 @@
           }
         },
         "guidance": [
-          "Send `name` flat. The `folder` wrapper is added for you from the field's json_path, and sending your own `folder` object is rejected before the call as an unknown body key. Sending no fields at all fails on the server for an empty wrapper.",
+          "The fields go inside a `folder` object: send {\"folder\": {…}}. Sending no fields at all fails on the server for an empty wrapper.",
           "Sibling-name uniqueness is always checked. A clash relays the entity store's own message and status verbatim rather than the generic masked text most folder endpoints return — read `message` for the real reason. auto_rename:\"true\" turns the rejection into a silent rename.",
           "There is no undo. Folders keep no version history, so an overwritten name or notes value is gone and the only way back is to send the old value again — capture it with a read first if it matters.",
           "The updated folder is at `data.folder`. The `cases_count` and `sub_folders_count` in that echo are copied from the read taken BEFORE the update, not re-derived — do not treat them as fresh counts.",
@@ -17411,7 +17411,7 @@
           }
         },
         "guidance": [
-          "Send the fields flat. The wrapper applied for you here is `re_order`, NOT `test_case` like every other test-case write on this surface — that difference is handled by the json_paths, so you do not need to act on it, but it is why a hand-built `test_case` wrapper fails here in a different way than elsewhere.",
+          "The fields go inside a `re_order` object, NOT `test_case` like every other test-case write on this surface: send {\"re_order\": {…}}.",
           "Position is expressed by NEIGHBOURS, not by index: `top_test_case` and `bottom_test_case` are the case ids the moved block lands between. Omit `top_test_case` for the top of the page, `bottom_test_case` for the bottom.",
           "Everything is integer case ids — the anchors and the moved list alike. TC-NNN identifiers are not accepted here.",
           "Ordering is resolved within the page named by `page`, so both anchors must be on that page of the folder listing for the move to mean what you intend.",
@@ -17646,7 +17646,7 @@
           "An invalid run_state is not rejected on this call — it is silently coerced to new_run. The partial-update call on the same run returns 400 instead, so use that one if you want the error.",
           "shared_test_cases and filter_scope are accepted by the parameter filter and then ignored on this path. Cross-project cases only land through the PATCH.",
           "Case membership is REPLACED, not unioned: whatever test_cases / folder_ids / include_all resolve to should be treated as the run's whole case list. Always send the existing cases plus the new ones; a case left out loses its results.",
-          "Send the fields flat. The `test_run` wrapper is added for you from each field's json_path, and sending your own `test_run` object is rejected before the call as an unknown body key.",
+          "The fields go inside a `test_run` object: send {\"test_run\": {…}}.",
           "400 'invalid data' also covers an assignee email that cannot be resolved in this group — the run is left untouched in that case.",
           "There is no undo: test runs keep no version history, so a field this call clears cannot be restored.",
           "The updated run comes back at the top level as `testrun` — one word, no underscore, and no `data` envelope.",
@@ -19595,7 +19595,7 @@
           "To rename without losing data: read the dataset first and send its existing `variables` and `rows` (uuids included) back alongside the new name.",
           "There is no undo. Datasets keep no version history and there is no restore endpoint, so an overwritten column or row set is gone. Read the current contents before writing.",
           "`metadata` passes validation here and is then silently discarded — the handler forwards only name, columns, rows and tags. Sending metadata returns 200 with metadata unchanged. It can only be set at creation.",
-          "Send the fields flat. The `dataset` wrapper is added for you from each field's json_path, and sending your own `dataset` object is rejected before the call as an unknown body key. Nothing beyond the declared keys is permitted anywhere in the body (additionalProperties:false at every level) — an extra or misspelled key fails the whole call with 400.",
+          "The fields go inside a `dataset` object: send {\"dataset\": {…}}. Nothing beyond the declared keys is permitted anywhere in the body (additionalProperties:false at every level) — an extra or misspelled key fails the whole call with 400.",
           "The `uuid` in the path is the dataset's uuid string, resolved by looking it up in the project's dataset list; an unknown one is 404 {success:false, message:'Dataset <uuid>  not found.'}.",
           "Rows and columns come back normalised (blank rows and empty columns removed, cells trimmed, duplicate rows collapsed, row_number renumbered) — trust the response, not your payload.",
           "422 {message:'Feature not available'} is the Team Pro entitlement gate, not a bad body; any other 422 message is a real validation failure.",
@@ -19815,7 +19815,7 @@
           }
         },
         "guidance": [
-          "Send the fields flat. The `exploratory_session` wrapper is added for you from each field's json_path, and sending your own is rejected before the call as an unknown body key.",
+          "The fields go inside an `exploratory_session` object: send {\"exploratory_session\": {…}}.",
           "Scalar fields are patched by presence: only title, description, charter, timebox_duration, duration, actual_duration, folder_id and test_plan_id keys actually present in the body are sent. Omitted keys are left alone.",
           "The collection fields are NOT patched, they are replaced. Sending `tags`, `configurations`, `issues` or `attachments` overwrites the whole list; sending an empty array clears it. Omitting the key is the only way to leave a collection untouched.",
           "Replacing `attachments` detaches every blob you left out and frees it for reuse. An invalid set is rejected with 422 whose body is the bare JSON string \"attachment is invalid\" — not the usual {success:false, message} envelope, so do not parse it like one.",
@@ -19957,7 +19957,7 @@
         },
         "guidance": [
           "Both ids matter and both are integers: log_id identifies the entry, session_id in the path identifies its parent session. A log_id that belongs to a different session is not addressable here.",
-          "Send the fields flat. The `session_log` wrapper is added for you from each field's json_path, and sending your own is rejected before the call as an unknown body key. Only content, status, elapsed_time and defects are read, and only the keys present are forwarded — everything else is left as it is.",
+          "The fields go inside a `session_log` object: send {\"session_log\": {…}}. Only content, status, elapsed_time and defects are read, and only the keys present are forwarded — everything else is left as it is.",
           "You cannot blank a field out: nulls are stripped from the outgoing payload, so sending content:null or status:null leaves the existing value in place. Send an empty string for content instead, and expect status and elapsed_time to be un-clearable.",
           "`defects`, when non-empty, REPLACES the log's defect links; omit the key to leave them alone. The same coercion applies as on create — bare id strings become jira issues, malformed entries silently reduce the list to empty, and a bad jira id fails the whole call. Linking is applied asynchronously after the 200.",
           "You cannot unlink every defect from a log: sending defects:[] is treated as 'not supplied' and the existing links survive. This differs from the session update, where an empty tags/configurations/issues array does clear the list.",
@@ -20240,7 +20240,7 @@
         "guidance": [
           "This EDITS the latest existing result; it never creates one. With nothing logged yet it answers 404 {success:false, message:'No test results found'} — log a result first, then amend it.",
           "A closed test run is refused with 400 {success:false, error:'Cannot Update Closed Test Run'} before any field is written. A closed run cannot be reopened, so its results are final — record new results in a clone of the run instead.",
-          "Send the fields flat. The `test_result` wrapper is added for you from each field's json_path, and sending your own `test_result` object is rejected before the call as an unknown body key. Sending no fields at all is legal and re-saves the current values unchanged.",
+          "The fields go inside a `test_result` object: send {\"test_result\": {…}}. Sending no fields at all is legal and re-saves the current values unchanged.",
           "Only description, status_id, custom_fields, attachments and issues survive to the write. `status` (the name) and `elapsed_time` are accepted by the parameter filter and then dropped on this path — set the status by id here, and use the v2 result surface if you only have a status name.",
           "Keys you omit keep their current values (the handler re-reads the result and fills them in), so this is a genuine partial update.",
           "configuration_id and mapping_id are read at the TOP level — query string or body root, never from inside `test_result`. Without one of them 'latest' means latest across all configurations, which on a configuration matrix is usually not the row you meant.",
@@ -21473,7 +21473,7 @@
           "is_dynamic lives inside filter_test_cases and nowhere else. true needs at least one other criterion in the same object or the call 400s; false flips a dynamic run back to static; omitting it leaves the flag as it is.",
           "Composition keys interact: sending only configurations re-reads the run's existing case selection so the case list survives, and sending selection keys without configurations re-reads the existing configuration list. Send neither and the run's composition is left completely untouched.",
           "Case membership is REPLACED, not unioned: the selection you send becomes the run's whole case list, and any case missing from it is removed with its run row, assignee and results — with a 200. Only the run's own fields follow the partial rule (omitted owner, tags and description are kept). To add cases use bulk_update_test_run_test_cases (add_test_cases); if you use this call anyway, read the current cases and send existing + new, then re-read to confirm the count.",
-          "Send the fields flat. The `test_run` wrapper is added for you from each field's json_path, and sending your own `test_run` object is rejected before the call as an unknown body key.",
+          "The fields go inside a `test_run` object: send {\"test_run\": {…}}.",
           "There is no undo: test runs keep no version history, so an overwritten name, description or tag list cannot be restored.",
           "The updated run comes back at the top level as `testrun` — one word, no underscore, and no `data` envelope. This differs from the read endpoints, which use `test_run`.",
           "The updated run comes back under `testrun` (no underscore) and is the NARROW v2 projection: no `id`, no `uuid`, no `owner`, no `is_automation`, no `test_cases_count`. Its identity is the TR-NNN string in `identifier`.",
@@ -21717,7 +21717,7 @@
         "guidance": [
           "DOES NOT WORK. A well-formed request returns a bare 500. The handler calls an attach method that the object it holds does not have, so the call raises before anything is stored. There is no request that makes it succeed — do not retry with a different body.",
           "Despite the name and the published spec this is NOT a multipart file upload. The body is JSON and `attachments` is a list of INTEGER blob ids returned by a prior generic attachment upload. No file bytes cross this boundary.",
-          "Send the list flat. The `test_case` wrapper is added for you from the field's json_path, and sending your own `test_case` object is rejected before the call as an unknown body key.",
+          "The fields go inside a `test_case` object: send {\"test_case\": {…}}.",
           "Each blob must belong to the caller's group or to this project, and must not already be attached to anything. Reusing a blob that is attached elsewhere fails the WHOLE call with 422 'the attachment has been referenced elsewhere' — upload a fresh copy for each attachment point.",
           "An id that resolves to no blob gives 422 'attachment not found'. An EMPTY array is accepted, does nothing, and still answers 200 with the case's existing attachments — it does not clear them.",
           "The write is additive: the ids you list are added to whatever the case already has. Removal is the delete-attachment capability, one id at a time.",
@@ -22101,7 +22101,7 @@
         "guidance": [
           "This is the SINGLE-case update, addressed by one identifier. The bulk edits take a selection (ids or a filter) instead, refuse step lists, and key custom fields by numeric id — so when you are changing one case, and always when you are changing its steps, this is the one to use.",
           "Both ids in the path are prefixed strings (PR-1 / TC-42). The case id is resolved by an identifier lookup inside the project, so the internal integer id that the v1 edit endpoints take returns 404 'Test case not found' here.",
-          "Send the fields flat. The `test_case` wrapper is added for you from each field's json_path, and sending your own `test_case` object is rejected before the call as an unknown body key. Send at least one field: a 400 saying 'Invalid request format: test_case parameter is missing or malformed' means the body reached the server empty, not that you must nest it.",
+          "The fields go inside a `test_case` object: send {\"test_case\": {…}}. Send at least one field: a 400 saying 'Invalid request format: test_case parameter is missing or malformed' means the body reached the server empty.",
           "Only the keys you send are written — omitted fields keep their stored values. There is no undo, but the case keeps version history, so a bad edit can be recovered by restoring the previous version.",
           "Accepted and then silently discarded on this path, each returning 200: expected_result, estimate, is_shared, the dataset payload, and `folder_id` (use test_case_folder_id to move). Re-read the case before telling anyone these landed.",
           "priority, status and case_type take the PROJECT's display value or that value's numeric id; one bad value fails the whole call with 400 'Invalid default field value <field>'. Resolve the allowed values from the project's system field values first rather than guessing 'P1' or 'Open'.",
@@ -23102,7 +23102,7 @@
         ],
         "intent": "Create a test plan to group the test runs for a release, sprint or milestone — the TP-NNN it returns is what runs and sub-plans then hang off",
         "guidance": [
-          "Send the fields flat. The `test_plan` wrapper is added for you from each field's json_path, and sending your own wrapper — `test_plan`, `plan` or `sub_test_plan` — is rejected before the call as an unknown body key.",
+          "The fields go inside a `test_plan` object: send {\"test_plan\": {…}}. A `plan` or `sub_test_plan` object is refused as an unknown key.",
           "The plan is always created in the `new` state: a plan_status in the create body is not read at all. Move it to started/completed afterwards with the update capability.",
           "Owner is always the calling user — there is no owner field on this route, unlike the v1 create.",
           "This route always creates a TOP-LEVEL plan: a parent_plan_id you send is filtered out before the plan is built, so the created plan has no parent and the response never carries a parent_plan_id key at all - not even as null. To create a child, use the sub-plan create under its parent; parentage cannot be changed afterwards on v2.",
@@ -23332,7 +23332,7 @@
         ],
         "intent": "Break a test plan into a child plan — use this when a release plan needs per-team, per-phase or per-platform slices that each hold their own runs",
         "guidance": [
-          "Send the fields flat. The wrapper applied for you here is `sub_test_plan`, NOT `test_plan`; that difference is handled by the json_paths, and sending either wrapper yourself is rejected before the call as an unknown body key.",
+          "The fields go inside a `sub_test_plan` object, NOT `test_plan`: send {\"sub_test_plan\": {…}}.",
           "The parent comes from the path; there is no parent_plan_id field, and a sub-plan cannot be re-parented or promoted afterwards on v2.",
           "Every response from this route carries parent_plan_id - the parent's TP-NNN, not its numeric id - because the route only ever creates children. It also carries sub_plans_count, which is 0 on a plan that was just created; that field is not suppressed for sub-plans. urls.self is a web-app deep link and the only place the new plan's numeric id appears; the sub_test_plans link is added to top-level plans only, so a sub-plan does not get one.",
           "The created plan comes back under `sub_test_plan` (not test_plan) and its identifier is STP-NNN. That STP id is accepted wherever a plan id is taken on these v2 plan routes — read it, edit it, list its runs.",
@@ -23590,7 +23590,7 @@
           "Lifecycle is one-way and one step at a time: new -> completed is 400 'Cannot directly complete test plan', started -> new is 400 'Cannot revert started test plan', and once completed the plan is FROZEN — every later edit, including a rename, is 400 'Cannot update completed test plan'. Complete a plan last.",
           "No undo: plans keep no version history, so a name, description or date this call overwrites cannot be restored and there is nothing to roll back to. Read the plan first if the old value matters.",
           "Clearing is not possible through this call: empty strings and empty arrays are read as 'not sent' for name, description, tags and issues.",
-          "Send the fields flat. The `test_plan` wrapper is added for you from each field's json_path — including when the target is a sub-plan (STP-NNN), where `sub_test_plan` is NOT the key this route reads. Sending your own wrapper is rejected before the call as an unknown body key.",
+          "The fields go inside a `test_plan` object: send {\"test_plan\": {…}} — including when the target is a sub-plan (STP-NNN), where `sub_test_plan` is NOT the key this route reads.",
           "parent_plan_id comes back only when the plan you edited is a sub-plan, carrying the parent's TP-NNN; a top-level plan's response omits the key entirely rather than returning null. This call cannot change parentage, so the field never appears or disappears as a result of the edit. sub_plans_count is always present, and test_runs and links are not - they belong to the single-plan read.",
           "Owner, reviewers, attachments, custom fields and re-parenting are v1-only on plans; sending them here changes nothing and is not reported.",
           "A rejected edit returns 400 with {success: false, error: ...} and saves nothing — the plan is left exactly as it was."

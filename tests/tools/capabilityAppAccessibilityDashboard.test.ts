@@ -321,14 +321,19 @@ describe("the App Accessibility dashboard follows the account's region", () => {
     );
   }
 
+  // The deployment's own settings must not choose the host under test.
+  const ISOLATED = [OVERRIDE, PRODUCT_OVERRIDE, "CAPABILITY_REGISTRY_ENV"];
+  let saved: Record<string, string | undefined> = {};
   beforeEach(() => {
     vi.resetModules();
-    delete process.env[OVERRIDE];
-    delete process.env[PRODUCT_OVERRIDE];
+    saved = Object.fromEntries(ISOLATED.map((k) => [k, process.env[k]]));
+    for (const k of ISOLATED) delete process.env[k];
   });
   afterEach(() => {
-    delete process.env[OVERRIDE];
-    delete process.env[PRODUCT_OVERRIDE];
+    for (const k of ISOLATED) {
+      if (saved[k] === undefined) delete process.env[k];
+      else process.env[k] = saved[k];
+    }
   });
 
   it.each([
@@ -339,7 +344,7 @@ describe("the App Accessibility dashboard follows the account's region", () => {
     expect(await resolveIn(region, "dashboard")).toBe(host);
   });
 
-  it("keeps the public-API lists on the API host", async () => {
+  it("keeps the product's own base host on the API host", async () => {
     expect(await resolveIn("eu")).toBe(
       "https://api-app-accessibility-eu.browserstack.com",
     );

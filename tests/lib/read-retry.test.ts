@@ -60,11 +60,23 @@ describe("retryRead", () => {
   });
 
   it("does not retry an answer the caller has to act on", async () => {
-    for (const status of [200, 400, 401, 403, 404, 500]) {
+    for (const status of [200, 400, 401, 403, 404, 500, 504]) {
       const attempt = vi.fn().mockResolvedValue({ status });
       await settle(retryRead(attempt, isTransientResponse));
       expect(attempt).toHaveBeenCalledTimes(1);
     }
+  });
+
+  it("discards the body of a transient answer before trying again", async () => {
+    const cancel = vi.fn().mockResolvedValue(undefined);
+    const attempt = vi
+      .fn()
+      .mockResolvedValueOnce({ status: 503, body: { cancel } })
+      .mockResolvedValueOnce({ status: 200 });
+
+    await settle(retryRead(attempt, isTransientResponse));
+
+    expect(cancel).toHaveBeenCalledTimes(1);
   });
 
   it("rethrows at once when retryOnError is off", async () => {

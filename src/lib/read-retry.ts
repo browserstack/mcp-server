@@ -1,9 +1,15 @@
 export const READ_RETRY_DELAYS_MS = [300, 1000];
 
-export const RETRYABLE_STATUSES: ReadonlySet<number> = new Set([502, 503, 504]);
+export const RETRYABLE_STATUSES: ReadonlySet<number> = new Set([502, 503]);
 
 const sleep = (ms: number) =>
   new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+async function discard(result: unknown): Promise<void> {
+  const body = (result as { body?: { cancel?: () => Promise<void> } } | null)
+    ?.body;
+  if (typeof body?.cancel === "function") await body.cancel().catch(() => {});
+}
 
 export interface RetryReadOptions {
   retryOnError?: boolean;
@@ -29,6 +35,7 @@ export async function retryRead<T>(
       continue;
     }
     if (!isTransient(result)) return result;
+    await discard(result);
     await sleep(delay);
   }
   return attempt();

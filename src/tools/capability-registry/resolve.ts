@@ -170,6 +170,7 @@ export async function invoke(
     });
   };
 
+  // Only an unanswered read is retried; a product's own error status is returned as sent.
   let response =
     capability.mode === "read"
       ? await retryRead(

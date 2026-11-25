@@ -136,6 +136,18 @@ describe("telemetry by the account's region", () => {
     },
   );
 
+  it.each(["eu", "in", "unknown"])(
+    "keeps bug_capture as a known product for a %s account",
+    (region) => {
+      withAccountRegion(region as any, () =>
+        trackMCP("searchCapability", clientInfo, undefined, config, {
+          product: "bug_capture",
+        }),
+      );
+      expect(lastRow().product).toBe("bug_capture");
+    },
+  );
+
   it.each([undefined, "us"])(
     "sends every field when the region is %s",
     (region) => {

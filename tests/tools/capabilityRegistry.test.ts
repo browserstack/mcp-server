@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { bind, coerce } from "../../src/tools/capability-registry/bind.js";
 import { authHeaders } from "../../src/tools/capability-registry/egress.js";
@@ -490,17 +490,66 @@ describe("invoke — one request, response returned untouched", () => {
       .toMatch(/User Workload Reports/);
   });
 
-  it("reports an unreachable product as status 0", async () => {
-    const transport = async () => ({
-      status: 0, body: null, error: "the product could not be reached",
-    });
-    const result = await invoke(
-      LIST_CASES, { path_params: { project_id: 1, folder_id: 2 } },
-      "https://tm.example", credentials, transport,
-    );
-    expect(result.ok).toBe(false);
-    expect(result.http_response.status).toBe(0);
-    expect(result.http_response.error).toMatch(/could not be reached/);
+  it("reports an unreachable product as status 0 after retrying a read", async () => {
+    vi.useFakeTimers();
+    try {
+      let calls = 0;
+      const transport = async () => {
+        calls++;
+        return { status: 0, body: null, error: "the product could not be reached" };
+      };
+      const pending = invoke(
+        LIST_CASES, { path_params: { project_id: 1, folder_id: 2 } },
+        "https://tm.example", credentials, transport,
+      );
+      await vi.runAllTimersAsync();
+      const result = await pending;
+      expect(calls).toBe(3);
+      expect(result.ok).toBe(false);
+      expect(result.http_response.status).toBe(0);
+      expect(result.http_response.error).toMatch(/could not be reached/);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("returns a read that reaches the product on a later try", async () => {
+    vi.useFakeTimers();
+    try {
+      let calls = 0;
+      const transport = async () =>
+        ++calls === 1
+          ? { status: 0, body: null, error: "the product could not be reached" }
+          : { status: 200, body: { test_cases: [] } };
+      const pending = invoke(
+        LIST_CASES, { path_params: { project_id: 1, folder_id: 2 } },
+        "https://tm.example", credentials, transport,
+      );
+      await vi.runAllTimersAsync();
+      const result = await pending;
+      expect(calls).toBe(2);
+      expect(result.ok).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not retry a write or a read that timed out", async () => {
+    for (const [capability, error] of [
+      [{ ...LIST_CASES, mode: "write" as const }, "the product could not be reached"],
+      [LIST_CASES, "no answer within 45s. The request was sent, so it may have taken effect"],
+    ] as const) {
+      let calls = 0;
+      const transport = async () => {
+        calls++;
+        return { status: 0, body: null, error };
+      };
+      await invoke(
+        capability, { path_params: { project_id: 1, folder_id: 2 } },
+        "https://tm.example", credentials, transport,
+      );
+      expect(calls).toBe(1);
+    }
   });
 });
 

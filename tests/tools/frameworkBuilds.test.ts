@@ -1,3 +1,4 @@
+import { unwrapUntrusted } from "../fixtures/unwrap";
 import { describe, it, expect, vi, beforeEach, Mock } from "vitest";
 import JSZip from "jszip";
 import { apiClient } from "../../src/lib/apiClient";
@@ -287,7 +288,7 @@ describe("tools on a framework build", () => {
       config,
     );
 
-    const sessions = JSON.parse(result.content[0].text as string);
+    const sessions = JSON.parse(unwrapUntrusted(result.content[0].text as string));
     expect(sessions[0]).toMatchObject({ sessionId: SESSION, status: "failed" });
     expect(result.content.map((c: any) => c.text).join("\n")).toContain(
       "ran through the maestro framework API",
@@ -472,7 +473,7 @@ describe("review follow-ups", () => {
     );
 
     expect(
-      JSON.parse(result.content[0].text as string).map((s: any) => s.sessionId),
+      JSON.parse(unwrapUntrusted(result.content[0].text as string)).map((s: any) => s.sessionId),
     ).toEqual(["s3"]);
   });
 });

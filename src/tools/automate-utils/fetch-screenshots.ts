@@ -16,6 +16,12 @@ import {
 } from "../appautomate-utils/framework-builds.js";
 import { resolveAppAutomateBuildId } from "../failurelogs-utils/resolve-app-build-id.js";
 import { CallerError } from "../../lib/error.js";
+import { encodePathSegment } from "../../lib/path-segment.js";
+import {
+  trustedRedirectGuard,
+  isTrustedAssetUrl,
+  isRedirectRefused,
+} from "../../lib/trusted-hosts.js";
 
 /** The session is unknown to the generic logs endpoint (404). */
 export class SessionLogsNotFoundError extends Error {
@@ -41,7 +47,7 @@ async function extractScreenshotUrls(
   const host = sessionApiHost(sessionType);
   const baseUrl = `${host}/${isAutomate ? "automate" : "app-automate"}`;
 
-  const url = `${baseUrl}/sessions/${sessionId}/logs`;
+  const url = `${baseUrl}/sessions/${encodePathSegment(sessionId, "sessionId")}/logs`;
   const response = await apiClient.get({
     url,
     headers: {
@@ -81,18 +87,6 @@ const RESPONSE_VALUE_PATTERN = new RegExp(
 const DEBUG_SCREENSHOT_PATTERN = new RegExp(
   String.raw`${LOG_PREFIX}DEBUG (https://\S+)$`,
 );
-const TRUSTED_HOST_PATTERN =
-  /(^|\.)browserstack\.com$|\.s3([.-][a-z0-9]+)*\.amazonaws\.com$|\.backblazeb2\.com$/;
-
-function isTrustedScreenshotUrl(value: string): boolean {
-  try {
-    const url = new URL(value);
-    return url.protocol === "https:" && TRUSTED_HOST_PATTERN.test(url.hostname);
-  } catch {
-    return false;
-  }
-}
-
 export function parseScreenshotUrls(text: string): string[] {
   const urls: string[] = [];
   const lines = text.split("\n").map((line) => line.trimEnd());
@@ -124,7 +118,7 @@ export function parseScreenshotUrls(text: string): string[] {
     }
   }
 
-  return [...new Set(urls)].filter(isTrustedScreenshotUrl);
+  return [...new Set(urls)].filter(isTrustedAssetUrl);
 }
 
 function detectImageMimeType(buffer: Buffer): string {
@@ -136,14 +130,25 @@ function detectImageMimeType(buffer: Buffer): string {
 
 export type Screenshot = { url: string; base64: string; mimeType: string };
 
-// Returns null for a screenshot over MAX_SCREENSHOT_BYTES so the rest still load.
+// Returns null for a screenshot over MAX_SCREENSHOT_BYTES, or one whose download
+// tried to redirect off the trusted hosts, so the rest still load.
 async function fetchAndCompress(url: string): Promise<Screenshot | null> {
-  const response = await apiClient.get({
-    url,
-    responseType: "arraybuffer",
-    maxContentLength: MAX_SCREENSHOT_BYTES,
-    raise_error: false,
-  });
+  let response;
+  try {
+    response = await apiClient.get({
+      url,
+      responseType: "arraybuffer",
+      maxContentLength: MAX_SCREENSHOT_BYTES,
+      maxRedirects: 5,
+      beforeRedirect: trustedRedirectGuard("screenshot"),
+      raise_error: false,
+    });
+  } catch (error) {
+    if (isRedirectRefused(error)) {
+      return null;
+    }
+    throw error;
+  }
   if (response.status === 413) {
     return null;
   }

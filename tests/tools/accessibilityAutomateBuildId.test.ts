@@ -16,6 +16,11 @@ vi.mock("../../src/lib/apiClient.js", () => ({
     })),
   },
 }));
+// Web builds are looked up on the Accessibility dashboard with a minted token; no auth server here.
+vi.mock("../../src/tools/capability-registry/egress.js", async (original) => ({
+  ...(await original<typeof import("../../src/tools/capability-registry/egress.js")>()),
+  authHeaders: vi.fn(async () => ({ Authorization: "Bearer test-token" })),
+}));
 
 import { apiClient } from "../../src/lib/apiClient.js";
 import {
@@ -47,9 +52,10 @@ let answers: {
 };
 
 function route({ url }: { url: string }): Reply {
-  const path = new URL(url).pathname;
-  if (path.endsWith(`/automated-tests/v1/builds/${WEB_BUILD}`)) {
-    return reply(200, { success: true, data: { id: WEB_BUILD } });
+  const parsed = new URL(url);
+  const path = parsed.pathname;
+  if (path.endsWith("/meta") && parsed.searchParams.get("th_build_id") === WEB_BUILD) {
+    return reply(200, { success: true, metaData: { name: "web", projectName: "Web" } });
   }
   if (path === `/automate/builds/${HASHED}/sessions.json`) {
     return answers.automateSessions ?? notFound;

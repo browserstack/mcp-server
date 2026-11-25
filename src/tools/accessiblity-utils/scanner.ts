@@ -203,12 +203,31 @@ function nameIsTaken(err: any): boolean {
   return !reason || /already exists/i.test(String(reason));
 }
 
+/**
+ * central-scanner's refusal of a scanScope while part-of-page scans are not released to the
+ * account's group, "Part-of-page scan is not enabled for your group".
+ */
+const SCOPE_NOT_ENABLED = /part-of-page scan is not enabled/i;
+
 function scanStartError(err: any): Error {
   // apiClient throws generic errors, try to extract message.
   const reason = refusalReason(err);
-  const limit = SCAN_LIMIT_REFUSAL.exec(String(reason ?? ""));
-  if (err?.response?.status === 402 && limit) {
+  const said = Array.isArray(reason) ? reason.join("; ") : String(reason ?? "");
+  const status = err?.response?.status;
+  const limit = SCAN_LIMIT_REFUSAL.exec(said);
+  if (status === 402 && limit) {
     return new ScanRefusedError(scanLimitMessage(limit[1]));
+  }
+  if (status === 403 && SCOPE_NOT_ENABLED.test(said)) {
+    return new ScanRefusedError(
+      "Scanning part of a page (scanScope) is not enabled for this account, so no scan was started. Leave out scanScope to scan the whole page, or ask BrowserStack support to enable part-of-page scans.",
+    );
+  }
+  // A selector the API could not take is the caller's to correct, not a failure to report.
+  if (status === 422 && /scanScope/.test(said)) {
+    return new ScanRefusedError(
+      `No scan was started: the API refused scanScope (${said}). Correct the selector, or leave out scanScope to scan the whole page.`,
+    );
   }
   if (err?.response?.status === 422 && !reason) {
     return new Error(
@@ -243,6 +262,31 @@ export interface ScanSettings {
   experimentalRules?: boolean;
   /** Also run a screen reader on the scanned pages: NVDA (Windows) or VO (VoiceOver). Off by default. */
   screenReader?: "NVDA" | "VO";
+  /**
+   * Scan only the first element of each page that a CSS selector or XPath matches; a page
+   * with no match is not scanned. Read back from a scan, null is a scan of the whole page.
+   */
+  scanScope?: ScanScope | null;
+}
+
+/** The part of each page a scan covers: the first element a CSS selector or XPath matches. */
+export interface ScanScope {
+  type: "css" | "xpath";
+  value: string;
+}
+
+/**
+ * A scan's scope as the API gives it back: null for a scan of the whole page, undefined when
+ * the API does not say (one from before part-of-page scans gives no scanScope at all).
+ */
+function readScope(value: unknown): ScanScope | null | undefined {
+  if (value === null) return null;
+  const scope = value as { type?: unknown; value?: unknown } | undefined;
+  return (scope?.type === "css" || scope?.type === "xpath") &&
+    typeof scope.value === "string" &&
+    scope.value
+    ? { type: scope.type, value: scope.value }
+    : undefined;
 }
 
 export class AccessibilityScanner {
@@ -301,7 +345,9 @@ export class AccessibilityScanner {
     const transformedUrlList = urlList.map(scanUrl);
 
     const scanSettings = Object.fromEntries(
-      Object.entries(settings).filter(([, value]) => value !== undefined),
+      Object.entries(settings).filter(
+        ([, value]) => value !== undefined && value !== null,
+      ),
     );
     const cleanName = cleanScanName(name, hostName(urlList));
     const baseRequestBody = {
@@ -404,6 +450,7 @@ export class AccessibilityScanner {
     const experimental = overview?.ok
       ? overview.data?.data?.scanConfigInfo?.experimental
       : undefined;
+    const scope = readScope(run.scanScope);
     return {
       ...(run.wcagVersion ? { wcagVersion: run.wcagVersion } : {}),
       ...(typeof run.bestPractices === "boolean"
@@ -418,6 +465,7 @@ export class AccessibilityScanner {
       ...(typeof experimental === "boolean"
         ? { experimentalRules: experimental }
         : {}),
+      ...(scope !== undefined ? { scanScope: scope } : {}),
     };
   }
 
@@ -570,6 +618,7 @@ export class AccessibilityScanner {
     const info = data.scanConfigInfo ?? {};
     const flag = (value: unknown) =>
       typeof value === "boolean" ? value : undefined;
+    const scope = readScope(info.scanScope);
     const settings: ScanSettings = {
       ...(typeof info.wcagVersion === "string" && info.wcagVersion
         ? { wcagVersion: info.wcagVersion }
@@ -586,6 +635,7 @@ export class AccessibilityScanner {
       ...(flag(info.experimental) !== undefined
         ? { experimentalRules: info.experimental }
         : {}),
+      ...(scope !== undefined ? { scanScope: scope } : {}),
     };
     return {
       ...(typeof info.name === "string" && info.name

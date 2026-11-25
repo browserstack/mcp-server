@@ -80,6 +80,10 @@ vi.mock("../../src/index.js", () => ({
 
 import addAccessibilityTools from "../../src/tools/accessibility.js";
 import {
+  FIX_WORKFLOW_WITH_REPORT,
+  fixWorkflowForAgent,
+} from "../../src/tools/accessiblity-utils/fix-workflow.js";
+import {
   ExportPendingError,
   ScanNotInListError,
   ScanRunNotFoundError,
@@ -1307,7 +1311,8 @@ describe("questions about a report beyond its issues", () => {
     );
 
     expect(body).toContain(`${ASK} (Website Scanner scan scan-42, run run-7)`);
-    expect(body).toContain("do not work out the plan yourself");
+    // Fixing the issues in code is the fix workflow's job, not BrowserStack AI's.
+    expect(body).toContain("first call fetchAccessibilityIssues with fixWorkflow: true");
     expect(body).toContain("If askBrowserStackAI says it is not enabled for this account, tell the user");
   });
 
@@ -1317,6 +1322,36 @@ describe("questions about a report beyond its issues", () => {
     );
 
     expect(body).not.toContain("askBrowserStackAI");
+    expect(body).not.toContain("fixWorkflow");
+  });
+
+  // The workflow is ~11 KB: on top of a large first page it passes the size at which clients
+  // save a result to a file, and coming last it is what a client cutting long results drops.
+  it("points at the workflow, rather than adding it, when fixWorkflow comes with a report", async () => {
+    const plain = text(
+      await handlers.fetchAccessibilityIssues({ scanId: "scan-42", scanRunId: "run-7" }, CONTEXT),
+    );
+    const result = await handlers.fetchAccessibilityIssues(
+      { scanId: "scan-42", scanRunId: "run-7", fixWorkflow: true },
+      CONTEXT,
+    );
+    const body = text(result);
+
+    expect(result.content.at(-1).text).toBe(FIX_WORKFLOW_WITH_REPORT);
+    expect(body).not.toContain(fixWorkflowForAgent());
+    expect(body.length - plain.length).toBeLessThan(400);
+  });
+
+  it("adds nothing for fixWorkflow on a later page", async () => {
+    const body = text(
+      await handlers.fetchAccessibilityIssues(
+        { scanId: "scan-42", scanRunId: "run-7", cursor: 140, fixWorkflow: true },
+        CONTEXT,
+      ),
+    );
+
+    expect(body).not.toContain(FIX_WORKFLOW_WITH_REPORT);
+    expect(body).not.toContain(fixWorkflowForAgent());
   });
 
   it("startAccessibilityScan sends them to BrowserStack AI too", async () => {

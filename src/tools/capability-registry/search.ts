@@ -660,6 +660,7 @@ const GENERIC_ANCHORS = new Set([
   "filter",
   "filters",
   "os",
+  "summary",
 ]);
 
 export interface ProductAmbiguity {

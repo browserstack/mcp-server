@@ -2,10 +2,15 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { describe, expect, it, vi } from "vitest";
 
-// The accessibility fix workflow ships as a prompt only: the user starts it on purpose. There
-// is no resource for it, no pointer in the instructions, and no link after issue results.
+// The accessibility fix workflow ships as a prompt the user can start, and as the fixWorkflow
+// argument of fetchAccessibilityIssues, for an agent the user simply asks to fix issues. One
+// line in the server instructions points at the argument: Claude Code shows the agent a
+// deferred tool's name only, but always shows the instructions. There is no resource for it.
 
-vi.mock("../../src/lib/instrumentation.js", () => ({ trackMCP: vi.fn() }));
+vi.mock("../../src/lib/instrumentation.js", () => ({
+  trackMCP: vi.fn(),
+  withToolCall: (_tool: string, _client: unknown, _config: unknown, fn: () => unknown) => fn(),
+}));
 vi.mock("../../src/logger.js", () => ({
   default: { error: vi.fn(), info: vi.fn(), debug: vi.fn(), warn: vi.fn() },
 }));
@@ -65,7 +70,41 @@ describe("the fix workflow over MCP", () => {
     await client.close();
   });
 
-  it("advertises no resources: the workflow is a prompt only", async () => {
+  it("points the agent at fixWorkflow from the server instructions, and not for advice", async () => {
+    const client = await connected();
+
+    const instructions = client.getInstructions() ?? "";
+    expect(instructions).toContain(
+      "Before editing code to fix accessibility issues, call fetchAccessibilityIssues with fixWorkflow: true.",
+    );
+    expect(instructions).toContain("Don't call it for questions or advice.");
+    await client.close();
+  });
+
+  it("returns the workflow alone when fixWorkflow names no report", async () => {
+    const client = await connected();
+
+    const { tools } = await client.listTools();
+    const fetch = tools.find((t) => t.name === "fetchAccessibilityIssues");
+    expect(fetch?.inputSchema.properties).toHaveProperty("fixWorkflow");
+
+    const result = await client.callTool({
+      name: "fetchAccessibilityIssues",
+      arguments: { fixWorkflow: true },
+    });
+    expect(result.isError).toBeFalsy();
+    const content = result.content as { type: string; text: string }[];
+    expect(content).toHaveLength(1);
+    expect(content[0].text).toMatch(/^You are fixing accessibility issues in this codebase/);
+    expect(content[0].text).toMatch(
+      /\*\*This run:\*\* take the target and the scope from the user's request\./,
+    );
+    // Not the prompt's ending: there are no slash-command arguments to echo back.
+    expect(content[0].text).not.toContain("some clients split arguments on spaces");
+    await client.close();
+  });
+
+  it("advertises no resources", async () => {
     const client = await connected();
 
     expect(client.getServerCapabilities()?.prompts).toBeDefined();

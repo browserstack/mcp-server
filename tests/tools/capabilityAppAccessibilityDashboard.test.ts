@@ -206,8 +206,8 @@ describe("the App Accessibility dashboard capabilities", () => {
   });
 
   it("tell an agent a switched-off write is final, not something to retry", () => {
-    // app-accessibility answers 403 AGENT_REPORT_ACTIONS_DISABLED when ops blacklist the
-    // user or group for agent writes; nothing changed and a retry is refused too.
+    // 403 AGENT_REPORT_ACTIONS_DISABLED: agent writes are switched off for the account;
+    // nothing changed and a retry is refused too.
     expect(app.responses.DashboardForbidden.description).toMatch(
       /AGENT_REPORT_ACTIONS_DISABLED/,
     );
@@ -405,18 +405,16 @@ describe("the App Accessibility dashboard follows the account's region", () => {
   // A lower-env session that overrides only the product host must not send its dashboard
   // calls to production.
   it("refuses the dashboard host when only the product host is overridden", async () => {
-    process.env[PRODUCT_OVERRIDE] =
-      "https://app-accessibility-rengg-regression-accessibility.bsstag.com";
+    process.env[PRODUCT_OVERRIDE] = "https://app-accessibility-staging.example.com";
     await expect(resolveIn("us", "dashboard")).rejects.toThrow(
       /overrides product 'app_accessibility', but not its 'dashboard' host/,
     );
   });
 
   it("lets an override reach a non-production dashboard", async () => {
-    process.env[OVERRIDE] =
-      "https://app-accessibility-rengg-regression-accessibility.bsstag.com";
+    process.env[OVERRIDE] = "https://app-accessibility-staging.example.com";
     expect(await resolveIn("us", "dashboard")).toBe(
-      "https://app-accessibility-rengg-regression-accessibility.bsstag.com",
+      "https://app-accessibility-staging.example.com",
     );
   });
 });

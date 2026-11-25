@@ -37,17 +37,25 @@ export const RUN_APP_AUTOMATE_SCHEMA = {
     .string()
     .optional()
     .default("BStack-AppAutomate-Suite")
-    .describe("Project name for organizing test runs on BrowserStack."),
+    .describe("BrowserStack project for these runs."),
   detectedAutomationFramework: z
     .nativeEnum(AppTestPlatform)
-    .describe(
-      "The automation framework used in the project, such as 'espresso' (Android) or 'xcuitest' (iOS).",
-    ),
+    .describe("'espresso' (Android) or 'xcuitest' (iOS)."),
   accessibility: z
     .boolean()
     .optional()
     .default(false)
     .describe(
-      "App Accessibility checks on screens the tests touch (Android 11+, iOS 14+); suite must be built with BrowserStack's SDK.",
+      "App Accessibility checks on touched screens (Android 11+, iOS 14+); suite needs BrowserStack's SDK.",
     ),
+  screenReader: z
+    .boolean()
+    .optional()
+    .default(false)
+    .describe("Also run Screen Reader Automation; turns accessibility on."),
+  screenReaderLinearNavigation: z
+    .boolean()
+    .optional()
+    .default(false)
+    .describe("Screen reader swipes every screen in order."),
 };

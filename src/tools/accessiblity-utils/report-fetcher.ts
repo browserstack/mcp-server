@@ -17,6 +17,10 @@ import { sessionsListUrl } from "../automate-utils/list-session-ids.js";
 import { getAutomationBaseUrl } from "../rca-agent-utils/constants.js";
 import { getRegionalHost } from "../../lib/regional-host.js";
 import { CallerError } from "../../lib/error.js";
+import { invalidateToken } from "../../lib/central-oauth.js";
+import { authHeaders as signedHeaders } from "../capability-registry/egress.js";
+import { resolveScope, resolveTokenUrl } from "../capability-registry/oauth.js";
+import type { AuthScheme } from "../capability-registry/types.js";
 
 export { MAX_APP_BUILD_LIST_PAGES } from "./app-report-fetcher.js";
 
@@ -55,6 +59,21 @@ export type ScanBuildSource = {
 
 const apiBase = () => `${getRegionalHost("accessibilityApi")}/api`;
 const dashboard = () => getRegionalHost("accessibilityDashboard");
+
+/**
+ * The dashboard's own routes take a Bearer token minted from the user's username and access
+ * key with the `ai_agent` scope, as the capability registry signs Web Accessibility's
+ * dashboard capabilities. The backend allows that token only on the routes it lists for it.
+ */
+const DASHBOARD_AUTH: AuthScheme = { type: "oauth2" };
+const DASHBOARD_PRODUCT = "web_accessibility";
+
+/**
+ * A build report route on the dashboard. The path's project and build segments are not read:
+ * `th_build_id` alone picks the build.
+ */
+const buildReportPath = (view: "meta" | "overview", buildId: string) =>
+  `/api/projects/_/test_runs/_/${view}?th_build_id=${encodeURIComponent(buildId)}`;
 
 /**
  * The API does not know a Website Scanner run by this build id, or not for this account:
@@ -125,17 +144,33 @@ const MAX_FOUND_SCAN_RUNS = 200;
 const MAX_SCAN_RUN_PAGES = 10;
 
 /** A build whose status is checked is one just run, so it sits at the top of its project's list. */
-const MAX_BUILD_LIST_PAGES = 3;
+/**
+ * Pages of a project's build list walked for one build. The dashboard lists 30 builds a page,
+ * so 10 pages reach as far back as three of the External API's pages of 100 did.
+ */
+const MAX_BUILD_LIST_PAGES = 10;
+const BUILD_LIST_PAGE_SIZE = 30;
 
 /**
- * The Workflow Analyzer report list holds the whole account's reports, newest first, with no
- * page or date: a report is found in its newest pages, at the list's largest page size, and
- * the pages of the earlier ones after it are read from their summaries, a batch at a time.
+ * The Workflow Analyzer report list holds the whole account's reports, newest first: a report
+ * is found in its newest pages, at the list's largest page size, and the pages of the earlier
+ * ones after it are read from their summaries, a batch at a time. A summary is a whole
+ * consolidation on the dashboard, so few are read: only reports that started before this one.
  */
 const MAX_WORKFLOW_LIST_PAGES = 3;
 const WORKFLOW_LIST_PAGE_SIZE = 99;
-const MAX_WORKFLOW_CANDIDATES = 30;
-const WORKFLOW_SUMMARY_BATCH = 10;
+const MAX_WORKFLOW_CANDIDATES = 10;
+const WORKFLOW_SUMMARY_BATCH = 4;
+
+/** A Workflow Analyzer report as its dashboard summary reads it. */
+interface WorkflowSummary {
+  status?: string;
+  /** When the report's scan started (ISO 8601). */
+  time?: string;
+  /** The pages with issues, as the summary lists them (at most 100 on a grouped report). */
+  pages: string[];
+  scoreData?: unknown;
+}
 
 /** An earlier Workflow Analyzer report: of the same page, or else of the same site. */
 export interface EarlierWorkflowReport {
@@ -192,13 +227,18 @@ const SCAN_BUILD_LINK_TTL_MS = 5 * 60 * 1000;
  */
 export const reportExports = new Map<
   string,
-  { link?: string; expiresAt?: number; taskId?: string }
+  { link?: string; expiresAt?: number; taskId?: string; startedAt?: number }
 >();
 export const MAX_REPORT_EXPORTS = 200;
 
 function rememberExport(
   key: string,
-  entry: { link?: string; expiresAt?: number; taskId?: string },
+  entry: {
+    link?: string;
+    expiresAt?: number;
+    taskId?: string;
+    startedAt?: number;
+  },
 ): void {
   reportExports.delete(key);
   reportExports.set(key, entry);
@@ -210,12 +250,16 @@ function rememberExport(
 
 /** An export still being generated when a call stopped waiting on it. */
 export class ExportPendingError extends Error {
+  /**
+   * `taskId` is undefined when the export running is one this call could not start or read,
+   * such as one started from the dashboard: the next call starts its own once that one ends.
+   */
   constructor(
-    readonly taskId: string,
+    readonly taskId: string | undefined,
     readonly waitedMs: number,
   ) {
     super(
-      `The report's CSV export is still being generated after ${Math.round(waitedMs / 1000)}s (export task ${taskId}).`,
+      `The report's CSV export is still being generated after ${Math.round(waitedMs / 1000)}s${taskId ? ` (export task ${taskId})` : " (an export of this report started elsewhere is still running)"}.`,
     );
     this.name = "ExportPendingError";
   }
@@ -414,6 +458,33 @@ function exportUrls(source: IssueSource): {
   }
 }
 
+/**
+ * A dashboard export still running this long is taken as failed and started again: the
+ * dashboard answers a running, a failed and an expired export alike (410), so a dead one
+ * would otherwise be waited on forever.
+ */
+const DASHBOARD_EXPORT_STALE_MS = 15 * 60 * 1000;
+
+/**
+ * The dashboard's export request for a report (`POST /api/export_reports`), or undefined for
+ * a report it cannot name: a Website Scanner run known only by its scan's ids, whose build id
+ * the dashboard needs, is still exported through the External API.
+ */
+function dashboardExportBody(
+  source: IssueSource,
+): Record<string, unknown> | undefined {
+  switch (source.kind) {
+    case "build":
+      return { type: "automatedTest", th_build_id: source.buildId };
+    case "scanBuild":
+      return { type: "websiteScan", th_build_id: source.thBuildId };
+    case "workflow":
+      return { type: "workflowScan", report_id: source.reportId };
+    default:
+      return undefined;
+  }
+}
+
 /** Why an export did not start, in the API's words, and where a build's id comes from when it is not found. */
 function startFailure(source: IssueSource, status: number, body: any): string {
   const reason =
@@ -441,9 +512,25 @@ function automateIds(
 
 export class AccessibilityReportFetcher {
   private auth: { username: string; password: string } | undefined;
-  private readonly app = new AppAccessibilityApi(() => this.authHeaders());
+  private readonly app = new AppAccessibilityApi(
+    () => this.authHeaders(),
+    () =>
+      this.auth
+        ? { username: this.auth.username, accessKey: this.auth.password }
+        : undefined,
+  );
   /** Web builds whose overview was read, by id, so a status check need not read it again. */
   private readonly webBuilds = new Map<string, WebBuild>();
+  /** Web builds' dashboard metadata, by id: their name, project, number, start and status. */
+  private readonly buildMetas = new Map<string, any>();
+  /** Workflow Analyzer reports' dashboard summaries, by report id. */
+  private readonly workflowSummaries = new Map<string, WorkflowSummary>();
+  /**
+   * The Bearer headers for the dashboard's routes, minted once per tool call (a fetcher serves
+   * one call). Without it a hosted server, which does not cache tokens across callers, would
+   * mint one for every request.
+   */
+  private dashboardAuth: Promise<Record<string, string>> | undefined;
 
   public setAuth(auth: { username: string; password: string }): void {
     this.auth = auth;
@@ -456,6 +543,112 @@ export class AccessibilityReportFetcher {
       Authorization:
         "Basic " + Buffer.from(`${username}:${password}`).toString("base64"),
     };
+  }
+
+  private dashboardCredentials(): { username: string; accessKey: string } {
+    if (!this.auth) throw new Error("BrowserStack credentials are not set");
+    return { username: this.auth.username, accessKey: this.auth.password };
+  }
+
+  /**
+   * GET one of the Accessibility dashboard's own routes. A token the dashboard rejects (401) is
+   * discarded and minted again once, as the capability registry does. A token that cannot be
+   * minted throws, so it never reads as the dashboard's answer about a report.
+   */
+  private async dashboardGet(
+    path: string,
+  ): Promise<{ ok: boolean; status: number; data: any }> {
+    return this.dashboardRequest("get", path);
+  }
+
+  private async dashboardRequest(
+    method: "get" | "post",
+    path: string,
+    body?: unknown,
+  ): Promise<{ ok: boolean; status: number; data: any }> {
+    const credentials = this.dashboardCredentials();
+    const send = async () => {
+      this.dashboardAuth ??= signedHeaders(
+        credentials,
+        DASHBOARD_AUTH,
+        DASHBOARD_PRODUCT,
+      );
+      let headers: Record<string, string>;
+      try {
+        headers = await this.dashboardAuth;
+      } catch (error) {
+        this.dashboardAuth = undefined;
+        throw error;
+      }
+      const url = `${dashboard()}${path}`;
+      return method === "post"
+        ? apiClient.post({ url, headers, body, raise_error: false })
+        : apiClient.get({ url, headers, raise_error: false });
+    };
+    let resp = await send();
+    if (resp.status === 401) {
+      invalidateToken(
+        resolveTokenUrl(DASHBOARD_PRODUCT, DASHBOARD_AUTH),
+        resolveScope(DASHBOARD_AUTH),
+        credentials,
+      );
+      this.dashboardAuth = undefined;
+      resp = await send();
+    }
+    return resp;
+  }
+
+  /**
+   * An Automated Tests build's dashboard metadata (`metaData`), or undefined when the
+   * dashboard does not know the build (404). Any other failure throws.
+   */
+  private async buildMeta(buildId: string): Promise<any | undefined> {
+    if (this.buildMetas.has(buildId)) return this.buildMetas.get(buildId);
+    const resp = await this.dashboardGet(buildReportPath("meta", buildId));
+    if (resp.status === 404) return undefined;
+    if (!resp.ok || !resp.data?.metaData) {
+      throw new Error(
+        `Could not look up build "${buildId}" in Automated Tests: HTTP ${resp.status}`,
+      );
+    }
+    this.buildMetas.set(buildId, resp.data.metaData);
+    return resp.data.metaData;
+  }
+
+  /**
+   * A Workflow Analyzer report's dashboard summary (`tests#consolidate?view=summary`): status,
+   * start, the pages with issues and the score. Undefined when it cannot be read. Kept for the
+   * tool call, as status, score and start are often read together.
+   */
+  private async workflowSummary(
+    reportId: string,
+  ): Promise<WorkflowSummary | undefined> {
+    const known = this.workflowSummaries.get(reportId);
+    if (known) return known;
+    const resp = await this.dashboardGet(
+      `/api/tests/consolidate?ids=${encodeURIComponent(reportId)}&view=summary`,
+    );
+    const data = resp.ok ? resp.data?.data : undefined;
+    if (!data) return undefined;
+    const metas = data.meta_v2 ?? {};
+    const meta = metas[`workflowScan:${reportId}`] ?? Object.values(metas)[0];
+    const rows: { url?: unknown }[] = data.chartData?.issueCountByURL ?? [];
+    const summary: WorkflowSummary = {
+      status: meta?.status,
+      time: meta?.startTimestamp,
+      pages: rows
+        .map((row) => row?.url)
+        .filter((url): url is string => typeof url === "string"),
+      scoreData: data.scoreData,
+    };
+    this.workflowSummaries.set(reportId, summary);
+    return summary;
+  }
+
+  /** An Automated Tests build's dashboard overview (`data`), or undefined when it cannot be read. */
+  private async buildOverview(buildId: string): Promise<any | undefined> {
+    const resp = await this.dashboardGet(buildReportPath("overview", buildId));
+    return resp.ok ? resp.data?.data : undefined;
   }
 
   /**
@@ -553,19 +746,9 @@ export class AccessibilityReportFetcher {
     { orScanRun = false }: { orScanRun?: boolean } = {},
   ): Promise<IssueSource> {
     if (source.kind !== "build") return source;
-    // Only a 404 means the web API does not know the id: any other failure is not an
-    // answer about the build, and asking the app API next would hide it.
-    const resp = await apiClient.get({
-      url: `${apiBase()}/automated-tests/v1/builds/${encodeURIComponent(source.buildId)}`,
-      headers: this.authHeaders(),
-      raise_error: false,
-    });
-    if (!resp.ok && resp.status !== 404) {
-      throw new Error(
-        `Could not look up build "${source.buildId}" in Automated Tests: HTTP ${resp.status}`,
-      );
-    }
-    const web = resp.ok ? resp.data?.data : undefined;
+    // Only a 404 means the dashboard does not know the id as a web build: any other failure
+    // is not an answer about the build, and asking the app API next would hide it.
+    const web = await this.buildMeta(source.buildId);
     if (web) {
       this.rememberWebBuild(source.buildId, web);
       return source;
@@ -704,19 +887,17 @@ export class AccessibilityReportFetcher {
         `Automate session ${sessionId} is not linked to a BrowserStack SDK build (it was not run through the SDK, or belongs to another account), so it has no accessibility results`,
       );
     }
-    const build = await apiClient.get({
-      url: `${apiBase()}/automated-tests/v1/builds/${encodeURIComponent(buildId)}`,
-      headers: this.authHeaders(),
-      raise_error: false,
-    });
-    if (build.status === 404) {
-      throw new CallerError(
-        `This Automate run belongs to build ${buildId}, which has no accessibility results: accessibility testing was not on for it`,
+    let build: any;
+    try {
+      build = await this.buildMeta(buildId);
+    } catch (error) {
+      throw new Error(
+        `Could not read accessibility build ${buildId} of this Automate run: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
-    if (!build.ok) {
-      throw new Error(
-        `Could not read accessibility build ${buildId} of this Automate run: HTTP ${build.status}`,
+    if (!build) {
+      throw new CallerError(
+        `This Automate run belongs to build ${buildId}, which has no accessibility results: accessibility testing was not on for it`,
       );
     }
     return { kind: "build", buildId };
@@ -807,6 +988,11 @@ export class AccessibilityReportFetcher {
     const known = options.stillProcessing ? undefined : reportExports.get(key);
     if (known?.link && (known.expiresAt ?? 0) > Date.now()) return known.link;
 
+    const exportBody = dashboardExportBody(source);
+    if (exportBody) {
+      return this.dashboardReportLink(source, key, exportBody, known, options);
+    }
+
     const urls = exportUrls(source);
     let taskId = options.exportTaskId ?? known?.taskId;
     if (!taskId) {
@@ -873,6 +1059,106 @@ export class AccessibilityReportFetcher {
       const pause =
         EXPORT_POLL_MS[Math.min(attempt, EXPORT_POLL_MS.length - 1)];
       await new Promise((resolve) => setTimeout(resolve, pause));
+    }
+  }
+
+  /**
+   * The CSV link of a report, exported through the dashboard: `POST /api/export_reports`
+   * queues the export, `GET /api/export_reports/{id}` answers 410 until it has finished and then
+   * a presigned link. The dashboard also emails the user the file, as its own Export button does.
+   * An export of the same report already running (one started from the dashboard, say) is a
+   * 422 with no id to follow, so the create is retried until that one ends.
+   */
+  private async dashboardReportLink(
+    source: IssueSource,
+    key: string,
+    body: Record<string, unknown>,
+    known: { taskId?: string; startedAt?: number } | undefined,
+    options: {
+      exportTaskId?: string;
+      onWait?: (waitedMs: number) => Promise<void>;
+      stillProcessing?: boolean;
+    },
+  ): Promise<string> {
+    const started = Date.now();
+    const pause = (attempt: number) =>
+      new Promise((resolve) =>
+        setTimeout(
+          resolve,
+          EXPORT_POLL_MS[Math.min(attempt, EXPORT_POLL_MS.length - 1)],
+        ),
+      );
+    const stale =
+      known?.startedAt !== undefined &&
+      Date.now() - known.startedAt > DASHBOARD_EXPORT_STALE_MS;
+    let exportId = options.exportTaskId ?? (stale ? undefined : known?.taskId);
+    let exportStartedAt = exportId ? (known?.startedAt ?? started) : started;
+
+    for (let attempt = 0; !exportId; attempt++) {
+      const resp = await this.dashboardRequest(
+        "post",
+        "/api/export_reports",
+        body,
+      );
+      const id = resp.data?.data?.id;
+      if (resp.ok && id !== undefined && id !== null) {
+        exportId = String(id);
+        exportStartedAt = Date.now();
+        break;
+      }
+      const reason = resp.data?.message ?? resp.data?.error;
+      if (resp.status === 422 && /in progress/i.test(String(reason ?? ""))) {
+        const waited = Date.now() - started;
+        if (waited >= EXPORT_WAIT_MS)
+          throw new ExportPendingError(undefined, waited);
+        await options.onWait?.(waited);
+        await pause(attempt);
+        continue;
+      }
+      reportExports.delete(key);
+      // Unknown to the dashboard: for a run named by a report link's build id, the caller
+      // looks the run up in the scan list instead.
+      if (source.kind === "scanBuild" && resp.status === 404) {
+        throw new ScanRunNotFoundError(source.thBuildId);
+      }
+      const message = startFailure(source, resp.status, {
+        error: reason ? [String(reason)] : undefined,
+      });
+      const callers = resp.status >= 400 && resp.status < 500;
+      throw callers ? new CallerError(message) : new Error(message);
+    }
+    // As with the External export: a report still adding issues gets a snapshot, kept nowhere.
+    if (options.stillProcessing) reportExports.delete(key);
+    else rememberExport(key, { taskId: exportId, startedAt: exportStartedAt });
+
+    for (let attempt = 0; ; attempt++) {
+      const resp = await this.dashboardGet(
+        `/api/export_reports/${encodeURIComponent(exportId)}`,
+      );
+      const link = resp.ok ? resp.data?.data?.url : undefined;
+      if (typeof link === "string" && link) {
+        if (options.stillProcessing) reportExports.delete(key);
+        else {
+          const expiresAt =
+            source.kind === "scanBuild"
+              ? Math.min(linkExpiry(link), Date.now() + SCAN_BUILD_LINK_TTL_MS)
+              : linkExpiry(link);
+          rememberExport(key, { link, expiresAt });
+        }
+        return link;
+      }
+      // 410: not finished yet (the dashboard says the same of a failed or expired one).
+      if (resp.status !== 410) {
+        reportExports.delete(key);
+        throw new Error(
+          `Failed to fetch the report's CSV export: HTTP ${resp.status}`,
+        );
+      }
+      const waited = Date.now() - started;
+      if (waited >= EXPORT_WAIT_MS)
+        throw new ExportPendingError(exportId, waited);
+      await options.onWait?.(waited);
+      await pause(attempt);
     }
   }
 
@@ -953,11 +1239,21 @@ export class AccessibilityReportFetcher {
         url = `${apiBase()}/website-scanner/v1/scans/${q(source.scanId)}/scan_runs/${q(source.scanRunId)}`;
         break;
       case "build":
-        url = `${apiBase()}/automated-tests/v1/builds/${q(source.buildId)}`;
-        break;
+        try {
+          return parseScore(
+            (await this.buildOverview(source.buildId))?.scoreData,
+          );
+        } catch {
+          return undefined;
+        }
       case "workflow":
-        url = `${apiBase()}/workflow-analyzer/v1/reports/${q(source.reportId)}`;
-        break;
+        try {
+          return parseScore(
+            (await this.workflowSummary(source.reportId))?.scoreData,
+          );
+        } catch {
+          return undefined;
+        }
       default:
         return undefined;
     }
@@ -989,11 +1285,7 @@ export class AccessibilityReportFetcher {
           // A run's status is read by its scan's ids, which a build id does not give.
           return undefined;
         case "workflow":
-          return (
-            await this.getData(
-              `${apiBase()}/workflow-analyzer/v1/reports/${q(source.reportId)}`,
-            )
-          )?.summary?.status;
+          return (await this.workflowSummary(source.reportId))?.status;
         case "build":
           return await this.buildStatus(source.buildId);
         case "appBuild":
@@ -1008,25 +1300,6 @@ export class AccessibilityReportFetcher {
     }
   }
 
-  /** A Workflow Analyzer report's start and the pages it scanned, from its summary. */
-  private async workflowReportPages(
-    reportId: string,
-  ): Promise<{ time?: string; pages: string[] } | undefined> {
-    const summary = (
-      await this.getData(
-        `${apiBase()}/workflow-analyzer/v1/reports/${encodeURIComponent(reportId)}`,
-      )
-    )?.summary;
-    if (!summary) return undefined;
-    const rows: { url?: unknown }[] = summary.issueCount?.issueCountByUrl ?? [];
-    return {
-      time: summary.time,
-      pages: rows
-        .map((row) => row?.url)
-        .filter((url): url is string => typeof url === "string"),
-    };
-  }
-
   /**
    * The newest Workflow Analyzer report before this one that scanned one of its pages, or
    * else one on its site; undefined when none is among the account's newest reports.
@@ -1034,31 +1307,37 @@ export class AccessibilityReportFetcher {
   async previousWorkflowReport(
     reportId: string,
   ): Promise<EarlierWorkflowReport | undefined> {
-    const own = await this.workflowReportPages(reportId);
+    const own = await this.workflowSummary(reportId);
     if (!own?.pages.length) return undefined;
-    // Newest first: the completed reports listed after this one are earlier.
+    // Newest first: the completed reports listed after this one are earlier. A summary is a
+    // whole consolidation, so only reports that started before this one are kept, from the
+    // list's own times, before any summary is read.
     const earlier: string[] = [];
-    let reached = false;
-    let nextPage: string | undefined;
+    let ownStart: number | undefined;
     for (
-      let page = 0;
-      page < MAX_WORKFLOW_LIST_PAGES &&
+      let page = 1;
+      page <= MAX_WORKFLOW_LIST_PAGES &&
       earlier.length < MAX_WORKFLOW_CANDIDATES;
       page++
     ) {
-      const data = await this.getData(
-        `${apiBase()}/workflow-analyzer/v1/reports?limit=${WORKFLOW_LIST_PAGE_SIZE}${
-          nextPage ? `&next_page=${encodeURIComponent(nextPage)}` : ""
-        }`,
+      const resp = await this.dashboardGet(
+        `/api/v1/reports?product=workflow-analyzer&page_size=${WORKFLOW_LIST_PAGE_SIZE}&page=${page}`,
       );
-      for (const row of data?.reports ?? []) {
-        if (String(row.id) === reportId) reached = true;
-        else if (reached && row.status === "completed") {
+      // An account with no reports is shown sample ones: they are not the user's.
+      if (!resp.ok || resp.data?.isColdStart) break;
+      for (const row of resp.data?.reports ?? []) {
+        const start = Date.parse(row.time ?? "");
+        if (String(row.id) === reportId) ownStart = start;
+        else if (
+          ownStart !== undefined &&
+          row.status === "completed" &&
+          !(start >= ownStart) &&
+          earlier.length < MAX_WORKFLOW_CANDIDATES
+        ) {
           earlier.push(String(row.id));
         }
       }
-      if (!data?.pagination?.hasNext || !data.pagination.nextPage) break;
-      nextPage = data.pagination.nextPage;
+      if (!resp.data?.info?.next) break;
     }
     const pages = new Set(own.pages.map(samePage));
     const sites = new Set(
@@ -1074,7 +1353,7 @@ export class AccessibilityReportFetcher {
     for (let i = 0; i < candidates.length; i += WORKFLOW_SUMMARY_BATCH) {
       const batch = candidates.slice(i, i + WORKFLOW_SUMMARY_BATCH);
       const summaries = await Promise.all(
-        batch.map((id) => this.workflowReportPages(id)),
+        batch.map((id) => this.workflowSummary(id)),
       );
       for (const [j, summary] of summaries.entries()) {
         if (!summary || started(summary.time) >= started(own.time)) continue;
@@ -1108,11 +1387,7 @@ export class AccessibilityReportFetcher {
             (run) => String(run.id) === source.scanRunId,
           )?.scanDate;
         case "workflow":
-          return (
-            await this.getData(
-              `${apiBase()}/workflow-analyzer/v1/reports/${encodeURIComponent(source.reportId)}`,
-            )
-          )?.summary?.time;
+          return (await this.workflowSummary(source.reportId))?.time;
         default:
           return undefined;
       }
@@ -1121,45 +1396,42 @@ export class AccessibilityReportFetcher {
     }
   }
 
+  /**
+   * A build's status as the dashboard's build list shows it: its metadata's status, except that
+   * a completed build with no test cases is `failed`, which the metadata does not say and its
+   * overview's test-case count does.
+   */
   private async buildStatus(buildId: string): Promise<string | undefined> {
-    const q = encodeURIComponent;
-    const project = (await this.webBuild(buildId))?.projectName;
-    if (!project) return undefined;
-    let nextPage: string | undefined;
-    for (let page = 0; page < MAX_BUILD_LIST_PAGES; page++) {
-      const data = await this.getData(
-        `${apiBase()}/automated-tests/v1/builds?project_name=${q(project)}&limit=100${
-          nextPage ? `&next_page=${q(nextPage)}` : ""
-        }`,
-      );
-      const row = data?.builds?.find((build: any) => build.id === buildId);
-      if (row) return row.status;
-      if (!data?.pagination?.has_next || !data.pagination.next_page) break;
-      nextPage = data.pagination.next_page;
-    }
-    return undefined;
+    const status: string | undefined = (await this.buildMeta(buildId))?.status;
+    if (status !== "completed") return status;
+    const total = (await this.buildOverview(buildId))?.healthSummary?.total;
+    return total !== undefined && Number(total) === 0 ? "failed" : status;
   }
 
-  private rememberWebBuild(buildId: string, overview: any): WebBuild {
+  /** A web build from its dashboard metadata, where `buildId` is the build's number. */
+  private rememberWebBuild(buildId: string, meta: any): WebBuild {
     const build: WebBuild = {
       buildId,
-      name: overview.name,
-      projectName: overview.projectName,
-      buildNumber: overview.buildNumber,
-      startedAt: overview.time,
+      name: meta.name,
+      projectName: meta.projectName,
+      buildNumber: meta.buildId,
+      startedAt: meta.createdAt,
     };
     this.webBuilds.set(buildId, build);
     return build;
   }
 
-  /** An Automated Tests build's name, project, number and start, from its overview. */
+  /** An Automated Tests build's name, project, number and start, from its dashboard metadata. */
   async webBuild(buildId: string): Promise<WebBuild | undefined> {
     const known = this.webBuilds.get(buildId);
     if (known) return known;
-    const overview = await this.getData(
-      `${apiBase()}/automated-tests/v1/builds/${encodeURIComponent(buildId)}`,
-    );
-    return overview ? this.rememberWebBuild(buildId, overview) : undefined;
+    let meta: any;
+    try {
+      meta = await this.buildMeta(buildId);
+    } catch {
+      return undefined;
+    }
+    return meta ? this.rememberWebBuild(buildId, meta) : undefined;
   }
 
   /**
@@ -1172,33 +1444,39 @@ export class AccessibilityReportFetcher {
   ): Promise<(WebBuild & { status: string }) | undefined> {
     if (!build.projectName) return undefined;
     const q = encodeURIComponent;
-    let passed = false;
-    let nextPage: string | undefined;
-    for (let page = 0; page < MAX_BUILD_LIST_PAGES; page++) {
-      const data = await this.getData(
-        `${apiBase()}/automated-tests/v1/builds?project_name=${q(build.projectName)}&limit=100${
-          nextPage ? `&next_page=${q(nextPage)}` : ""
-        }`,
+    // The build's name as the compare API matches it: TestHub's own name, which a list row
+    // carries escaped as `normalisedName`. A row's `name` is the displayed one, which for some
+    // accounts is the original name instead. Read off the build's own row once it is reached.
+    let sameName: ((row: any) => boolean) | undefined;
+    for (let page = 1; page <= MAX_BUILD_LIST_PAGES; page++) {
+      // Newest first by id, as the External API listed them. The dashboard URL-decodes the
+      // project name twice (Rails, then the controller), so it is encoded twice here, or a
+      // name with "+" or "%" would not match.
+      const resp = await this.dashboardGet(
+        `/api/test_runs?project_name=${q(q(build.projectName))}&sort_by=id-desc&page_size=${BUILD_LIST_PAGE_SIZE}&page=${page}`,
       );
-      for (const row of data?.builds ?? []) {
-        if (row.id === build.buildId) passed = true;
-        else if (
-          passed &&
-          row.name === build.name &&
+      if (!resp.ok) break;
+      for (const row of resp.data?.testRuns ?? []) {
+        if (row.thBuildId === build.buildId) {
+          const key = row.normalisedName;
+          sameName = key
+            ? (other) => other.normalisedName === key
+            : (other) => other.name === build.name;
+        } else if (
+          sameName?.(row) &&
           (row.status === "completed" || row.status === "failed")
         ) {
           return {
-            buildId: row.id,
+            buildId: row.thBuildId,
             name: row.name,
             projectName: build.projectName,
             buildNumber: row.buildNumber,
-            startedAt: row.time,
+            startedAt: row.createdAt,
             status: row.status,
           };
         }
       }
-      if (!data?.pagination?.has_next || !data.pagination.next_page) break;
-      nextPage = data.pagination.next_page;
+      if (!resp.data?.info?.next) break;
     }
     return undefined;
   }

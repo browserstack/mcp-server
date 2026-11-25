@@ -277,6 +277,29 @@ export async function uploadXcuiTestSuite(
 export interface NativeBuildOptions {
   /** Run App Accessibility checks during the tests (the build API's `accessibility` flag). */
   accessibility?: boolean;
+  /** With accessibility on, also run Screen Reader Automation and report it. */
+  screenReader?: { linearNavigation?: boolean };
+}
+
+/** How long linear navigation may swipe through a screen, as the SR test configs use. */
+const LINEAR_NAVIGATION_TIMEOUT_MS = 300000;
+
+/** App Automate forwards these to the accessibility run only when accessibility is on. */
+function screenReaderOptions(
+  options: NativeBuildOptions,
+): Record<string, unknown> {
+  if (!options.accessibility || !options.screenReader) return {};
+  const linear = options.screenReader.linearNavigation
+    ? {
+        linearNavigation: true,
+        linearNavigationTimeout: LINEAR_NAVIGATION_TIMEOUT_MS,
+      }
+    : {};
+  return {
+    accessibilityOptions: {
+      screenReaderAutomation: { autoReport: true, ...linear },
+    },
+  };
 }
 
 function buildRequestBody(
@@ -292,6 +315,7 @@ function buildRequestBody(
     devices,
     project,
     ...(options.accessibility ? { accessibility: true } : {}),
+    ...screenReaderOptions(options),
   };
 }
 

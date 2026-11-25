@@ -79,8 +79,18 @@ const REGIONAL_HOSTS: Record<
 > = {
   tm: { base: "testManagement" },
   tra: { base: "observabilityApi" },
-  app_accessibility: { base: "appAccessibilityApi" },
-  web_accessibility: { base: "accessibilityApi" },
+  // `dashboard`: as for web_accessibility below, read with an ai_agent token on the routes
+  // app-accessibility's allowlist admits.
+  app_accessibility: {
+    base: "appAccessibilityApi",
+    hosts: { dashboard: "appAccessibilityDashboard" },
+  },
+  // `dashboard`: the dashboard's own routes, which never read Basic auth; those capabilities
+  // declare oauth2 themselves and the backend admits only what its ai_agent scope allows.
+  web_accessibility: {
+    base: "accessibilityApi",
+    hosts: { dashboard: "accessibilityDashboard" },
+  },
   devicecontrol: { base: "automateHubUrl", hosts: { api: "automateApi" } },
   mobiledevicecontrol: {
     base: "appAutomateHubUrl",
@@ -152,6 +162,16 @@ function credentialsFrom(config: BrowserStackConfig): Credentials {
  * that reads like the caller's problem, when it is our missing configuration.
  */
 /**
+ * Products whose named hosts refuse to fall back to the regional host when only the
+ * product-level override is set. web_accessibility's `dashboard` host is the reason: a
+ * preprod override must never send its dashboard calls to production.
+ */
+const STRICT_NAMED_HOST_PRODUCTS: ReadonlySet<string> = new Set([
+  "web_accessibility",
+  "app_accessibility",
+]);
+
+/**
  * The host a capability named, as opposed to the product's own.
  *
  * `_HOST_` is in the override variable deliberately. The environment-suffixed form is
@@ -176,6 +196,22 @@ function resolveNamedHost(
   const override = process.env[`CAPABILITY_REGISTRY_BASE_URL_${suffix}`];
   if (override) return trim(override);
 
+  // An override of the product's own host says "not production", but it does not say where
+  // this host lives. Falling through to the regional (production) host would send a preprod
+  // session's dashboard calls to production.
+  //
+  // Scoped to the products listed in STRICT_NAMED_HOST_PRODUCTS so other products' named
+  // hosts (devicecontrol / mobiledevicecontrol `api`) keep their earlier fall-through.
+  if (
+    STRICT_NAMED_HOST_PRODUCTS.has(product) &&
+    process.env[`CAPABILITY_REGISTRY_BASE_URL_${key}`]
+  ) {
+    throw new InvocationError(
+      `CAPABILITY_REGISTRY_BASE_URL_${key} overrides product '${product}', but not its ` +
+        `'${host}' host. Set CAPABILITY_REGISTRY_BASE_URL_${suffix} as well.`,
+    );
+  }
+
   if (environment) {
     throw new InvocationError(
       `environment '${environment}' has no '${host}' host for product '${product}'. Set ` +
@@ -197,6 +233,30 @@ function resolveNamedHost(
         ? `Its index defines: ${known.join(", ")}.`
         : `Its index defines no named hosts.`) +
       ` Set CAPABILITY_REGISTRY_BASE_URL_${suffix} to override.`,
+  );
+}
+
+/**
+ * A product's named host for code outside the registry that calls the same routes: the same
+ * override, strict check and regional rules as a capability on that host. `declared` stands
+ * in for the index's `hosts` entry, the US default; it is only called when no override or
+ * regional host answers first, so an override works even while the account region is unknown.
+ */
+export function namedHostUrl(
+  product: string,
+  host: string,
+  declared: () => string,
+): string {
+  const hosts = Object.defineProperty({}, host, {
+    get: declared,
+    enumerable: true,
+  });
+  return resolveNamedHost(
+    product,
+    product.toUpperCase(),
+    host,
+    { hosts } as HostSource,
+    selectedEnvironment(),
   );
 }
 

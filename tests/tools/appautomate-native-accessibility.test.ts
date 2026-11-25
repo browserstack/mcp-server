@@ -163,6 +163,134 @@ describe("runAppTestsOnBrowserStack and App Accessibility", () => {
   });
 });
 
+// Screen Reader Automation rides on the same build request: App Automate forwards
+// accessibilityOptions to the accessibility run when accessibility is on.
+describe("Screen Reader Automation on native builds", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    m.post.mockResolvedValue({ data: { build_id: "b1" } });
+  });
+
+  it.each([
+    ["Espresso", triggerEspressoBuild],
+    ["XCUITest", triggerXcuiBuild],
+  ])("asks for a Screen Reader report on an %s build", async (_f, trigger) => {
+    await trigger("bs://app", "bs://suite", ["Google Pixel 8-14.0"], "p", CONFIG, {
+      accessibility: true,
+      screenReader: {},
+    });
+
+    expect(m.post.mock.calls[0][0].body).toMatchObject({
+      accessibility: true,
+      accessibilityOptions: { screenReaderAutomation: { autoReport: true } },
+    });
+    expect(
+      m.post.mock.calls[0][0].body.accessibilityOptions.screenReaderAutomation,
+    ).not.toHaveProperty("linearNavigation");
+  });
+
+  it("adds linear navigation with its timeout when asked", async () => {
+    await triggerEspressoBuild("bs://app", "bs://suite", ["Google Pixel 8-14.0"], "p", CONFIG, {
+      accessibility: true,
+      screenReader: { linearNavigation: true },
+    });
+
+    expect(m.post.mock.calls[0][0].body.accessibilityOptions).toEqual({
+      screenReaderAutomation: {
+        autoReport: true,
+        linearNavigation: true,
+        linearNavigationTimeout: 300000,
+      },
+    });
+  });
+
+  it("sends no screen reader options without accessibility", async () => {
+    await triggerEspressoBuild("bs://app", "bs://suite", ["Google Pixel 8-14.0"], "p", CONFIG, {
+      screenReader: {},
+    });
+
+    expect(m.post.mock.calls[0][0].body).not.toHaveProperty("accessibilityOptions");
+  });
+});
+
+describe("runAppTestsOnBrowserStack and Screen Reader Automation", () => {
+  let handlers: Record<string, (...args: any[]) => any>;
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    m.post.mockResolvedValue({ data: { build_id: "b1" } });
+    const { default: addAppAutomationTools } = await import(
+      "../../src/tools/appautomate.js"
+    );
+    handlers = {};
+    const server: any = {
+      tool: vi.fn((...args: any[]) => {
+        handlers[args[0]] = args[args.length - 1];
+      }),
+      server: { getClientVersion: vi.fn().mockReturnValue({ version: "1.0" }) },
+    };
+    addAppAutomationTools(server, CONFIG);
+  });
+
+  const run = (extra: Record<string, unknown>) =>
+    handlers.runAppTestsOnBrowserStack({
+      browserstackAppUrl: "bs://app",
+      browserstackTestSuiteUrl: "bs://suite",
+      devices: [{ platform: "android", deviceName: "Google Pixel 8", osVersion: "14.0" }],
+      project: "p",
+      detectedAutomationFramework: "espresso",
+      ...extra,
+    });
+
+  it("turns the accessibility checks on with the screen reader, which needs them", async () => {
+    await run({ screenReader: true });
+
+    expect(m.post.mock.calls[0][0].body).toMatchObject({
+      accessibility: true,
+      accessibilityOptions: { screenReaderAutomation: { autoReport: true } },
+    });
+  });
+
+  it("passes linear navigation through", async () => {
+    await run({ screenReader: true, screenReaderLinearNavigation: true });
+
+    expect(
+      m.post.mock.calls[0][0].body.accessibilityOptions.screenReaderAutomation,
+    ).toMatchObject({ linearNavigation: true });
+  });
+
+  it("turns the screen reader on when only linear navigation is asked for", async () => {
+    await run({ screenReaderLinearNavigation: true });
+
+    const body = m.post.mock.calls[0][0].body;
+    expect(body.accessibility).toBe(true);
+    expect(body.accessibilityOptions.screenReaderAutomation).toMatchObject({
+      autoReport: true,
+      linearNavigation: true,
+    });
+  });
+
+  it("tells the agent where the Screen Reader report lands and what it needs", async () => {
+    const result = await run({ screenReader: true });
+
+    const body = result.content.map((c: any) => c.text).join("\n");
+    expect(body).toContain("Screen Reader Automation is on");
+    expect(body).toContain("list_app_accessibility_screen_reader_builds");
+    expect(body).toMatch(/plan/);
+  });
+
+  it("keeps the argument descriptions within budget", async () => {
+    const { RUN_APP_AUTOMATE_SCHEMA } = await import(
+      "../../src/tools/appautomate-utils/native-execution/constants.js"
+    );
+    for (const key of ["screenReader", "screenReaderLinearNavigation"]) {
+      const description = (RUN_APP_AUTOMATE_SCHEMA as any)[key].description ?? "";
+      expect(description.length, key).toBeGreaterThan(0);
+      expect(description.length, key).toBeLessThanOrEqual(60);
+    }
+  });
+});
+
 // A native suite records App Accessibility scans only when it was built with BrowserStack's
 // instrumentation; saying so where the agent chooses the flag lets it check before a run
 // that would otherwise finish, 10 to 20 minutes later, with no scans.

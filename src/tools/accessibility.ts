@@ -916,7 +916,9 @@ function exportPendingMessages(
 ): string[] {
   return [
     `This report's CSV export is still being generated (waited ${formatDuration(error.waitedMs)}; large reports can take a few minutes). No issues have been read yet.`,
-    `Call fetchAccessibilityIssues again with ${sourceArgs(source)}${extraArgs} and exportTaskId: "${error.taskId}" to continue this export instead of starting a new one.`,
+    error.taskId
+      ? `Call fetchAccessibilityIssues again with ${sourceArgs(source)}${extraArgs} and exportTaskId: "${error.taskId}" to continue this export instead of starting a new one.`
+      : `Another export of this report, started elsewhere, is still running. Call fetchAccessibilityIssues again with ${sourceArgs(source)}${extraArgs} in a minute.`,
   ];
 }
 

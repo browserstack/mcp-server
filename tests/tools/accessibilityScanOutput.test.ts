@@ -722,8 +722,6 @@ describe("fetchAccessibilityIssues and App Accessibility manual reports", () => 
       next_page: 140,
       remaining: 143,
       summary: { by_severity: { serious: 144 }, by_rule: [], by_screen: [] },
-      deduplicated: false,
-      dashboard_count: 97,
       duplicate_occurrences: 47,
       hidden_issues: 0,
       scan_count: 7,
@@ -745,8 +743,6 @@ describe("fetchAccessibilityIssues and App Accessibility manual reports", () => 
       next_page: 140,
       remaining: 96,
       summary: { by_severity: { serious: 97 }, by_rule: [], by_screen: [] },
-      deduplicated: true,
-      dashboard_count: 97,
       duplicate_occurrences: 47,
       hidden_issues: 0,
       scan_count: 7,
@@ -776,6 +772,18 @@ describe("fetchAccessibilityIssues and App Accessibility manual reports", () => 
     expect(body).toContain("Make the target at least 48dp.");
   });
 
+  it("says the dashboard's counts could not be read rather than dropping them", async () => {
+    const base = await m.appReportIssues();
+    m.appReportIssues.mockResolvedValue({ ...base, duplicate_occurrences: null, hidden_issues: null });
+
+    const body = text(await handlers.fetchAccessibilityIssues({ appReportId: REPORT_ID }, CONTEXT));
+
+    expect(body).toContain(
+      "The dashboard's duplicate and hidden issue counts could not be read for this report.",
+    );
+    expect(body).not.toContain("duplicate occurrences are left out");
+  });
+
   it("says how many screens it read when the report has more than it reads", async () => {
     const base = await m.appReportIssues();
     m.appReportIssues.mockResolvedValue({ ...base, scan_count: 1200, screens_read: 1000 });
@@ -797,10 +805,10 @@ describe("fetchAccessibilityIssues and App Accessibility manual reports", () => 
     expect(m.appReportIssues).toHaveBeenCalledWith(REPORT_ID, 0);
     const body = text(result);
     expect(body).toContain(
-      "Retrieved 1 accessibility issue occurrences (Total: 144) from the App Accessibility manual report below (7 screens scanned on iPhone 15 Pro, ios 17.0)",
+      "Retrieved 1 accessibility issues (Total: 144) from the App Accessibility manual report below (7 screens scanned on iPhone 15 Pro, ios 17.0)",
     );
     expect(body).toContain(
-      "The dashboard counts 97 issues for this report: 47 of the occurrences are duplicates it folds, which the API does not mark.",
+      "47 duplicate occurrences are left out, as the dashboard leaves them out of its count.",
     );
     const block = body.indexOf("«UNTRUSTED App Accessibility manual report");
     expect(block).toBeGreaterThan(-1);

@@ -79,7 +79,12 @@ const REGIONAL_HOSTS: Record<
 > = {
   tm: { base: "testManagement" },
   tra: { base: "observabilityApi" },
-  app_accessibility: { base: "appAccessibilityApi" },
+  // `dashboard`: as for web_accessibility below, read with an ai_agent token on the routes
+  // app-accessibility's allowlist admits.
+  app_accessibility: {
+    base: "appAccessibilityApi",
+    hosts: { dashboard: "appAccessibilityDashboard" },
+  },
   // `dashboard`: the dashboard's own routes, which never read Basic auth; those capabilities
   // declare oauth2 themselves and the backend admits only what its ai_agent scope allows.
   web_accessibility: {
@@ -163,6 +168,7 @@ function credentialsFrom(config: BrowserStackConfig): Credentials {
  */
 const STRICT_NAMED_HOST_PRODUCTS: ReadonlySet<string> = new Set([
   "web_accessibility",
+  "app_accessibility",
 ]);
 
 /**
@@ -227,6 +233,30 @@ function resolveNamedHost(
         ? `Its index defines: ${known.join(", ")}.`
         : `Its index defines no named hosts.`) +
       ` Set CAPABILITY_REGISTRY_BASE_URL_${suffix} to override.`,
+  );
+}
+
+/**
+ * A product's named host for code outside the registry that calls the same routes: the same
+ * override, strict check and regional rules as a capability on that host. `declared` stands
+ * in for the index's `hosts` entry, the US default; it is only called when no override or
+ * regional host answers first, so an override works even while the account region is unknown.
+ */
+export function namedHostUrl(
+  product: string,
+  host: string,
+  declared: () => string,
+): string {
+  const hosts = Object.defineProperty({}, host, {
+    get: declared,
+    enumerable: true,
+  });
+  return resolveNamedHost(
+    product,
+    product.toUpperCase(),
+    host,
+    { hosts } as HostSource,
+    selectedEnvironment(),
   );
 }
 

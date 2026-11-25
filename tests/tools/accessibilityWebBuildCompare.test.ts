@@ -42,7 +42,7 @@ const LATEST: Build = { id: "c4latestbuildeeeeeeeeeeeeeeeeeeeeeeeeeee", name: "c
 const BUILDS = [LATEST, EMPTY, OTHER, NEW, OLD]; // the project's build list: newest first
 const PROJECT = "Shop";
 const APP_BUILD = "a9appbuildgggggggggggggggggggggggggggggg";
-const APP_API = "https://api-app-accessibility.browserstack.com/automate/api/v1";
+const APP_API = "https://app-accessibility.browserstack.com/automate/api/v1";
 
 const PAGE_A = "http://localhost:8765/home.html";
 const PAGE_B = "http://localhost:8765/usage.html";

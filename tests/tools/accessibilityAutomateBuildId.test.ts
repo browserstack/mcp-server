@@ -7,7 +7,14 @@ import { beforeEach, describe, expect, it, Mock, vi } from "vitest";
 // and is named if nothing knows the id; once a session is found, what it says is the answer.
 
 vi.mock("../../src/lib/apiClient.js", () => ({
-  apiClient: { get: vi.fn() },
+  apiClient: {
+    get: vi.fn(),
+    // The App Accessibility dashboard's token.
+    post: vi.fn(async () => ({
+      status: 200,
+      data: { access_token: "agent-token", expires_in: 3600 },
+    })),
+  },
 }));
 // Web builds are looked up on the Accessibility dashboard with a minted token; no auth server here.
 vi.mock("../../src/tools/capability-registry/egress.js", async (original) => ({

@@ -248,7 +248,9 @@ async function runAppTestsOnBrowserStack(
   },
   config: BrowserStackConfig,
 ): Promise<CallToolResult> {
-  const screenReader = args.screenReader === true;
+  // Linear navigation is a screen reader option, so asking for it turns the screen reader on.
+  const screenReader =
+    args.screenReader === true || args.screenReaderLinearNavigation === true;
   // Screen Reader Automation runs inside the accessibility run, so it turns the checks on.
   const accessibility = args.accessibility === true || screenReader;
   const nativeOptions = {

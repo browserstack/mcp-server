@@ -259,6 +259,17 @@ describe("runAppTestsOnBrowserStack and Screen Reader Automation", () => {
     ).toMatchObject({ linearNavigation: true });
   });
 
+  it("turns the screen reader on when only linear navigation is asked for", async () => {
+    await run({ screenReaderLinearNavigation: true });
+
+    const body = m.post.mock.calls[0][0].body;
+    expect(body.accessibility).toBe(true);
+    expect(body.accessibilityOptions.screenReaderAutomation).toMatchObject({
+      autoReport: true,
+      linearNavigation: true,
+    });
+  });
+
   it("tells the agent where the Screen Reader report lands and what it needs", async () => {
     const result = await run({ screenReader: true });
 
@@ -274,7 +285,8 @@ describe("runAppTestsOnBrowserStack and Screen Reader Automation", () => {
     );
     for (const key of ["screenReader", "screenReaderLinearNavigation"]) {
       const description = (RUN_APP_AUTOMATE_SCHEMA as any)[key].description ?? "";
-      expect(description.length, key).toBeLessThanOrEqual(120);
+      expect(description.length, key).toBeGreaterThan(0);
+      expect(description.length, key).toBeLessThanOrEqual(60);
     }
   });
 });

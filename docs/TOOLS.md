@@ -362,7 +362,9 @@ searchCapability  →  describeCapability  →  invokeCapability
 
 Read a Bug Capture recording from its link (`toolkit.browserstack.com/sessions/<id>`, or a migrated Bird Eats Bug link). You can read a recording here only if you can open it in Bug Capture itself. Auth headers and cookies are always masked, and request and response bodies are off unless asked for.
 
-| Tool | What it does |
+These are catalog capabilities, not tools of their own: your assistant reaches them through `searchCapability` → `describeCapability` → `invokeCapability`.
+
+| Capability | What it does |
 |---|---|
 | `get_bug_capture_recording` | Summarize one recording: title, description, start page, browser, OS, when it started, which data it holds, and how many console logs, errors and failed requests it has. Start here. |
 | `list_bug_capture_console_logs` | List the recording's console logs (errors by default, or warnings, or every level), paged. |

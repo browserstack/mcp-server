@@ -405,7 +405,8 @@ describe("the App Accessibility dashboard follows the account's region", () => {
   // A lower-env session that overrides only the product host must not send its dashboard
   // calls to production.
   it("refuses the dashboard host when only the product host is overridden", async () => {
-    process.env[PRODUCT_OVERRIDE] = "https://app-accessibility-staging.example.com";
+    process.env[PRODUCT_OVERRIDE] =
+      "https://app-accessibility-staging.example.com";
     await expect(resolveIn("us", "dashboard")).rejects.toThrow(
       /overrides product 'app_accessibility', but not its 'dashboard' host/,
     );

@@ -137,12 +137,15 @@ describe("readUploadFile", () => {
     );
     fs.writeFileSync(outside, "%PDF");
     try {
+      // A path outside the folder is refused with the same "no file named …"
+      // listing as a missing one, so it cannot reveal whether the outside file
+      // exists.
       expect(() => readUploadFile(outside, dir)).toThrow(
-        /must be located inside/,
+        /No file named .* in the upload folder/,
       );
       expect(() =>
         readUploadFile(path.join("..", path.basename(outside)), dir),
-      ).toThrow(/must be located inside/);
+      ).toThrow(/No file named .* in the upload folder/);
     } finally {
       fs.rmSync(outside, { force: true });
     }

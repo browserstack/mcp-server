@@ -4,6 +4,7 @@ import {
   markCallerFault,
   recordRegionProbeFailure,
 } from "./upstream-status.js";
+import { wrapUntrusted } from "./untrusted-content.js";
 
 const MAX_ERROR_TEXT = 500;
 const BODY_FIELDS = ["message", "error", "errors"] as const;
@@ -56,13 +57,18 @@ function bodyText(data: unknown): string | undefined {
  * it prefers the body's `message`, `error` or `errors` field, serialising
  * objects, and uses the whole body when none of those fields exist. An empty,
  * whitespace-only or HTML-document body falls back to the error's own message.
+ *
+ * The backend response body is untrusted content, so it is returned wrapped
+ * with {@link wrapUntrusted}, the same as other backend-supplied output. It is
+ * capped first so the wrapper's closing marker is never truncated. The
+ * server-authored fallbacks (`err.message`, `defaultText`) are returned plain.
  * @param err - The error object to describe
  * @param defaultText - The fallback error message
  */
 export function errorText(err: unknown, defaultText: string): string {
   if (err instanceof AxiosError) {
     const text = bodyText(err.response?.data);
-    if (text) return text;
+    if (text) return wrapUntrusted("API response", text);
     return clip(err.message || defaultText);
   }
   if (err instanceof Error) return clip(err.message || defaultText);

@@ -1,6 +1,7 @@
 import { apiClient } from "../../lib/apiClient.js";
 import { getBrowserStackAuth } from "../../lib/get-auth.js";
 import { BrowserStackConfig } from "../../lib/types.js";
+import { encodePathSegment } from "../../lib/path-segment.js";
 import {
   getO11yBaseUrl,
   getRcaViewGuidance,
@@ -122,10 +123,10 @@ export function toTrimmedResult(
 export function buildPollUrl(testRunId: string, turnId: string): string {
   return (
     getO11yBaseUrl() +
-    RCA_CHAT_POLL_PATH.replace("{testRunId}", testRunId).replace(
-      "{turnId}",
-      turnId,
-    )
+    RCA_CHAT_POLL_PATH.replace(
+      "{testRunId}",
+      encodePathSegment(testRunId, "testRunId"),
+    ).replace("{turnId}", encodePathSegment(turnId, "turnId"))
   );
 }
 

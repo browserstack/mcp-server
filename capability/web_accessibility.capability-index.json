@@ -6026,6 +6026,7 @@
       },
       {
         "name": "bulk_hide_issue_components",
+        "disabled": true,
         "method": "PATCH",
         "path": "/api/issues/bulk_hide",
         "host": "dashboard",
@@ -6297,6 +6298,7 @@
       },
       {
         "name": "list_bulk_review_categories",
+        "disabled": true,
         "method": "GET",
         "path": "/api/v1/bulk-review/categories",
         "host": "dashboard",
@@ -6496,6 +6498,7 @@
       },
       {
         "name": "get_bulk_review_component",
+        "disabled": true,
         "method": "GET",
         "path": "/api/v1/bulk-review/categories/{category_id}/components",
         "host": "dashboard",
@@ -6694,6 +6697,7 @@
       },
       {
         "name": "get_bulk_review_component_page",
+        "disabled": true,
         "method": "GET",
         "path": "/api/v1/bulk-review/categories/{category_id}/component-pages",
         "host": "dashboard",
@@ -7013,6 +7017,7 @@
       },
       {
         "name": "get_bulk_review_page",
+        "disabled": true,
         "method": "GET",
         "path": "/api/v1/bulk-review/categories/{category_id}/page-review",
         "host": "dashboard",
@@ -7324,6 +7329,7 @@
       },
       {
         "name": "submit_bulk_review_decisions",
+        "disabled": true,
         "method": "POST",
         "path": "/api/v1/bulk-review/reviews",
         "host": "dashboard",
@@ -7528,6 +7534,7 @@
       },
       {
         "name": "undo_bulk_review_decisions",
+        "disabled": true,
         "method": "PATCH",
         "path": "/api/v1/bulk-review/reviews",
         "host": "dashboard",

@@ -1,3 +1,4 @@
+import { unwrapUntrusted } from "../fixtures/unwrap";
 import { HttpError } from "../../src/lib/error";
 import { describe, it, expect, vi, beforeEach, Mock } from "vitest";
 import {
@@ -101,7 +102,7 @@ describe("RCA Agent Tools", () => {
       );
 
       expect(result.isError).toBeFalsy();
-      const parsed = JSON.parse(result.content[0].text);
+      const parsed = JSON.parse(unwrapUntrusted(result.content[0].text));
       expect(parsed).toEqual([101, 102, 103]);
     });
 
@@ -143,7 +144,7 @@ describe("RCA Agent Tools", () => {
         TestStatus.FAILED,
         true,
       );
-      const parsed = JSON.parse(result.content[0].text);
+      const parsed = JSON.parse(unwrapUntrusted(result.content[0].text));
       expect(parsed[0].failure.category).toBe("Assertion");
     });
 

@@ -22,6 +22,8 @@ jobs:
       uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
       with:
         node-version: ${{ matrix.node-version }}
+    - name: Apply hardened npm config
+      run: cp .npmrc.sample .npmrc
     - run: npm ci
     - run: npm test
     # A contract correction can move `returns` and leave the response schema behind.

@@ -1,9 +1,10 @@
+import { createHash } from "crypto";
 import { PercyIntegrationTypeEnum } from "../common/types.js";
 import { CallerError } from "../../../lib/error.js";
 import { trackedFetch } from "../../../lib/upstream-status.js";
+import globalConfig from "../../../config.js";
 
-let globalPercyToken: string | null = null;
-let globalProjectName: string | null = null;
+const tokenCache = new Map<string, string>();
 
 async function fetchTokenFromAPI(
   projectName: string,
@@ -39,21 +40,34 @@ async function fetchTokenFromAPI(
   return data.token;
 }
 
+function tokenCacheKey(
+  projectName: string,
+  authorization: string,
+  type?: PercyIntegrationTypeEnum,
+): string {
+  return createHash("sha256")
+    .update(`${authorization}\u0000${projectName}\u0000${type ?? ""}`)
+    .digest("hex");
+}
+
 export async function fetchPercyToken(
   projectName: string,
   authorization: string,
   options: { type?: PercyIntegrationTypeEnum } = {},
 ): Promise<string> {
-  if (globalProjectName !== projectName) {
-    globalProjectName = projectName;
-    globalPercyToken = null;
+  // Hosted mode serves many accounts from one process: never hold a token across
+  // calls there. Local (single-account) runs keep the cache, keyed on credentials.
+  if (globalConfig.REMOTE_MCP) {
+    return fetchTokenFromAPI(projectName, authorization, options);
   }
 
-  if (globalPercyToken) {
-    return globalPercyToken;
+  const key = tokenCacheKey(projectName, authorization, options.type);
+  const cached = tokenCache.get(key);
+  if (cached) {
+    return cached;
   }
 
   const token = await fetchTokenFromAPI(projectName, authorization, options);
-  globalPercyToken = token;
+  tokenCache.set(key, token);
   return token;
 }

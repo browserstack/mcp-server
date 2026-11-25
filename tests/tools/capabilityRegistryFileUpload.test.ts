@@ -69,7 +69,7 @@ describe("a file parameter", () => {
     const { bind } = await bindWith(base);
     expect(() =>
       bind(CAPABILITY as never, { body: { file: outside } }),
-    ).toThrow(/must be located inside/);
+    ).toThrow(/must be an existing file inside/);
   });
 
   it("refuses an extension that is not an app build", async () => {
@@ -85,7 +85,7 @@ describe("a file parameter", () => {
     const { bind } = await bindWith(base);
     expect(() =>
       bind(CAPABILITY as never, { body: { file: join(base, "gone.apk") } }),
-    ).toThrow(/File not found/);
+    ).toThrow(/must be an existing file inside/);
   });
 
   it("refuses a build under a hidden directory", async () => {

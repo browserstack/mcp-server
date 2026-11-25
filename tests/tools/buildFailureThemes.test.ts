@@ -1,3 +1,4 @@
+import { unwrapUntrusted } from "../fixtures/unwrap";
 import { describe, it, expect, vi, beforeEach, Mock } from "vitest";
 import addTfaRcaCollaborationTools, {
   getBuildFailureThemesTool,
@@ -386,7 +387,7 @@ describe("getBuildFailureThemesTool (direct)", () => {
       getBuildFailureThemesTool({ buildUuid: "b-1" }, mockConfig as any),
     );
 
-    const payload = JSON.parse(result.content[0].text as string);
+    const payload = JSON.parse(unwrapUntrusted(result.content[0].text as string));
     expect(payload.ready).toBe(true);
     expect(payload.buildThemes).toHaveLength(1);
   });
@@ -405,7 +406,7 @@ describe("listTestsInFailureThemeTool (direct)", () => {
       mockConfig as any,
     );
 
-    const payload = JSON.parse(result.content[0].text as string);
+    const payload = JSON.parse(unwrapUntrusted(result.content[0].text as string));
     expect(payload.tests).toHaveLength(1);
     expect(payload.tests[0].testRunId).toBe(1);
   });
@@ -425,7 +426,7 @@ describe("getBuildFailureThemes handler", () => {
     );
 
     expect(result.isError).toBeFalsy();
-    const payload = JSON.parse(result.content[0].text as string);
+    const payload = JSON.parse(unwrapUntrusted(result.content[0].text as string));
     expect(payload.ready).toBe(true);
     expect(trackMCP).toHaveBeenCalledTimes(1);
     expect((trackMCP as Mock).mock.calls[0][0]).toBe("getBuildFailureThemes");

@@ -3,6 +3,9 @@ import { z } from "zod";
 import {
   FIX_WORKFLOW_NAME,
   FIX_WORKFLOW_TITLE,
+  FIX_WORKFLOW_POINTER,
+  FIX_WORKFLOW_WITH_REPORT,
+  fixWorkflowForAgent,
   fixWorkflowText,
 } from "./accessiblity-utils/fix-workflow.js";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
@@ -52,6 +55,7 @@ import { NEEDS_A11Y_CONFIG_ID, NEEDS_A11Y_SCAN_ID } from "./tool-handoff.js";
 import { isEnabled as capabilityRegistryEnabled } from "./capability-registry/config.js";
 import {
   applyMemory,
+  LATER_CHARACTERS,
   memoryForReport,
   type MemoryView,
 } from "./accessiblity-utils/fp-memory.js";
@@ -110,7 +114,9 @@ import {
   localScanNotRerunNote,
   otherPageNote,
   rescanHint,
+  savedScopeLine,
   savedSettingDifferences,
+  scopeKind,
   uncheckedSettings,
   unusedLoginAndTunnel,
   withNotes,
@@ -175,7 +181,8 @@ async function initializeReportFetcher(
  * which names what to use instead so an agent stops reaching for it.
  */
 const ACCESSIBILITY_EXPERT_DEPRECATED =
-  "Note: accessibilityExpert is deprecated and will be removed in a future release. To list or filter a report's issues, for example those failing a WCAG criterion, use fetchAccessibilityIssues and answer from its result; to scan a page, use startAccessibilityScan. For advice on a report, such as how to raise its score or which issues to fix first, call askBrowserStackAI with product a11y and give the user its answer. For a general WCAG or ARIA question, call askBrowserStackAI with product a11y too. If askBrowserStackAI says it is not enabled for this account, answer from the report's issues.";
+  "Note: accessibilityExpert is deprecated and will be removed in a future release. To list or filter a report's issues, for example those failing a WCAG criterion, use fetchAccessibilityIssues and answer from its result; to scan a page, use startAccessibilityScan. For advice on a report, such as how to raise its score or which issues to fix first, call askBrowserStackAI with product a11y and give the user its answer. For a general WCAG or ARIA question, call askBrowserStackAI with product a11y too. If askBrowserStackAI says it is not enabled for this account, answer from the report's issues. " +
+  FIX_WORKFLOW_POINTER;
 
 async function executeAccessibilityRAG(
   args: { query: string },
@@ -222,6 +229,7 @@ interface FetchIssuesArgs {
   pageUrl?: string;
   compareWith?: string;
   exportTaskId?: string;
+  fixWorkflow?: boolean;
 }
 
 /** A source named by its ids, or a dashboard link still to be resolved to them. */
@@ -266,9 +274,21 @@ async function executeFetchAccessibilityIssues(
       undefined,
       config,
     );
+    const namesReport = Boolean(
+      args.scanId ||
+      args.scanRunId ||
+      args.buildId ||
+      args.workflowReportId ||
+      args.appReportId ||
+      args.reportUrl,
+    );
+    // The workflow alone: the agent wants to fix issues and has no report yet.
+    if (args.fixWorkflow && !namesReport) {
+      return createSuccessResponse([fixWorkflowForAgent()]);
+    }
     const source = issueSourceFrom(args);
     if (typeof source === "string") return createErrorResponse(source);
-    return await fetchAccessibilityIssues(
+    const result = await fetchAccessibilityIssues(
       source,
       config,
       args.cursor,
@@ -279,6 +299,15 @@ async function executeFetchAccessibilityIssues(
         exportTaskId: args.exportTaskId,
       },
     );
+    // With a report, only a line that points at the workflow, and only on the first page: the
+    // workflow itself on top of a large first page is past what clients show inline.
+    if (args.fixWorkflow && !result.isError && !args.cursor) {
+      result.content = [
+        ...(result.content ?? []),
+        { type: "text", text: FIX_WORKFLOW_WITH_REPORT },
+      ];
+    }
+    return result;
   } catch (error) {
     return handleMCPError("fetchAccessibilityIssues", server, config, error);
   }
@@ -574,7 +603,7 @@ function scoreNote(score: ReportScore | undefined): string[] {
  * agent works out for itself from one page of issues.
  */
 function askAiNote(source: IssueSource): string {
-  return `For anything about this report beyond listing its issues, such as a plan to fix them or raise the score, what to fix first, or why it scored as it did, call askBrowserStackAI with product a11y, the user's question and this report (${describeSource(source)}), and give the user its answer. BrowserStack AI answers from the whole report, so do not work out the plan yourself. If askBrowserStackAI says it is not enabled for this account, tell the user, then answer from the issues and score above.`;
+  return `${FIX_WORKFLOW_POINTER} For advice about this report beyond listing its issues, such as how to raise the score, what to fix first, or why it scored as it did, call askBrowserStackAI with product a11y, the user's question and this report (${describeSource(source)}), and give the user its answer. BrowserStack AI answers from the whole report. If askBrowserStackAI says it is not enabled for this account, tell the user, then answer from the issues and score above.`;
 }
 
 const WEB_ISSUES_NOTE =
@@ -584,11 +613,22 @@ const WEB_ISSUES_NOTE =
 // cases, issues by WCAG guideline, the elements behind a rule, one issue's detail, merging
 // reports) and once told the user test cases "aren't available". Point at the dashboard views.
 const WEB_MORE_VIEWS_NOTE =
-  "This answer is the issue list only. For a build's or scan run's test cases, its issues grouped by rule or by WCAG guideline, the elements behind a rule or guideline, one issue's full detail, or several Workflow Analyzer reports merged into one, call searchCapability with product web_accessibility: those are separate dashboard views. Check searchCapability before telling the user one is unavailable, and if a view then refuses (for example a 403 for scope, plan or access), relay that refusal as it came.";
+  "This answer is the issue list only. For a build's or scan run's test cases, its issues grouped by rule or by WCAG guideline, the elements behind a rule or guideline, one issue's full detail, or several Workflow Analyzer reports merged into one, call searchCapability with product web_accessibility: those are separate dashboard views. Check searchCapability before telling the user one is unavailable, and if a view then refuses (for example a 403 for the token's permissions, plan or access), relay that refusal as it came.";
 
 /** The CSV link, with what it is for: an answer gives a page of issues at a time. */
-function fullReportLine(reportLink: string): string {
-  return `The full list of issues is a CSV, valid for about 12 hours: download it when every issue is needed at once (this answer gives them a page at a time), from the following link: ${reportLink}`;
+function fullReportLine(
+  reportLink: string,
+  fp?: { marked: number; laterMarked: number; laterUnlisted: number },
+): string {
+  const line = `The full list of issues is a CSV, valid for about 12 hours: download it when every issue is needed at once (this answer gives them a page at a time), from the following link: ${reportLink}`;
+  // The CSV is the export as the scanner wrote it: agents that read it found no saved false
+  // positives in it and told the user there were none.
+  if (!fp || fp.marked + fp.laterMarked === 0) return line;
+  return `${line} The CSV still lists the issues saved as false positives and does not mark them: before you report anything from it, remove the issues this answer marks saved_fp_entries${
+    fp.laterUnlisted
+      ? `, and read the later pages this answer names for the ${fp.laterUnlisted} it only counts`
+      : ""
+  }.`;
 }
 
 /** How many new and resolved issues a comparison lists per page. */
@@ -835,6 +875,7 @@ async function appBuildMessages(
     ...excludedIssuesNote(null, 0, report.hidden_issues),
     APP_ISSUES_SHAPE,
     `Issues: ${wrapUntrusted("accessibility scan results", JSON.stringify({ issues: records, rules: report.rules, screens: report.screens }, null, 2))}`,
+    ...(cursor === 0 ? [FIX_WORKFLOW_POINTER] : []),
     closingMessage(next_page, report.remaining, source, stillProcessing),
   ];
 }
@@ -904,6 +945,7 @@ async function appReportMessages(
     ...excludedIssuesNote(null, 0, report.hidden_issues),
     APP_ISSUES_SHAPE,
     `Issues: ${wrapUntrusted("accessibility scan results", JSON.stringify({ issues: records, rules: report.rules, screens: report.screens }, null, 2))}`,
+    ...(cursor === 0 ? [FIX_WORKFLOW_POINTER] : []),
     closingMessage(next_page, report.remaining, source, stillProcessing),
   ];
 }
@@ -1162,6 +1204,7 @@ async function fetchAccessibilityIssues(
       hidden_issues,
       page,
       error_pages = [],
+      later_pages,
     },
     score,
   ] = await Promise.all([
@@ -1178,63 +1221,107 @@ async function fetchAccessibilityIssues(
     (p) => p.status !== "redirect" && !errorPageUrls.has(samePage(p.pageUrl)),
   );
   // The memory for this page's rules comes with the issues, so it is applied whether or
-  // not the agent thinks to ask for it.
-  const fp = applyMemory(
-    await memoryForReport(setupAuth(config), Object.keys(rules ?? {}), pageUrl),
-    records,
-    pageUrl,
-  );
-  const beforeRemoval = fp.marked
-    ? ", before removing saved false positives"
-    : "";
+  // not the agent thinks to ask for it. The first page reads it for every rule in the
+  // report: an agent that stopped there, or read the CSV, missed the false positives that
+  // were only on later pages and reported them as real.
+  const ruleCodes = cursor
+    ? Object.keys(rules ?? {})
+    : (summary?.by_rule.map((r) => r.issue_type) ?? Object.keys(rules ?? {}));
+  const memory = await memoryForReport(setupAuth(config), ruleCodes, pageUrl);
+  const csvLink = reportLink;
 
-  return createSuccessResponse([
-    ...fp.lead,
-    ...preface,
-    ...processingNote(processing),
-    // What the run did not check, said on the first page with the whole report's counts.
-    ...(cursor
-      ? []
-      : [
-          ...errorPagesNote(
-            error_pages,
-            source.kind === "build" ? "run the tests again" : "scan again",
-          ),
-          ...(notScanned.length
-            ? [
-                `⚠️ ${pageReasons(notScanned, ["was not scanned, so its issues are not in this report", "were not scanned, so their issues are not in this report"])}`,
-              ]
-            : []),
-        ]),
-    // A page that did not load has no issues of its own to count.
-    ...(page && error_pages.length === 0 ? pageNote(page) : []),
-    `Retrieved ${page_length} accessibility issues (Total: ${total_issues}${beforeRemoval})`,
-    // The whole report's score and counts, said on its first page.
-    ...scoreNote(score),
-    ...(cursor ? [] : webSummaryNote(summary, total_issues)),
-    ...excludedIssuesNote(
-      duplicate_issues,
-      unlinked_duplicates,
-      hidden_issues,
-      true,
+  return withinResultLimit((laterBudget) =>
+    webIssuesAnswer(
+      applyMemory(memory, records, pageUrl, later_pages, laterBudget),
     ),
-    fullReportLine(reportLink),
-    WEB_ISSUES_NOTE,
-    // Said once, on the first page, and only when searchCapability is there to follow it to.
-    ...(cursor || !capabilityRegistryEnabled() ? [] : [WEB_MORE_VIEWS_NOTE]),
-    ...fp.notes,
-    `Issues: ${wrapUntrusted("accessibility scan results", JSON.stringify({ issues: fp.records, rules }))}`,
-    ...fp.closing,
-    ...(cursor ? [] : [askAiNote(source)]),
-    closingMessage(
-      next_page,
-      remaining,
-      source,
-      stillProcessing,
-      pageArg,
-      error_pages.length > 0 || notScanned.length > 0,
-    ),
-  ]);
+  );
+
+  function webIssuesAnswer(
+    fp: MemoryView<(typeof records)[number]>,
+  ): CallToolResult {
+    const beforeRemoval =
+      fp.marked + fp.laterMarked
+        ? ", before removing saved false positives"
+        : "";
+    return createSuccessResponse([
+      ...fp.lead,
+      ...preface,
+      ...processingNote(processing),
+      // What the run did not check, said on the first page with the whole report's counts.
+      ...(cursor
+        ? []
+        : [
+            ...errorPagesNote(
+              error_pages,
+              source.kind === "build" ? "run the tests again" : "scan again",
+            ),
+            ...(notScanned.length
+              ? [
+                  `⚠️ ${pageReasons(notScanned, ["was not scanned, so its issues are not in this report", "were not scanned, so their issues are not in this report"])}`,
+                ]
+              : []),
+          ]),
+      // A page that did not load has no issues of its own to count.
+      ...(page && error_pages.length === 0 ? pageNote(page) : []),
+      `Retrieved ${page_length} accessibility issues (Total: ${total_issues}${beforeRemoval})`,
+      // The whole report's score and counts, said on its first page.
+      ...scoreNote(score),
+      ...(cursor ? [] : webSummaryNote(summary, total_issues)),
+      ...excludedIssuesNote(
+        duplicate_issues,
+        unlinked_duplicates,
+        hidden_issues,
+        true,
+      ),
+      fullReportLine(csvLink, fp),
+      WEB_ISSUES_NOTE,
+      // Said once, on the first page, and only when searchCapability is there to follow it to.
+      ...(cursor || !capabilityRegistryEnabled() ? [] : [WEB_MORE_VIEWS_NOTE]),
+      ...fp.notes,
+      `Issues: ${wrapUntrusted("accessibility scan results", JSON.stringify({ issues: fp.records, rules }))}`,
+      ...fp.later,
+      ...fp.closing,
+      ...(cursor ? [] : [askAiNote(source)]),
+      closingMessage(
+        next_page,
+        remaining,
+        source,
+        stillProcessing,
+        pageArg,
+        error_pages.length > 0 || notScanned.length > 0,
+      ),
+    ]);
+  }
+}
+
+/**
+ * About where Claude Code stops showing a tool's result and saves it to a file instead: a
+ * first page of 56 KB was saved, and an agent with no file tool could not read it at all.
+ */
+const RESULT_CHARACTERS = 45_000;
+
+/**
+ * An answer whose first page lists later pages' saved false positives, listing fewer of
+ * them (and counting the rest by page) when the whole answer would pass that limit.
+ */
+function withinResultLimit(
+  respond: (laterBudget: number) => CallToolResult,
+): CallToolResult {
+  const length = (result: CallToolResult) =>
+    result.content.reduce(
+      (n, part) => n + (part.type === "text" ? part.text.length : 0),
+      0,
+    );
+  // Listing fewer adds the count of the rest, so shrink with a margin, a few times at most.
+  let budget = LATER_CHARACTERS;
+  let result = respond(budget);
+  for (let i = 0; i < 3 && budget > 0; i++) {
+    const over = length(result) - RESULT_CHARACTERS;
+    if (over <= 0) break;
+    budget = Math.max(0, budget - over - 1_000);
+    result = respond(budget);
+  }
+  return result;
 }
 
 /** What one page of a report holds, in the dashboard's page-view terms. */
@@ -1467,6 +1554,21 @@ function planDowngradeNote(asked: ScanSettings, applied: ScanSettings): string {
 }
 
 /**
+ * A scope asked for that the run does not show, so the issues are not taken for the part of
+ * the page asked for when they are the whole page's, or may be.
+ */
+function scopeNote(asked: ScanSettings, applied: ScanSettings): string {
+  if (!asked.scanScope) return "";
+  if (applied.scanScope === null) {
+    return "A scanScope was asked for, but this scan ran on the whole page, so the issues found are the whole page's.";
+  }
+  if (applied.scanScope === undefined) {
+    return `Only part of the page was asked for (${scopeKind(asked.scanScope)}); the run's settings do not say whether the scan kept to it.`;
+  }
+  return "";
+}
+
+/**
  * What the scan ran with, read back from the run, since an unset setting takes the API's
  * default and the plan can turn advanced rules off. When it cannot be read, only what was
  * asked for is said: a guessed default would be stated as fact.
@@ -1493,6 +1595,9 @@ function scanSettingsNote(
       settings.screenReader !== undefined
         ? `screen reader ${settings.screenReader === "VO" ? "VoiceOver" : settings.screenReader}`
         : "",
+      settings.scanScope
+        ? `part of the page only (${scopeKind(settings.scanScope)})`
+        : "",
     ]
       .filter(Boolean)
       .join(", ");
@@ -1500,6 +1605,7 @@ function scanSettingsNote(
     return [
       `Scan settings, as the scan ran: ${describe(applied)}.`,
       planDowngradeNote(asked, applied),
+      scopeNote(asked, applied),
     ]
       .filter(Boolean)
       .join(" ");
@@ -1565,6 +1671,7 @@ function startNewScan(
       advancedRules: args.advancedRules,
       experimentalRules: args.experimentalRules,
       screenReader: args.screenReader,
+      scanScope: args.scanScope,
     },
     args.localIdentifier,
   );
@@ -1633,10 +1740,9 @@ async function executeCreateAuthConfig(
 
     return createSuccessResponse([
       `✅ Auth config "${args.name}" created successfully with ID: ${result.data?.id}`,
-      `Auth config details: ${JSON.stringify(
-        safeAuthConfigData(result),
-        null,
-        2,
+      `Auth config details: ${wrapUntrusted(
+        "auth config",
+        JSON.stringify(safeAuthConfigData(result), null, 2),
       )}`,
     ]);
   } catch (error) {
@@ -1676,10 +1782,9 @@ async function executeGetAuthConfig(
 
     return createSuccessResponse([
       `✅ Auth config retrieved successfully`,
-      `Auth config details: ${JSON.stringify(
-        safeAuthConfigData(result),
-        null,
-        2,
+      `Auth config details: ${wrapUntrusted(
+        "auth config",
+        JSON.stringify(safeAuthConfigData(result), null, 2),
       )}`,
     ]);
   } catch (error) {
@@ -1701,6 +1806,21 @@ function renameReason(
   return `A scan named "${name}" already exists on this account`;
 }
 
+/** The error a page's scan log gives when the scan's scanScope matches nothing on it. */
+const SCOPE_NOT_FOUND = "PART_OF_PAGE_SCOPE_NOT_FOUND";
+
+/**
+ * What to do when the page was not scanned because its scanScope matched nothing on it. A
+ * re-run keeps the scan's saved scope, so the whole page takes a new scan.
+ */
+function scopeNotFoundHint(details: ScanFailureDetails): string[] {
+  return details.pages.some((page) => page.reason.includes(SCOPE_NOT_FOUND))
+    ? [
+        "Nothing on the page matched the scan's scanScope, so the page was not scanned. Check the selector against the page, or start a new scan without scanScope and without scanId to scan the whole page.",
+      ]
+    : [];
+}
+
 /**
  * A failed run, with the reason the API gives for it: the run's own and each page's. It used
  * to say only "The dashboard says why", which left an agent nothing to tell the user.
@@ -1717,6 +1837,7 @@ function createScanFailureResponse(
     [
       `❌ Accessibility scan "${name}" failed with status: ${status}. Scan ID: ${scanId} and Scan Run ID: ${scanRunId}.`,
       ...failureReasons(details),
+      ...scopeNotFoundHint(details),
       scanDashboardNote(dashboardLink, scanId),
     ].join("\n"),
   );
@@ -1758,9 +1879,10 @@ function createScanSuccessResponse(
   ),
 ): CallToolResult {
   const cursor = report.next_page;
-  const beforeRemoval = fp.marked
-    ? " (before removing saved false positives)"
-    : "";
+  const beforeRemoval =
+    fp.marked + fp.laterMarked
+      ? " (before removing saved false positives)"
+      : "";
   const messages = [
     ...fp.lead,
     `Accessibility scan "${name}" completed. ${scanDashboardNote(dashboardLink, scanId)}`,
@@ -1768,7 +1890,7 @@ function createScanSuccessResponse(
     // The parser leaves an error page's rows out of the count; this says why.
     ...errorPagesNote(report.error_pages ?? [], "scan again"),
     scanSettingsNote(settings, applied),
-    fullReportLine(reportUrl),
+    fullReportLine(reportUrl, fp),
     `We found ${report.total_issues} issues${beforeRemoval}. Below are the details of the ${report.page_length} most critical issues.`,
     ...scoreNote(score),
     ...webSummaryNote(report.summary, report.total_issues),
@@ -1782,6 +1904,7 @@ function createScanSuccessResponse(
     ...(capabilityRegistryEnabled() ? [WEB_MORE_VIEWS_NOTE] : []),
     ...fp.notes,
     `Scan results: ${wrapUntrusted("accessibility scan results", JSON.stringify({ issues: fp.records, rules: report.rules }))}`,
+    ...fp.later,
     ...fp.closing,
     askAiNote({ kind: "scan", scanId, scanRunId }),
   ];
@@ -1890,29 +2013,34 @@ async function scanOutcome(
     parseAccessibilityReportFromCSV(reportLink),
     reportFetcher.score({ kind: "scan", scanId, scanRunId }),
   ]);
-  // Saved false positives for this page's rules are removed before the issues are shown,
-  // for a new scan and a re-run alike.
-  const fp = applyMemory(
-    await memoryForReport(
-      setupAuth(config),
+  // Saved false positives are removed before the issues are shown, for a new scan and a
+  // re-run alike: read for every rule in the report, as this is its first page.
+  const memory = await memoryForReport(
+    setupAuth(config),
+    report.summary?.by_rule.map((r) => r.issue_type) ??
       Object.keys(report.rules ?? {}),
-      scan.pageURL,
-    ),
-    report.records,
     scan.pageURL,
   );
   return [
-    createScanSuccessResponse(
-      scanName,
-      report,
-      scanId,
-      scanRunId,
-      reportLink,
-      dashboardLink,
-      settings,
-      applied,
-      score,
-      fp,
+    withinResultLimit((laterBudget) =>
+      createScanSuccessResponse(
+        scanName,
+        report,
+        scanId,
+        scanRunId,
+        reportLink,
+        dashboardLink,
+        settings,
+        applied,
+        score,
+        applyMemory(
+          memory,
+          report.records,
+          scan.pageURL,
+          report.later_pages,
+          laterBudget,
+        ),
+      ),
     ),
     "completed",
   ];
@@ -2010,6 +2138,7 @@ async function rerunAccessibilityScan(
         `Scan ${scanId} was not re-run: a re-run uses the scan's saved settings, and ${one ? "this one differs" : "these differ"} from what was passed:`,
         ...differences.map((difference) => `- ${difference}`),
         `To re-run it with its saved settings, call startAccessibilityScan again with scanId "${scanId}" and without ${one ? "that setting" : "those settings"}. To scan with the settings passed, call it without scanId: that starts a new scan, whose runs can't be compared with this scan's.`,
+        ...savedScopeLine(saved),
         ...nameLine,
       ].join("\n"),
     ]);
@@ -2031,6 +2160,7 @@ async function rerunAccessibilityScan(
     ...(saved.localTestingEnabled
       ? [localRerunNote(args.localIdentifier)]
       : []),
+    ...savedScopeLine(saved),
     ...(unchecked.length
       ? [
           `${unchecked.join(", ")} could not be checked against the scan's saved settings, which the API does not give back; the run uses the saved ones.`,
@@ -2115,14 +2245,12 @@ export default function addAccessibilityTools(
         .min(1)
         .optional()
         .describe(
-          "ID of a BrowserStack Local tunnel you started, for localhost or internal URLs.",
+          "BrowserStack Local tunnel ID, for localhost or internal URLs.",
         ),
       advancedRules: z
         .boolean()
         .optional()
-        .describe(
-          "Run advanced rules (default true; off if the plan lacks them).",
-        ),
+        .describe("Run advanced rules (default true if the plan has them)."),
       wcagVersion: z
         .enum(Object.keys(WCAG_VERSIONS) as [keyof typeof WCAG_VERSIONS])
         .optional()
@@ -2143,13 +2271,22 @@ export default function addAccessibilityTools(
         .boolean()
         .optional()
         .describe(
-          "Run experimental rules (default true; off if the plan lacks them).",
+          "Run experimental rules (default true if the plan has them).",
         ),
       screenReader: z
         .enum(["NVDA", "VO"])
         .optional()
         .describe(
-          'Also run a screen reader: "NVDA" or "VO" (VoiceOver). Needs Screen Reader on the plan.',
+          "Also run a screen reader (VO: VoiceOver); the plan needs it.",
+        ),
+      scanScope: z
+        .object({
+          type: z.enum(["css", "xpath"]),
+          value: z.string().trim().min(1).max(1000),
+        })
+        .optional()
+        .describe(
+          'Only the first element matched, e.g. {"type":"css","value":"main"}.',
         ),
     },
     {
@@ -2338,6 +2475,12 @@ export default function addAccessibilityTools(
         .string()
         .optional()
         .describe("Continue a CSV export that is still being generated."),
+      fixWorkflow: z
+        .boolean()
+        .optional()
+        .describe(
+          "true: the steps to follow before editing code to fix accessibility issues (not for advice). Alone: only the steps.",
+        ),
     },
     {
       title: "Fetch Accessibility Issues",

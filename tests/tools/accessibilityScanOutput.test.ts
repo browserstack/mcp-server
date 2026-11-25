@@ -772,6 +772,18 @@ describe("fetchAccessibilityIssues and App Accessibility manual reports", () => 
     expect(body).toContain("Make the target at least 48dp.");
   });
 
+  it("says the dashboard's counts could not be read rather than dropping them", async () => {
+    const base = await m.appReportIssues();
+    m.appReportIssues.mockResolvedValue({ ...base, duplicate_occurrences: null, hidden_issues: null });
+
+    const body = text(await handlers.fetchAccessibilityIssues({ appReportId: REPORT_ID }, CONTEXT));
+
+    expect(body).toContain(
+      "The dashboard's duplicate and hidden issue counts could not be read for this report.",
+    );
+    expect(body).not.toContain("duplicate occurrences are left out");
+  });
+
   it("says how many screens it read when the report has more than it reads", async () => {
     const base = await m.appReportIssues();
     m.appReportIssues.mockResolvedValue({ ...base, scan_count: 1200, screens_read: 1000 });

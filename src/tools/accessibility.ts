@@ -918,11 +918,15 @@ async function appReportMessages(
     report.device ? ` on ${report.device}` : ""
   }`;
   const dashboardNote =
-    report.duplicate_occurrences === 0
-      ? []
-      : [
-          `${report.duplicate_occurrences} duplicate occurrences are left out, as the dashboard leaves them out of its count.`,
-        ];
+    report.duplicate_occurrences === null || report.hidden_issues === null
+      ? [
+          "The dashboard's duplicate and hidden issue counts could not be read for this report.",
+        ]
+      : report.duplicate_occurrences === 0
+        ? []
+        : [
+            `${report.duplicate_occurrences} duplicate occurrences are left out, as the dashboard leaves them out of its count.`,
+          ];
   return [
     ...preface,
     ...processingNote(processing),

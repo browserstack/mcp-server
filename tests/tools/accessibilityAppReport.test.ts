@@ -941,6 +941,20 @@ describe("AccessibilityReportFetcher and App Accessibility manual reports", () =
     });
   });
 
+  it("leaves the dashboard's counts unset when its overview can't be read", async () => {
+    get
+      .mockResolvedValueOnce(ok({ data: DETAIL }))
+      .mockResolvedValueOnce(failed(500))
+      .mockResolvedValueOnce(screens(SNAPSHOTS[0], 2))
+      .mockResolvedValueOnce(screens(SNAPSHOTS[1], null));
+
+    const report = await fetcher().appReportIssues(REPORT_ID);
+
+    expect(report.total_issues).toBe(3);
+    expect(report.duplicate_occurrences).toBeNull();
+    expect(report.hidden_issues).toBeNull();
+  });
+
   it("reads a manual report's screens as the dashboard does: duplicates left out, each issue with its element and fix", async () => {
     get
       .mockResolvedValueOnce(ok({ data: DETAIL }))

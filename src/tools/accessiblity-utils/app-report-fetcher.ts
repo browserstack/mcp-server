@@ -234,8 +234,9 @@ export interface AppManualReport extends AppIssuePageContext {
   /** How many issues the pages after this one hold. */
   remaining: number;
   summary: AppIssueSummary;
-  duplicate_occurrences: number;
-  hidden_issues: number;
+  /** Null when the dashboard's overview could not be read. */
+  duplicate_occurrences: number | null;
+  hidden_issues: number | null;
   scan_count: number;
   /** complete | in_progress */
   status: string;
@@ -1146,15 +1147,19 @@ export class AppAccessibilityApi {
   }
 
   /** A manual report's issue counts as the dashboard shows them; none when unreadable. */
-  private async manualReportCounts(reportId: string): Promise<{
-    total?: number;
-    hidden_issues?: number;
-    duplicate_issues?: number;
-  }> {
+  /** The dashboard's counts, or undefined when its overview could not be read. */
+  private async manualReportCounts(reportId: string): Promise<
+    | {
+        total?: number;
+        hidden_issues?: number;
+        duplicate_issues?: number;
+      }
+    | undefined
+  > {
     const resp = await this.dashboardGet(
       `${manualApiBase()}/app_scanner/${encodeURIComponent(reportId)}/overview`,
     ).catch(() => undefined);
-    return (resp?.ok && resp.data?.data?.issues) || {};
+    return (resp?.ok && resp.data?.data?.issues) || undefined;
   }
 
   /** The manual reports whose name, app or package contains `search`, newest first, a page at a time. */
@@ -1257,8 +1262,8 @@ export class AppAccessibilityApi {
       ...contextOf(page.records, context),
       total_issues: all.length,
       summary: summarizeAppIssues(all),
-      duplicate_occurrences: counts.duplicate_issues ?? 0,
-      hidden_issues: counts.hidden_issues ?? 0,
+      duplicate_occurrences: counts ? (counts.duplicate_issues ?? 0) : null,
+      hidden_issues: counts ? (counts.hidden_issues ?? 0) : null,
       scan_count: detail.scan_count ?? details.length,
       status: manualReportStatus(detail),
       report_name: detail.report_name ?? reportId,

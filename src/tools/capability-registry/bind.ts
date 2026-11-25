@@ -6,11 +6,6 @@
  * has `folder_id` as both a path parameter and a body field). A flat map cannot say which
  * one is meant, which is exactly why the Python side used to rename body fields `body_*`.
  * Grouping removes the collision AND the rename, so a caller sends the spec's own names.
- *
- * The body is the request body as the API defines it: `{folder_id, test_case: {ids}}`
- * is sent nested, and each value is matched to the field declared at that position
- * (`json_path`). A field is published under its dotted position (`test_case.ids`), so
- * two fields that share a name at different depths stay two fields.
  */
 
 import appConfig from "../../config.js";
@@ -452,94 +447,15 @@ export function replacedFixed(
     const sent = args[group];
     if (typeof sent !== "object" || sent === null || Array.isArray(sent))
       continue;
-    const params = (capability[declared] as WireParam[] | undefined) || [];
-    for (const param of params) {
+    for (const param of (capability[declared] as WireParam[] | undefined) ||
+      []) {
       const fixed = fixedValue(param);
-      const key = keyOf(group, param, params);
-      if (fixed === undefined || !(key in sent)) continue;
-      if (JSON.stringify(sent[key]) !== JSON.stringify(fixed))
-        replaced.push(key);
+      if (fixed === undefined || !(param.name in sent)) continue;
+      if (JSON.stringify(sent[param.name]) !== JSON.stringify(fixed))
+        replaced.push(param.name);
     }
   }
   return replaced;
-}
-
-/**
- * The name a body field is published and sent under: its position in the body, dotted,
- * when it sits inside an object the API wraps it in (`test_case.ids` for
- * `/test_case/ids`), and its own name otherwise.
- *
- * Position rather than bare name because a body can declare one name twice at different
- * depths — a top-level `folder_id` and a `test_case.folder_id` that mean different
- * things — and only the position tells them apart.
- *
- * A body that RENAMES any field keeps plain names for all of them: a `json_path` ending
- * in a different name (`browser_name` for `/capabilities/alwaysMatch/browserName`) is a
- * deliberate readable surface over a wire shape, and its siblings stay on that surface.
- */
-export function bodyKey(param: WireParam, siblings: WireParam[]): string {
-  const segments = (field: WireParam) =>
-    (field.json_path ?? "").split("/").filter((segment) => segment !== "");
-  const renamed = (field: WireParam) => {
-    const at = segments(field);
-    return at.length > 0 && at[at.length - 1] !== field.name;
-  };
-  const here = segments(param);
-  if (here.length < 2 || siblings.some(renamed)) return param.name;
-  return here.join(".");
-}
-
-function keyOf(
-  group: keyof GroupedArguments,
-  param: WireParam,
-  params: WireParam[],
-): string {
-  return group === "body" ? bodyKey(param, params) : param.name;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-/**
- * The caller's body, read as the JSON the API takes, turned into one value per declared
- * field keyed by `bodyKey`.
- *
- * Each key is matched by POSITION: `{test_case: {ids: [1]}}` reaches the field declared
- * at `/test_case/ids`. An object is walked into only when a declared field sits below it,
- * so an object-typed field (`q`, `folders`) is taken whole. A nested key that matches
- * nothing is kept under its dotted position, so the unknown-field refusal can name exactly
- * where it was (`test_case.nmae`). Top-level keys that match no position are left as sent,
- * for `normalise` to resolve by name.
- */
-function flattenBody(
-  params: WireParam[],
-  sent: Record<string, unknown>,
-): Record<string, unknown> {
-  const byPointer = new Map(
-    params.map((param) => [param.json_path || `/${param.name}`, param]),
-  );
-  const pointers = [...byPointer.keys()];
-  const out: Record<string, unknown> = {};
-  const walk = (prefix: string, object: Record<string, unknown>): void => {
-    for (const [name, value] of Object.entries(object)) {
-      const pointer = `${prefix}/${name}`;
-      const param = byPointer.get(pointer);
-      if (param) {
-        out[bodyKey(param, params)] = value;
-      } else if (
-        isRecord(value) &&
-        pointers.some((declared) => declared.startsWith(`${pointer}/`))
-      ) {
-        walk(pointer, value);
-      } else {
-        out[prefix === "" ? name : pointer.slice(1).replaceAll("/", ".")] =
-          value;
-      }
-    }
-  };
-  walk("", sent);
-  return out;
 }
 
 /**
@@ -561,13 +477,6 @@ export function withoutFixed(
       .map(({ aliases, form_name, ...param }) => {
         void aliases;
         void form_name;
-        // A wrapped body field is published under its position, which already says
-        // where it goes; the pointer beside it would only repeat that.
-        if (group === "body" && bodyKey(param, params ?? []) !== param.name) {
-          const { json_path, ...rest } = param;
-          void json_path;
-          return { ...rest, name: bodyKey(param, params ?? []) };
-        }
         return param;
       });
     view[group] = shown.length > 0 ? shown : undefined;
@@ -643,59 +552,22 @@ function snake(name: string): string {
  */
 export function normalise(
   capability: Capability,
-  given: GroupedArguments,
+  args: GroupedArguments,
 ): GroupedArguments {
-  const bodyParams = capability.body || [];
-  const args: GroupedArguments =
-    isRecord(given.body) && !keyedParam("body", bodyParams)
-      ? { ...given, body: flattenBody(bodyParams, given.body) }
-      : given;
-
   const declared = new Map<
     keyof GroupedArguments,
-    {
-      byName: Map<string, WireParam>;
-      bySpelling: Map<string, string>;
-      byLeaf: Map<string, string>;
-    }
+    { byName: Map<string, WireParam>; bySpelling: Map<string, string> }
   >();
   for (const { group, declared: key } of GROUPS) {
     const params = (capability[key] as WireParam[] | undefined) || [];
-    const byName = new Map(
-      params.map((param) => [keyOf(group, param, params), param]),
-    );
-    // A spelling resolves to ONE field or to none. Fields at the top of the body
-    // claim their spellings first; a spelling two wrapped fields share is dropped, so
-    // the caller is asked for the position instead of one of them being picked.
+    const byName = new Map(params.map((param) => [param.name, param]));
     const bySpelling = new Map<string, string>();
-    const shared = new Set<string>();
-    const wrapped = (param: WireParam) =>
-      keyOf(group, param, params).includes(".");
-    for (const param of [
-      ...params.filter((param) => !wrapped(param)),
-      ...params.filter(wrapped),
-    ]) {
-      const target = keyOf(group, param, params);
-      for (const spelling of [snake(param.name), ...(param.aliases ?? [])]) {
-        const held = bySpelling.get(spelling);
-        if (held === undefined && !shared.has(spelling)) {
-          bySpelling.set(spelling, target);
-        } else if (held !== target && held?.includes(".") && wrapped(param)) {
-          bySpelling.delete(spelling);
-          shared.add(spelling);
-        }
-      }
+    for (const param of params) {
+      bySpelling.set(snake(param.name), param.name);
+      for (const alias of param.aliases ?? [])
+        bySpelling.set(alias, param.name);
     }
-    // A wrapped field sent under its bare name (`ids` for `test_case.ids`), which is how
-    // callers sent it before bodies were nested. Kept only where the name is unique.
-    const byLeaf = new Map<string, string>();
-    const leafCount = new Map<string, number>();
-    for (const param of params.filter(wrapped))
-      leafCount.set(param.name, (leafCount.get(param.name) ?? 0) + 1);
-    for (const param of params.filter(wrapped))
-      if (leafCount.get(param.name) === 1 && !byName.has(param.name))
-        byLeaf.set(param.name, keyOf(group, param, params));
-    declared.set(group, { byName, bySpelling, byLeaf });
+    declared.set(group, { byName, bySpelling });
   }
   const resolve = (
     name: string,
@@ -726,8 +598,7 @@ export function normalise(
       continue;
     for (const [name, value] of Object.entries(sent)) {
       if (declared.get(group)!.byName.has(name)) continue;
-      const leaf = declared.get(group)!.byLeaf.get(name);
-      const target = leaf ? { group, name: leaf } : resolve(name);
+      const target = resolve(name);
       if (!target) continue;
       if (target.group === group && target.name === name) continue;
       // Checked against what is being built, not what was sent: a second spelling of a
@@ -777,14 +648,12 @@ export function bind(
       throw new InvocationError(`${group} must be an object of name -> value`);
     }
     const params = (capability[declared] as WireParam[] | undefined) || [];
-    const byName = new Map(
-      params.map((param) => [keyOf(group, param, params), param]),
-    );
+    const byName = new Map(params.map((param) => [param.name, param]));
     const keyed = keyedParam(group, params);
     const supplied: Record<string, unknown> = { ...sent };
     for (const param of params) {
       const fixed = fixedValue(param);
-      if (fixed !== undefined) supplied[keyOf(group, param, params)] = fixed;
+      if (fixed !== undefined) supplied[param.name] = fixed;
     }
     given[group] = supplied;
 
@@ -794,17 +663,35 @@ export function bind(
       (name) => !byName.has(name) && !keyed,
     );
     if (unknown.length > 0) {
-      // A dotted name is a position in the body: `test_case.ids` is sent as
-      // `{"test_case": {"ids": …}}`. Said once, in the refusal, because an accepted list
-      // of dotted names reads as flat keys to a caller who has not met the convention.
-      const nested =
-        group === "body" &&
-        [...byName.keys()].some((name) => name.includes("."));
+      // A CALLER WHO SENT THE WRAPPER WE BUILD DESERVES TO BE TOLD SO.
+      //
+      // Most of these endpoints want a nested body — Rails `params.require(:test_case)` —
+      // and the fields declare that as `json_path: /test_case/name`, so this layer
+      // assembles the wrapper itself and the caller sends the fields flat. A caller who
+      // wraps it by hand therefore sends a key that is never a declared param, and the
+      // bare message reads as "that field does not exist" when the truth is the opposite:
+      // it exists, and building it is our job.
+      //
+      // Worth special-casing because the guidance itself has been telling callers to wrap:
+      // 25 tm capabilities carried a line describing the WIRE format to a caller who never
+      // writes the wire. Those lines are being corrected, but an agent working from an
+      // older artifact, or reasoning from the Rails convention, lands here either way.
+      const wrappers = new Set(
+        params
+          .map((param) => (param as { json_path?: string }).json_path)
+          .filter((path): path is string => Boolean(path))
+          .map((path) => path.replace(/^\//, "").split("/")[0])
+          .filter((segment) => segment && !byName.has(segment)),
+      );
+      const sentAWrapper = unknown.filter((name) => wrappers.has(name));
       throw new InvocationError(
         `unknown ${group}: ${unknown.sort().join(", ")}. accepted: ` +
           `${[...byName.keys()].sort().join(", ") || "none"}` +
-          (nested
-            ? `. A dotted name is a position in the body: send a.b as {"a": {"b": …}}`
+          (sentAWrapper.length > 0
+            ? `. ${sentAWrapper.sort().join(" and ")} ` +
+              `${sentAWrapper.length > 1 ? "are wrappers" : "is a wrapper"} this ` +
+              `surface builds for you from each field's json_path — send the fields ` +
+              `directly instead of nesting them`
             : ""),
       );
     }
@@ -816,11 +703,7 @@ export function bind(
           `'${name}' is not a usable ${keyed.name} key: use the id exactly as a read returned it`,
         );
       }
-      // Labelled by the published name, so a refusal names `test_case.ids`, not `ids`.
-      const value = coerce(
-        raw,
-        param !== keyed && name !== param.name ? { ...param, name } : param,
-      );
+      const value = coerce(raw, param);
       if (group === "path_params") {
         // Encode with nothing exempt: a `/` inside a path value would otherwise rewrite the
         // route. Schema checking already stops this for integer ids; this covers strings.
@@ -852,15 +735,13 @@ export function bind(
     const supplied = given[group];
     const params = (capability[declared] as WireParam[] | undefined) || [];
     const keyed = keyedParam(group, params);
-    const declaredNames = new Set(
-      params.map((param) => keyOf(group, param, params)),
-    );
+    const declaredNames = new Set(params.map((param) => param.name));
     for (const param of params) {
       const present =
-        keyOf(group, param, params) in supplied ||
+        param.name in supplied ||
         (param === keyed &&
           Object.keys(supplied).some((name) => !declaredNames.has(name)));
-      if (param.required && !present) missing.push(keyOf(group, param, params));
+      if (param.required && !present) missing.push(param.name);
     }
   }
   if (missing.length > 0) {

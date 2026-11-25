@@ -276,7 +276,7 @@ describe("binding", () => {
 
   it("enforces required body fields, not just path ones", () => {
     expect(() => bind(CREATE_FOLDER, { path_params: { project_id: 2 }, body: {} }))
-      .toThrow(/missing required parameter\(s\): folder\.name/);
+      .toThrow(/missing required parameter\(s\): name/);
   });
 
   it("stops a traversal attempt at the declared type", () => {

@@ -157,3 +157,32 @@ export function fixWorkflowText(run: FixWorkflowRun): string {
     "If either is empty, ask for it in Stage 1. If the user's command had more words than Target and Scope show, use the user's full words: some clients split arguments on spaces.",
   ].join("\n\n");
 }
+
+/** The one line that points an agent at the workflow, on accessibility answers. */
+export const FIX_WORKFLOW_POINTER =
+  "To fix accessibility issues in the user's code (not just list them), first call fetchAccessibilityIssues with fixWorkflow: true and follow the workflow it returns.";
+
+/**
+ * What a report's first page says when `fixWorkflow: true` came with the report. The workflow
+ * itself (~11 KB) is left off: a large first page plus the workflow passes the size at which
+ * clients save a result to a file instead of showing it, and the workflow, coming last, is
+ * what a client that cuts long results drops.
+ */
+export const FIX_WORKFLOW_WITH_REPORT =
+  "The fix workflow is not included with a report's issues, to keep this answer small enough to show. Before editing code, call fetchAccessibilityIssues with only fixWorkflow: true (no report) and follow the workflow it returns.";
+
+/**
+ * One line for the server instructions. The last sentence keeps questions such as "how do I
+ * fix contrast issues?" from loading the workflow.
+ */
+export const FIX_WORKFLOW_INSTRUCTION =
+  "Before editing code to fix accessibility issues, call fetchAccessibilityIssues with fixWorkflow: true. Don't call it for questions or advice.";
+
+/** The workflow as a tool returns it to the agent, which has no slash-command arguments. */
+export function fixWorkflowForAgent(): string {
+  return [
+    WORKFLOW,
+    "---",
+    "**This run:** take the target and the scope from the user's request. If either is unclear, ask for it in Stage 1.",
+  ].join("\n\n");
+}

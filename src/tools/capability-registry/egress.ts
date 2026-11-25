@@ -69,6 +69,8 @@ export function replyCutOffMessage(detail: string): string {
   );
 }
 
+export const PRODUCT_UNREACHABLE = "the product could not be reached";
+
 /** What this server can put into a credential template. Nothing else is fillable. */
 const PLACEHOLDERS = ["username", "access_key"] as const;
 
@@ -333,7 +335,7 @@ export function fetchTransport(defaultTimeoutMs = 45_000): Transport {
             )
           : timedOut
             ? timedOutMessage(timeoutMs)
-            : "the product could not be reached",
+            : PRODUCT_UNREACHABLE,
       };
     } finally {
       clearTimeout(timer);

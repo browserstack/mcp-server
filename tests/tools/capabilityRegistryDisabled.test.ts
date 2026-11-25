@@ -1,3 +1,4 @@
+import { readdirSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -223,16 +224,17 @@ describe("the shipped tm index", () => {
   /**
    * The published surface is the capabilities that PASSED live probing. Everything that did
    * not — blocked, drifted, unverified, and the destructive tier — is withheld while the
-   * product team works through it, so 46 of 245 are off and 199 remain. download_report is
-   * withheld too: it answers with a job channel the API cannot resolve, so it can never
-   * deliver the file it is named for.
+   * product team works through it, and every bulk operation is withheld as well (see the
+   * suite below), so 63 of 245 are off and 182 remain. download_report is withheld too: it
+   * answers with a job channel the API cannot resolve, so it can never deliver the file it
+   * is named for.
    *
    * A few are spot-checked by name rather than pinning the whole list: the point of this
    * test is that the flag in the shipped artifact is spelled correctly and actually takes
    * effect, not to restate the roster, which is expected to shrink as defects are fixed.
    */
-  const WITHHELD_COUNT = 46;
-  const PUBLISHED_COUNT = 199;
+  const WITHHELD_COUNT = 63;
+  const PUBLISHED_COUNT = 182;
   const FILE_BEARING = [
     "import_dataset_csv",
     "upload_ai_attachments",
@@ -309,5 +311,80 @@ describe("the shipped tm index", () => {
         /unknown_capability/,
       );
     }
+  });
+});
+
+describe("bulk operations in every shipped index", () => {
+  /**
+   * BULK OPERATIONS ARE WITHHELD IN EVERY PRODUCT. One flat call with an empty selector
+   * moved a whole project's test cases: a single bulk call can touch every row in scope,
+   * and this surface has no preview or confirmation step. Until it does, nothing that
+   * writes to a selection of existing records is published. That means two things:
+   *
+   * - every capability whose name, route or intent says "bulk" is disabled, and
+   * - no published write takes a selector — `select_all`, `shared_selection`, or a
+   *   `/selection/...` field — so the same blast radius cannot come in under another name.
+   * - no published write that changes an EXISTING record takes a case-set selector
+   *   (`include_all`, `folder_ids`, `include_sub_folders`, `filter_test_cases`). On a run
+   *   update these replace the whole case list, dropping results and assignees with a 200.
+   *   A `create_*` capability may keep them: it only fills a record that did not exist.
+   *
+   * A new bulk capability or selector param added to any index fails here until it is
+   * flagged or removed, so the rule cannot erode one onboarding at a time.
+   */
+  const SELECTOR =
+    /^(select_all|test_case_select_all|shared_selection|selection)$/;
+  const CASE_SET =
+    /^(include_all|folder_ids|include_sub_folders|filter_test_cases)$/;
+
+  function shipped() {
+    const files = readdirSync("capability").filter((f) =>
+      f.endsWith(".capability-index.json"),
+    );
+    const out: Array<{ product: string; c: any }> = [];
+    for (const file of files) {
+      const raw = JSON.parse(readFileSync(`capability/${file}`, "utf8"));
+      for (const [product, bundle] of Object.entries<any>(raw)) {
+        for (const c of bundle?.capabilities ?? []) out.push({ product, c });
+      }
+    }
+    return out;
+  }
+
+  it("flags every capability whose name, route or intent says bulk as disabled", () => {
+    const all = shipped();
+    expect(all.length).toBeGreaterThan(0);
+    const live = all
+      .filter(({ c }) =>
+        /bulk/i.test(`${c.name} ${c.path ?? ""} ${c.intent ?? ""}`),
+      )
+      .filter(({ c }) => !c.disabled)
+      .map(({ product, c }) => `${product}.${c.name}`);
+    expect(live).toEqual([]);
+  });
+
+  it("publishes no write that takes a bulk selector", () => {
+    const live: string[] = [];
+    for (const { product, c } of shipped()) {
+      if (c.disabled || c.mode === "read") continue;
+      for (const group of ["path_params", "query", "body"]) {
+        for (const p of Array.isArray(c[group]) ? c[group] : []) {
+          const path = String(p?.json_path ?? "");
+          // A report's case selection only scopes what the report reads; it changes no
+          // records, so it is not a bulk write.
+          if (path.startsWith("/report_filters/")) continue;
+          const name = String(p?.name);
+          const creates = String(c.name).startsWith("create_");
+          if (
+            SELECTOR.test(name) ||
+            path.startsWith("/selection/") ||
+            (CASE_SET.test(name) && !creates)
+          ) {
+            live.push(`${product}.${c.name}: ${group}.${p.name}`);
+          }
+        }
+      }
+    }
+    expect(live).toEqual([]);
   });
 });

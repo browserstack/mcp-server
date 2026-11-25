@@ -36,6 +36,7 @@ import {
   ResponseSelection,
   resolveResponses,
 } from "./index-loader.js";
+import { sharedRegistry } from "./shared-registry.js";
 import { assertSelectable, narrowResponse } from "./narrow.js";
 import { invokeWithFallbacks } from "./fallback.js";
 import { invoke } from "./resolve.js";
@@ -85,43 +86,8 @@ export interface RegistryDeps {
   agentsEnabled?: (product: string) => boolean;
 }
 
-/**
- * The tool-adder the server factory calls.
- *
- * Registers NOTHING when the artifact is absent or unreadable, rather than throwing: a
- * missing index is a packaging problem, and taking the whole MCP server down with it would
- * remove every other product's tools too. The reason is logged so it is not silent.
- */
-export function addCapabilityRegistryToolsFromConfig(
-  server: McpServer,
-  config: BrowserStackConfig,
-): Record<string, RegisteredTool> {
-  if (!isEnabled()) {
-    logger.info("capability registry disabled by CAPABILITY_REGISTRY_DISABLED");
-    return {};
-  }
-  const files = indexPaths();
-  if (files.length === 0) {
-    logger.warn(
-      "capability registry index not found; its tools are not registered. Set " +
-        "CAPABILITY_REGISTRY_INDEX_DIR, or ship capabilities/<product>.capability-index.json " +
-        "at the package root.",
-    );
-    return {};
-  }
-  let registry: CapabilityRegistry;
-  try {
-    registry = CapabilityRegistry.fromFiles(files);
-  } catch (error) {
-    // One unreadable file fails the whole load on purpose (see `fromFiles`), so this is
-    // the only place that decides the surface is absent, and it says why.
-    logger.error(
-      "capability registry index unusable (%s): %s",
-      files.join(", "),
-      error instanceof Error ? error.message : String(error),
-    );
-    return {};
-  }
+/** What loaded, and how much of it this surface withholds. */
+function announceLoad(registry: CapabilityRegistry): void {
   const loaded = registry.buildInfo();
   logger.info(
     "capability registry loaded: %d product(s) — %s",
@@ -148,6 +114,51 @@ export function addCapabilityRegistryToolsFromConfig(
         .join(", "),
     );
   }
+}
+
+/**
+ * The tool-adder the server factory calls.
+ *
+ * Registers NOTHING when the artifact is absent or unreadable, rather than throwing: a
+ * missing index is a packaging problem, and taking the whole MCP server down with it would
+ * remove every other product's tools too. The reason is logged so it is not silent.
+ */
+export function addCapabilityRegistryToolsFromConfig(
+  server: McpServer,
+  config: BrowserStackConfig,
+): Record<string, RegisteredTool> {
+  if (!isEnabled()) {
+    logger.info("capability registry disabled by CAPABILITY_REGISTRY_DISABLED");
+    return {};
+  }
+  const files = indexPaths();
+  if (files.length === 0) {
+    logger.warn(
+      "capability registry index not found; its tools are not registered. Set " +
+        "CAPABILITY_REGISTRY_INDEX_DIR, or ship capabilities/<product>.capability-index.json " +
+        "at the package root.",
+    );
+    return {};
+  }
+  let registry: CapabilityRegistry;
+  let fresh: boolean;
+  try {
+    // ONE COPY PER PROCESS, not one per server. A hosted deployment builds a server for
+    // every request, and reading and parsing the index each time was most of what that
+    // cost. See `shared-registry.ts` for why sharing it across callers is safe.
+    ({ registry, loaded: fresh } = sharedRegistry(files));
+  } catch (error) {
+    // One unreadable file fails the whole load on purpose (see `fromFiles`), so this is
+    // the only place that decides the surface is absent, and it says why.
+    logger.error(
+      "capability registry index unusable (%s): %s",
+      files.join(", "),
+      error instanceof Error ? error.message : String(error),
+    );
+    return {};
+  }
+  // Said when the index is read, which is now once — not once per server built from it.
+  if (fresh) announceLoad(registry);
   return addCapabilityRegistryTools(
     server,
     {

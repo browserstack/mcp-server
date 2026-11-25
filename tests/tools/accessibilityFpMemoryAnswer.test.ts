@@ -229,3 +229,75 @@ describe("fetchAccessibilityIssues with saved false positives", () => {
     expect(lines.join("\n")).toContain("Total: 3)");
   });
 });
+
+describe("fetchAccessibilityIssues first page, with saved false positives on later pages", () => {
+  // Agents that stopped at the first page, or read the CSV, reported false positives that
+  // were only on later pages as real and said none were saved.
+  const firstPage = (later: { cursor: number; records: unknown[] }[]) => ({
+    ...structuredClone(REPORT),
+    records: [issue("image-alt", "img#")],
+    rules: { "image-alt": REPORT.rules["image-alt"] },
+    page_length: 1,
+    next_page: 400,
+    remaining: later.reduce((n, p) => n + p.records.length, 0),
+    later_pages: later,
+  });
+
+  it("reads the memory for every rule in the report, and says where the covered issues are", async () => {
+    m.parse.mockResolvedValue(
+      firstPage([
+        {
+          cursor: 400,
+          records: [issue("role-required", "acme-header-button#")],
+        },
+      ]),
+    );
+    m.memoryForReport.mockResolvedValue(MEMORY);
+    const out = texts(await fetchIssues()(RUN));
+    expect(m.memoryForReport.mock.calls[0][1]).toEqual([
+      "role-required",
+      "image-alt",
+    ]);
+    expect(out[0]).toContain(
+      "Saved false positives apply to this report: 1 issue on later pages",
+    );
+    const all = out.join("\n");
+    expect(all).toContain('"page_cursor":400');
+    expect(all).toContain(
+      "The CSV still lists the issues saved as false positives and does not mark them",
+    );
+  });
+
+  it("keeps the first page under the size a client shows inline, counting what does not fit", async () => {
+    // 186 covered issues once made a first page of 56 KB, which Claude Code saved to a file
+    // that an agent without file tools could not open.
+    const big = (n: number) =>
+      Array.from({ length: n }, (_, i) => ({
+        ...issue("role-required", `acme-header-button#b${i}`),
+        HTML_snippet: `<acme-header-button id="b${i}" class="${"c".repeat(300)}">`,
+      }));
+    const report = firstPage([
+      { cursor: 400, records: big(150) },
+      { cursor: 900, records: big(150) },
+    ]);
+    report.records = Array.from({ length: 64 }, (_, i) => ({
+      ...issue("image-alt", `img#i${i}`),
+      HTML_snippet: `<img id="i${i}" src="${"s".repeat(400)}">`,
+    }));
+    m.parse.mockResolvedValue(report);
+    m.memoryForReport.mockResolvedValue(MEMORY);
+    const out = texts(await fetchIssues()(RUN));
+    const all = out.join("");
+    // Near the limit, so the later list had to shrink to fit, not just fit by itself.
+    expect(all.length).toBeGreaterThan(40_000);
+    expect(all.length).toBeLessThanOrEqual(45_000);
+    // Fewer listed than the later list's own budget holds (about 30 rows like these).
+    const listed = (all.match(/"page_cursor"/g) ?? []).length;
+    expect(listed).toBeGreaterThan(0);
+    expect(listed).toBeLessThan(25);
+    expect(all).toContain(
+      "marked issues on later pages are too many to list here",
+    );
+    expect(all).toContain("on the page at cursor 900");
+  });
+});

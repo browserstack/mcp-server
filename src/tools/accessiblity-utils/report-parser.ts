@@ -2,6 +2,7 @@ import { apiClient } from "../../lib/apiClient.js";
 import { parse } from "csv-parse/sync";
 import logger from "../../logger.js";
 import {
+  laterPagesOf,
   mostCommon,
   PAGE_CHARACTERS,
   pageOf,
@@ -113,6 +114,8 @@ type PaginatedResult = {
   hidden_issues: number | null;
   /** Set when the report was read for one page. */
   page?: PageSummary;
+  /** Set on the first page: the pages after it, each with the cursor that fetches it. */
+  later_pages?: { cursor: number; records: IssueRow[] }[];
   /**
    * Set when pages did not load: an error page was scanned in their place. Their rows are
    * left out of everything above, as they are the error page's issues, not the page's.
@@ -302,17 +305,31 @@ function pageWithRules(
         a.i - b.i,
     )
     .map(({ issue }) => withoutRuleText(issue, rules[issue.issue_type]));
-  const named = new Set<string>();
-  const page = pageOf(ordered, {
-    ...options,
-    extraLength: (row) => {
+  // A page names each rule's text once, counted against its length.
+  const ruleTextLength = () => {
+    const named = new Set<string>();
+    return (row: IssueRow) => {
       if (named.has(row.issue_type)) return 0;
       named.add(row.issue_type);
       return JSON.stringify(rules[row.issue_type] ?? {}).length;
-    },
+    };
+  };
+  const page = pageOf(ordered, {
+    ...options,
+    extraLength: ruleTextLength(),
   });
+  // The first page says what the saved false positives cover on the pages after it, so an
+  // agent that stops there, or reads the CSV, still removes them.
+  const later =
+    options.nextPage === 0 && page.next_page !== null
+      ? laterPagesOf(ordered, page, {
+          maxCharacterLength: options.maxCharacterLength,
+          extraLength: ruleTextLength,
+        })
+      : undefined;
   return {
     ...page,
+    ...(later ? { later_pages: later } : {}),
     rules: Object.fromEntries(
       [...new Set(page.records.map((r) => r.issue_type))].map((type) => [
         type,

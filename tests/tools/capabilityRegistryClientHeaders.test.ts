@@ -6,6 +6,7 @@ import {
   authHeaders,
   clientHeaders,
   fetchTransport,
+  PRODUCT_UNREACHABLE,
 } from "../../src/tools/capability-registry/egress.js";
 import { CapabilityRegistry } from "../../src/tools/capability-registry/index-loader.js";
 import { addCapabilityRegistryTools } from "../../src/tools/capability-registry/register.js";
@@ -15,8 +16,9 @@ import { invoke } from "../../src/tools/capability-registry/resolve.js";
 // these to attribute calls (the backend records them as mcp_client / mcp_version), and to see
 // callers on builds too old to honour a newer index flag. Neither may ever cost the call.
 
-const VERSION: string = createRequire(import.meta.url)("../../package.json")
-  .version;
+const VERSION: string = createRequire(import.meta.url)(
+  "../../package.json",
+).version;
 const USER = { username: "u", accessKey: "k" };
 const CAP = {
   name: "get_thing",
@@ -109,6 +111,30 @@ describe("invoke", () => {
     const { transport, seen } = recorder();
     await invoke(CAP, {}, "https://p.example", USER, transport);
     expect(seen[0]).not.toHaveProperty("x-mcp-client");
+  });
+
+  // A read the product never answered is sent again: the retry is the same call, so it
+  // names the client too.
+  it("names the client on a retried read as well", async () => {
+    const seen: Record<string, string>[] = [];
+    const transport = vi.fn(async (_m: string, _u: string, headers: any) => {
+      seen.push(headers);
+      return seen.length === 1
+        ? { status: 0, body: null, error: PRODUCT_UNREACHABLE }
+        : { status: 200, body: {} };
+    });
+    const result = await invoke(
+      CAP,
+      {},
+      "https://p.example",
+      USER,
+      transport,
+      undefined,
+      "p",
+      "cursor",
+    );
+    expect(result.http_response.status).toBe(200);
+    expect(seen.map((h) => h["x-mcp-client"])).toEqual(["cursor", "cursor"]);
   });
 
   it("still reaches the product when the client's name is not a valid header value", async () => {

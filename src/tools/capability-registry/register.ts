@@ -544,9 +544,7 @@ export function addCapabilityRegistryTools(
     "describeEntity",
     "Describe an entity: identifiers, relations and product vocabulary. Read before filtering or writing; ids often need resolving first.",
     {
-      product: productArg().describe(
-        `Which product the entity belongs to: ${productList}.`,
-      ),
+      product: productArg().describe(`The entity's product: ${productList}.`),
       entity: z.string().describe("Entity name, as listProducts returns it."),
     },
     {

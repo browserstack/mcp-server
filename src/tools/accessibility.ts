@@ -47,7 +47,6 @@ import {
 } from "./accessiblity-utils/report-parser.js";
 import { wrapUntrusted } from "../lib/untrusted-content.js";
 import { isLocalURL } from "../lib/local.js";
-import { queryAccessibilityRAG } from "./accessiblity-utils/accessibility-rag.js";
 import { BrowserStackConfig } from "../lib/types.js";
 import { elicitCredentialsIfSupported } from "../lib/elicit-credentials.js";
 import logger from "../logger.js";
@@ -80,10 +79,6 @@ import {
   accountRefusal,
   asSentence,
 } from "./accessiblity-utils/error-messages.js";
-import {
-  EXPERT_QUERY_MAX_CHARS,
-  fitExpertQuery,
-} from "./accessiblity-utils/expert-query.js";
 import {
   buildIdNotFound,
   errorPagesNote,
@@ -123,8 +118,6 @@ import {
   type ScanArgs,
 } from "./accessiblity-utils/scan-rerun.js";
 import { CallerError } from "../lib/error.js";
-
-export { EXPERT_QUERY_MAX_CHARS };
 
 interface FormAuthArgs {
   name: string;
@@ -174,48 +167,6 @@ async function initializeReportFetcher(
   const auth = setupAuth(config);
   reportFetcher.setAuth(auth);
   return reportFetcher;
-}
-
-/**
- * accessibilityExpert is going away; until it is removed it still answers, with this note,
- * which names what to use instead so an agent stops reaching for it.
- */
-const ACCESSIBILITY_EXPERT_DEPRECATED =
-  "Note: accessibilityExpert is deprecated and will be removed in a future release. To list or filter a report's issues, for example those failing a WCAG criterion, use fetchAccessibilityIssues and answer from its result; to scan a page, use startAccessibilityScan. For advice on a report, such as how to raise its score or which issues to fix first, call askBrowserStackAI with product a11y and give the user its answer. For a general WCAG or ARIA question, call askBrowserStackAI with product a11y too. If askBrowserStackAI says it is not enabled for this account, answer from the report's issues. " +
-  FIX_WORKFLOW_POINTER;
-
-async function executeAccessibilityRAG(
-  args: { query: string },
-  server: McpServer,
-  config: BrowserStackConfig,
-): Promise<CallToolResult> {
-  try {
-    trackMCP(
-      "accessibilityExpert",
-      server.server.getClientVersion()!,
-      undefined,
-      config,
-    );
-    const { query, shortened, kept } = fitExpertQuery(args.query);
-    const answer = await queryAccessibilityRAG(query, config);
-    return {
-      ...answer,
-      content: [
-        { type: "text", text: ACCESSIBILITY_EXPERT_DEPRECATED },
-        ...(shortened
-          ? [
-              {
-                type: "text" as const,
-                text: `The question was ${args.query.length} characters; the knowledge base takes at most ${EXPERT_QUERY_MAX_CHARS}, so ${query.length} were sent: its ${kept ?? "opening"}. If the answer misses the point, ask again more briefly.`,
-              },
-            ]
-          : []),
-        ...(answer.content ?? []),
-      ],
-    };
-  } catch (error) {
-    return handleMCPError("accessibilityExpert", server, config, error);
-  }
 }
 
 interface FetchIssuesArgs {
@@ -2195,28 +2146,6 @@ export default function addAccessibilityTools(
   config: BrowserStackConfig,
 ) {
   const tools: Record<string, any> = {};
-
-  tools.accessibilityExpert = server.tool(
-    "accessibilityExpert",
-    "Deprecated, to be removed: answers accessibility, a11y, and WCAG questions from BrowserStack's accessibility knowledge base.",
-    {
-      query: z
-        .string()
-        .describe(
-          "Any accessibility, a11y, WCAG, or web accessibility question",
-        ),
-    },
-    {
-      title: "Accessibility Expert (deprecated)",
-      readOnlyHint: true,
-      openWorldHint: false,
-      destructiveHint: false,
-      idempotentHint: true,
-    },
-    async (args) => {
-      return await executeAccessibilityRAG(args, server, config);
-    },
-  );
 
   tools.startAccessibilityScan = server.tool(
     "startAccessibilityScan",

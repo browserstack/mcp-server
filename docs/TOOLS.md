@@ -23,7 +23,7 @@ searchCapability  →  describeCapability  →  invokeCapability
 
 | Tool | What it does |
 |---|---|
-| `askBrowserStackAI` | *(Alpha, limited availability)* Hand a multi-step task to BrowserStack's agent in plain language; it decides which calls to make and returns the answer plus the steps it took. Covers Test Management and Test Reporting & Analytics. Anything that would change data pauses for your confirmation in your own client; deletes are refused outright. Requires the account to be enrolled — otherwise it returns an entitlement error and nothing runs. |
+| `askBrowserStackAI` | *(Alpha, limited availability)* Hand a multi-step task to BrowserStack's agent in plain language; it decides which calls to make and returns the answer plus the steps it took. Covers Test Management, Test Reporting & Analytics and Accessibility (including WCAG and accessibility best-practice questions). Anything that would change data pauses for your confirmation in your own client; deletes are refused outright. Requires the account to be enrolled — otherwise it returns an entitlement error and nothing runs. |
 
 </details>
 
@@ -340,7 +340,6 @@ searchCapability  →  describeCapability  →  invokeCapability
 
 | Tool | What it does |
 |---|---|
-| `accessibilityExpert` | **Deprecated, to be removed.** Ask the A11y Expert (WCAG 2.0/2.1/2.2, mobile/web usability, best practices). |
 | `createAccessibilityAuthConfig` | Create an authentication configuration (form-based or basic) for accessibility scans behind a login. |
 | `fetchAccessibilityIssues` | Fetch accessibility issues, with pagination, from a Website Scanner run, an Automated Tests build (web) or App Accessibility build (mobile app, by the build id the SDK prints), a Workflow Analyzer report, an App Accessibility manual report (`appReportId`), or a report's dashboard link (a Website Scanner link is read by the run's build id, however old the scan; a Workflow Analyzer link by the report id it carries). Once the tests or scan have finished, a report that is still processing is not waited on: the answer says to call again in a minute or two; a run still in progress is read as it is, with a note. For an app build with no scans, lists the likely causes. |
 | `getAccessibilityAuthConfig` | Retrieve an existing accessibility authentication configuration by ID. |

@@ -182,3 +182,58 @@ describe("listTestCases — linked issues in summary", () => {
     expect(inside(json, note)).toBe(true);
   });
 });
+
+describe("listTestCases — id filter", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    (apiClient.get as any).mockResolvedValue({
+      data: { success: true, info: { count: 0 }, test_cases: [] },
+    });
+  });
+
+  const requestedUrl = () =>
+    new URL((apiClient.get as any).mock.calls[0][0].url);
+
+  it("sends the id filter to the API", async () => {
+    await listTestCases(
+      { project_identifier: "PR-1", id: "TC-61870435,TC-2" },
+      mockConfig,
+    );
+
+    expect(requestedUrl().searchParams.get("id")).toBe("TC-61870435,TC-2");
+  });
+
+  it("omits the filters when not given", async () => {
+    await listTestCases({ project_identifier: "PR-1" }, mockConfig);
+
+    const params = requestedUrl().searchParams;
+    expect(params.has("id")).toBe(false);
+    expect(params.has("review_status")).toBe(false);
+    expect([...params.keys()]).toEqual([]);
+  });
+
+  it("sends review statuses comma-separated", async () => {
+    await listTestCases(
+      { project_identifier: "PR-1", review_status: ["approved", "in_review"] },
+      mockConfig,
+    );
+
+    expect(requestedUrl().searchParams.get("review_status")).toBe(
+      "approved,in_review",
+    );
+  });
+
+  it("sends each custom field by name", async () => {
+    await listTestCases(
+      {
+        project_identifier: "PR-1",
+        custom_fields: { Theme: "Checkout", "Release Train": "R1" },
+      },
+      mockConfig,
+    );
+
+    const params = requestedUrl().searchParams;
+    expect(params.get("custom_fields[Theme]")).toBe("Checkout");
+    expect(params.get("custom_fields[Release Train]")).toBe("R1");
+  });
+});

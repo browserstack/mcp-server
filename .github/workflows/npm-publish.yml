@@ -107,12 +107,13 @@ jobs:
             -f ref="$GITHUB_REF_NAME" -F return_run_details=true \
             -f "inputs[ref]=$VERSION" -f "inputs[version]=${VERSION#v}" -f "inputs[tag]=latest" \
             --jq .workflow_run_id)
-          echo "Publishing $VERSION: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$RUN_ID"
+          PACKAGE="$(node -p 'require("./package.json").name')@${VERSION#v}"
+          echo "Publishing $PACKAGE: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$RUN_ID"
           if ! gh run watch "$RUN_ID" --repo "$GITHUB_REPOSITORY" --exit-status --interval 30 > /dev/null; then
             gh run view "$RUN_ID" --repo "$GITHUB_REPOSITORY" --log-failed
             exit 1
           fi
-          echo "Published $VERSION"
+          echo "Published $PACKAGE"
 
       - name: "Create GitHub Release"
         env:

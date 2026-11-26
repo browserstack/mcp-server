@@ -1,5 +1,5 @@
 name: "Publish to NPM"
-run-name: "Publish ${{ inputs.version }} (${{ inputs.tag }})"
+run-name: "Publish @browserstack/mcp-server@${{ inputs.version }} (${{ inputs.tag }})"
 
 on:
   workflow_dispatch:

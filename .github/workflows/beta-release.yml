@@ -71,9 +71,10 @@ jobs:
             -f ref="$GITHUB_REF_NAME" -F return_run_details=true \
             -f "inputs[ref]=$GITHUB_SHA" -f "inputs[version]=$VERSION" -f "inputs[tag]=beta" \
             --jq .workflow_run_id)
-          echo "Publishing $VERSION: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$RUN_ID"
+          PACKAGE="${{ steps.get_version.outputs.package }}@$VERSION"
+          echo "Publishing $PACKAGE: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$RUN_ID"
           if ! gh run watch "$RUN_ID" --repo "$GITHUB_REPOSITORY" --exit-status --interval 30 > /dev/null; then
             gh run view "$RUN_ID" --repo "$GITHUB_REPOSITORY" --log-failed
             exit 1
           fi
-          echo "Published $VERSION"
+          echo "Published $PACKAGE"

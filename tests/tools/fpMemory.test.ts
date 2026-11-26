@@ -18,7 +18,7 @@ vi.mock("../../src/logger.js", () => ({
 
 import {
   FP_APPLY_NOTE,
-  FP_FILING_GUIDE,
+  FP_REVIEW_GUIDE,
   LATER_CHARACTERS,
   READ_CAPABILITY,
   SUBMIT_CAPABILITY,
@@ -170,7 +170,7 @@ describe("applyMemory", () => {
       issue("role-required"),
     ]);
     expect(view.marked).toBe(0);
-    expect(view.notes).toEqual([FP_FILING_GUIDE]);
+    expect(view.notes).toEqual([FP_REVIEW_GUIDE]);
     expect(view.lead).toEqual([]);
   });
 
@@ -237,7 +237,7 @@ describe("applyMemory", () => {
       ),
     );
     expect(shown[0].entries.map((e: any) => e.id)).toEqual(["fp_1"]);
-    expect(view.notes.at(-1)).toBe(FP_FILING_GUIDE);
+    expect(view.notes.at(-1)).toBe(FP_REVIEW_GUIDE);
   });
 });
 
@@ -259,7 +259,7 @@ describe("applyMemory with more entries than one read returns", () => {
     expect(view.marked).toBe(0);
     expect(view.notes[0]).toMatch(/Not all saved false positives were read/);
     expect(view.notes[0]).toContain(READ_CAPABILITY);
-    expect(view.notes.at(-1)).toBe(FP_FILING_GUIDE);
+    expect(view.notes.at(-1)).toBe(FP_REVIEW_GUIDE);
   });
 });
 
@@ -304,7 +304,18 @@ describe("the capabilities an answer names", () => {
   it("exist in the Web Accessibility index", () => {
     expect(byName(SUBMIT_CAPABILITY)).toBeDefined();
     expect(byName(READ_CAPABILITY)).toBeDefined();
-    expect(FP_FILING_GUIDE).toContain(SUBMIT_CAPABILITY);
+    expect(FP_REVIEW_GUIDE).toContain(SUBMIT_CAPABILITY);
+  });
+
+  it("ask the agent to look for false positives itself, render-check them and get consent", () => {
+    // Not only when the user objects: the review is the first step of the memory's loop.
+    expect(FP_REVIEW_GUIDE).toMatch(/^Review these issues for false positives before you report them\./);
+    expect(FP_REVIEW_GUIDE).toContain("check the element as the page renders it");
+    expect(FP_REVIEW_GUIDE).toContain("say it wasn't checked rendered");
+    expect(FP_REVIEW_GUIDE).toContain("Keep these issues in your list and counts");
+    expect(FP_REVIEW_GUIDE).toContain("evidence.observations, including what you could not verify");
+    expect(FP_REVIEW_GUIDE).toContain("Show the user the rule, site, scope, predicate and rootCause you will save");
+    expect(FP_REVIEW_GUIDE).toContain("If they only said yes, ask for one line on why");
   });
 
   it("are never destructive, which invokeCapability refuses before binding", () => {

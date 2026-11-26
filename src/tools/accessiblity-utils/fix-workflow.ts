@@ -4,6 +4,8 @@
  * purpose. The text is a string here because the build copies no .md files.
  */
 
+import { SUBMIT_CAPABILITY } from "./fp-memory.js";
+
 /** The prompt's name. */
 export const FIX_WORKFLOW_NAME = "fix-accessibility-issues";
 
@@ -35,12 +37,12 @@ Understand each issue and decide what matters most.
 
 **Gate: the user has approved a fix plan.**
 
-1. **Keep only issues in scope:** the right page (\`affected_page\`, or \`screen\` in app reports), the right component or section, and the right severities.
+1. **Keep only issues in scope:** the right page (\`affected_page\`, or \`screen\` in app reports), the right component or section, and the right severities. Leave out saved false positives: in web reports, the answer marks issues with \`saved_fp_entries\` and says how to check them against their entries. Remove the ones the entries cover, and don't ask the user about them again.
 2. **Sort each issue into one of three groups:**
    - **Needs review:** \`needs_review\` is set to a status that does not start with "confirmed" (e.g. "pending review"). The engine could not decide it, and a person has not confirmed it. Don't fix it unless you confirm it in the code or the user asks. List these separately.
    - **Confirmed WCAG failure:** no \`needs_review\`, or a \`needs_review\` status starting with "confirmed" (a person confirmed it), and the rule is not a best practice (\`best_practice\` under \`rules\`).
    - **Best practice:** the rule is marked \`best_practice\`. Fix these after confirmed failures, and say they are not WCAG failures.
-3. **Confirm each issue in the source.** Find the element from its \`component\` (selector) and \`HTML_snippet\` (in app reports, \`screen\` and \`element\`). If the code shows the issue is not real (for example, a skip link whose target does exist), mark it **possible false positive** with a one-line reason and leave the code alone.
+3. **Confirm each issue in the source.** Find the element from its \`component\` (selector) and \`HTML_snippet\` (in app reports, \`screen\` and \`element\`). If the code suggests the issue is not real (for example, a skip link whose target does exist, or a role set inside a shadow root), check it rendered too. Open the page in a browser if you can and read the element's computed role and name, its place in the accessibility tree and its shadow DOM. If it still looks wrong, mark it **possible false positive** with a one-line reason and leave the code alone. If you couldn't render it, say so in the reason.
 4. **Group by root cause.** One rule on one source component is one fix, however many times it shows up. A shared \`<IconButton>\` without a label can produce 40 occurrences.
 5. **Say what kind of change each fix is.** This decides what needs approval:
    - **Code only:** markup or attributes; no change to how it looks or works. Can go ahead once the plan is approved.
@@ -50,6 +52,7 @@ Understand each issue and decide what matters most.
    - **Third-party:** the element comes from an external package. Leave third-party code unchanged. Report the package name, and what the user could ask its owners for.
 6. **Order the work:** critical → serious → moderate → minor. Within a level, confirmed failures before best practices, then the root causes with the most occurrences first.
 7. **Show the plan and wait.** Give a table with these columns: #, rule, severity, group (confirmed / best practice), element, source file and component, occurrences, kind of change, planned change. Then stop, even if the user already asked you to fix everything. Their reply to the plan is the go-ahead. If they say "go", fix every confirmed critical issue in scope. Approval covers only what the plan names. A shared component or a look-or-behaviour change that the plan didn't name needs its own question.
+8. **Ask about possible false positives.** Under the plan, list each one with its reason, and ask the user whether it is a false positive. In a web report, save each one they confirm with the web_accessibility capability \`${SUBMIT_CAPABILITY}\` (through \`invokeCapability\`), so later reports drop it. The issues answer says what to write in it and what to ask the user first.
 
 ### Questions about the report: use Ask BrowserStack AI
 
@@ -111,6 +114,7 @@ When every item in the approved plan is fixed, flagged or marked not fixed, stop
 1. A table: #, rule, severity, element, file changed, and status. Status is one of:
    - fixed and verified
    - fixed, not verified (with the reason)
+   - false positive, saved (with the entry id)
    - possible false positive (with the reason)
    - needs review (not touched)
    - third-party, reported

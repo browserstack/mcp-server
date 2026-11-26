@@ -81,6 +81,29 @@ describe("the fix workflow over MCP", () => {
     await client.close();
   });
 
+  it("tells the agent from the server instructions that confirmed false positives can be saved", async () => {
+    const client = await connected();
+
+    expect(client.getInstructions() ?? "").toContain(
+      "When the user confirms a web accessibility issue is a false positive, save it with the web_accessibility capability submit_false_positive_feedback, so later reports drop it.",
+    );
+    await client.close();
+  });
+
+  it("drops saved false positives, render-checks possible ones and saves those the user confirms", async () => {
+    const client = await connected();
+
+    const { messages } = await client.getPrompt({ name: "fix-accessibility-issues", arguments: {} });
+    const text = (messages[0].content as { text: string }).text;
+    expect(text).toContain("Leave out saved false positives");
+    expect(text).toContain("check it rendered too");
+    expect(text).toContain(
+      "save each one they confirm with the web_accessibility capability `submit_false_positive_feedback`",
+    );
+    expect(text).toContain("- false positive, saved (with the entry id)");
+    await client.close();
+  });
+
   it("returns the workflow alone when fixWorkflow names no report", async () => {
     const client = await connected();
 

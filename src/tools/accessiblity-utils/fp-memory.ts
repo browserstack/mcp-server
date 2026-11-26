@@ -176,7 +176,16 @@ export function memoryPayload(
 export const FP_APPLY_NOTE =
   "How to apply the false-positive memory: an issue marked saved_fp_entries has false positives saved for its rule (issue_type) on its site; compare it with those entries only. Match on an entry's pattern and root_cause, never on selector or exact HTML: ids, selectors and labels differ per page and language. Remove it when the entry covers it within the entry's scope (element: that element; component: the same component; component_family: any component its pattern.predicate describes; site_predicate: anything on the site the predicate describes), and do not ask the user about it again. Never remove a counter_example. A marked issue that looks like the same pattern but falls outside the scope is a likely false positive: ask the user once per group, and if they agree save it at the wider scope. An issue without saved_fp_entries is not covered by the memory. Each rule's docs link explains what the rule checks.";
 
-export const FP_FILING_GUIDE = `When the user says an issue is not a real problem, save it with the web_accessibility capability ${SUBMIT_CAPABILITY} (invokeCapability), so later reports are filtered without asking again. First inspect the element yourself (open the page if you have a browser, else read the issue's HTML): what it is built from (tag, custom element, shadow root, classes, design system) and why the rule is wrong about it. Write rootCause about how the element is built, not only that it works for the user, and pattern.predicate as the widest set of elements that root cause covers (e.g. every custom element of the same design system). Propose that scope and ask the user to confirm it, and to name any similar element that is a real issue (counterExamples). Quote the user as they said it in userStatement. Mark global only when the user says it holds on all their sites.`;
+/**
+ * How an agent reviews a report for false positives and saves the ones the user confirms.
+ * It comes with every answer that has the memory, not only after the user objects to an
+ * issue: an agent told only to save what the user disputes never looked for false
+ * positives itself, so the memory grew only as fast as users complained.
+ */
+export const FP_REVIEW_GUIDE = `Review these issues for false positives before you report them. A confirmed issue (no needs_review) can still be wrong about how the element is built: a role or name set inside a shadow root or by a design system, or a landmark that a parent already provides. For each issue that looks like this, check the element as the page renders it. Open the page in a browser if you can (for local code, from the dev server) and read the element's computed role and name, its place in the accessibility tree, its shadow DOM and its parents. If you can't render it, check the source and the issue's HTML, and say it wasn't checked rendered. Keep these issues in your list and counts, and show them to the user separately as likely false positives, each with a one-line reason. Save each one the user confirms with the web_accessibility capability ${SUBMIT_CAPABILITY} (invokeCapability), so later reports drop it. Do the same when the user says on their own that an issue is not real. Before you save: write rootCause about how the element is built, not only that it works for the user; write pattern.predicate as the widest set of elements that root cause covers (e.g. every custom element of the same design system); and put what you checked in evidence.observations, including what you could not verify. Show the user the rule, site, scope, predicate and rootCause you will save. Ask them to confirm these, and to name any similar element that is a real issue (counterExamples). Quote the user in userStatement. If they only said yes, ask for one line on why and quote that. Mark global only when the user says it holds on all their sites.`;
+
+/** One line for the server instructions, so an agent knows the memory exists before it reads a report. */
+export const FP_INSTRUCTION = `When the user confirms a web accessibility issue is a false positive, save it with the web_accessibility capability ${SUBMIT_CAPABILITY}, so later reports drop it.`;
 
 /** An issue as an answer lists it: its rule, and the page it is on when the answer spans several. */
 interface IssueLike {
@@ -335,7 +344,7 @@ export function applyMemory<T extends IssueLike>(
       records,
       marked,
       lead: [],
-      notes: [...unread, FP_FILING_GUIDE],
+      notes: [...unread, FP_REVIEW_GUIDE],
       closing: [],
       ...none,
     };
@@ -383,7 +392,7 @@ export function applyMemory<T extends IssueLike>(
             `Not all entries fit here${omitted.length ? ` (${omitted.map((o) => `${o.count} older entries of ${o.rule}`).join(", ")})` : ""}. When a marked issue is not covered by the entries above, read its rule's entries with the web_accessibility capability ${READ_CAPABILITY} (ruleCodes set to its rule; pass each page's nextCursor as cursor for the next).`,
           ]
         : []),
-      FP_FILING_GUIDE,
+      FP_REVIEW_GUIDE,
     ],
     closing: [
       "When you answer the user: list only the issues left after removing the saved false positives, and lead with how many are left; say how many you removed for each rule, with the entry ids; and say that the report's own totals above count them, so the issues left are that many fewer.",

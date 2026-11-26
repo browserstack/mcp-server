@@ -13,6 +13,7 @@ import addAccessibilityTools, {
   addAccessibilityFixWorkflow,
 } from "./tools/accessibility.js";
 import { FIX_WORKFLOW_INSTRUCTION } from "./tools/accessiblity-utils/fix-workflow.js";
+import { FP_INSTRUCTION } from "./tools/accessiblity-utils/fp-memory.js";
 import addTestManagementTools from "./tools/testmanagement.js";
 import addAppAutomationTools from "./tools/appautomate.js";
 import addFailureLogsTools from "./tools/get-failure-logs.js";
@@ -74,6 +75,9 @@ export class BrowserStackMcpServer {
           // Claude Code shows tools by name only until it searches for them, but always
           // shows these instructions, so this line is how its agent finds the fix workflow.
           FIX_WORKFLOW_INSTRUCTION,
+          // The memory's capabilities are found by search, and its guide comes only with a
+          // report: without this line an agent whose user disputes an issue never saves it.
+          FP_INSTRUCTION,
         ]
           .filter(Boolean)
           .join("\n"),

@@ -7972,6 +7972,8 @@
           "Before saving, inspect the element yourself (open the page if you can, else read the issue's HTML) and write rootCause and pattern.predicate from what you saw: a record that only says the element works for the user matches almost nothing on the next report.",
           "Propose the widest scope the root cause supports (e.g. component_family for every custom element of one design system) and have the user confirm it; ask them for any similar element that is a real issue and send it in counterExamples.",
           "Send the issue's fields as fetchAccessibilityIssues gave them; selectors are not taken, as they differ per page.",
+          "Put what you checked in evidence.observations, including what you could not verify, so another user can check the entry later.",
+          "Before setting user_permission, show the user the rule, site, scope, predicate and rootCause you will save; quote their own words in userStatement, and if they only said yes, ask for one line on why.",
           "warnings in the reply ask you to re-check the scope with the user; resend at the wider scope if they agree.",
           "A 409 reply means an active entry already covers this rule, site, scope and predicate: nothing was saved, and data.existingId names that entry; tell the user it is already saved."
         ],
@@ -8199,7 +8201,8 @@
         ],
         "intent": "Remove a saved false positive the user no longer agrees with, so the issues it covered show again in later reports.",
         "guidance": [
-          "Revoked entries are kept on the account's side but no longer returned or applied; there is no undo, so save a new entry instead if the user changes their mind."
+          "Revoked entries are kept on the account's side but no longer returned or applied; there is no undo, so save a new entry instead if the user changes their mind.",
+          "This is a write, not a delete: invokeCapability takes it once the user agrees, with user_permission and a change_summary."
         ],
         "returns": ["data.id", "data.status"],
         "responses": {

@@ -134,6 +134,77 @@ describe("a bare name two wrapped fields share", () => {
   });
 });
 
+describe("a field sent both ways", () => {
+  const CREATE = {
+    ...MOVE,
+    body: [{ name: "name", type: "string", json_path: "/folder/name" }],
+  } as Capability;
+  const create = (body: Record<string, unknown>) =>
+    bind(CREATE, { path_params: { project_id: 1 }, body }).body;
+
+  it("binds the bare name on its own", () => {
+    expect(create({ name: "a" })).toEqual({ folder: { name: "a" } });
+  });
+
+  it("is refused as sent twice, naming both keys", () => {
+    expect(() => create({ name: "a", folder: { name: "b" } })).toThrow(
+      "body field 'folder.name' was sent twice, as 'name' and as 'folder.name'. Send it once.",
+    );
+  });
+});
+
+describe("aliases on fields inside an item", () => {
+  const REPORT = {
+    ...MOVE,
+    body: [
+      {
+        name: "widgets",
+        type: "array",
+        fields: [
+          {
+            name: "globalFilters",
+            type: "object",
+            aliases: ["dashboardFilters"],
+          },
+        ],
+      },
+    ],
+  } as Capability;
+  const report = (body: Record<string, unknown>) =>
+    bind(REPORT, { path_params: { project_id: 1 }, body }).body;
+
+  it("renames the old key to the field in every item", () => {
+    expect(
+      report({
+        widgets: [
+          { id: "w1", dashboardFilters: { projects: [1] } },
+          { id: "w2", globalFilters: { projects: [2] } },
+        ],
+      }),
+    ).toEqual({
+      widgets: [
+        { id: "w1", globalFilters: { projects: [1] } },
+        { id: "w2", globalFilters: { projects: [2] } },
+      ],
+    });
+  });
+
+  it("refuses an item that sends both", () => {
+    expect(() =>
+      report({
+        widgets: [{ dashboardFilters: {}, globalFilters: {} }],
+      }),
+    ).toThrow(
+      "widgets.globalFilters was sent twice, as 'globalFilters' and as 'dashboardFilters'",
+    );
+  });
+
+  it("keeps field aliases out of the published contract", () => {
+    const [widgets] = withoutFixed(REPORT).body as WireParam[];
+    expect(widgets.fields).toEqual([{ name: "globalFilters", type: "object" }]);
+  });
+});
+
 describe("the published contract", () => {
   it("names a wrapped field by its position and drops the pointer", () => {
     const body = withoutFixed(MOVE).body as WireParam[];
@@ -313,6 +384,31 @@ describe("the shipped indexes", () => {
       }
     },
   );
+
+  it("tra create_report: old field names inside filters and reports[] reach the API under its keys", () => {
+    const bound = bind(find("tra", "create_report"), {
+      body: {
+        name: "r",
+        filters: {
+          buildNames: ["nightly"],
+          branchList: ["main"],
+          testPlanIds: [7],
+          order: ["buildName"],
+        },
+        reports: [{ name: "w", dashboardFilters: { projects: [1] } }],
+      },
+    });
+    expect(bound.body).toEqual({
+      name: "r",
+      filters: {
+        buildName: ["nightly"],
+        branches: ["main"],
+        tcmTestPlanIds: [7],
+        filterOrder: ["buildName"],
+      },
+      reports: [{ name: "w", globalFilters: { projects: [1] } }],
+    });
+  });
 
   it("names every item field by the key the API reads", () => {
     // Fields inside an array item or object are passed through as sent, never renamed, so

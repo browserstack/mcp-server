@@ -160,17 +160,19 @@ describe("what stays refused", () => {
       bind(NAVIGATE, {
         body: { sessionId: "a", SessionID: "b", url: "https://x" },
       }),
-    ).toThrow(/unknown body: SessionID/);
+    ).toThrow(/was sent twice, as 'SessionID' and as 'session_id'/);
   });
 
   it("the same parameter sent twice under two spellings", () => {
-    // Folding would make one value silently win; the refusal names the stray.
+    // Folding would make one value silently win; the refusal names both keys.
     expect(() =>
       bind(cap(NAVIGATE), {
         path_params: { session_id: "s1", sessionId: "s2" },
         body: { url: "https://example.com" },
       }),
-    ).toThrow(/unknown path_params: sessionId/);
+    ).toThrow(
+      "path_params 'session_id' was sent twice, as 'sessionId' and as 'session_id'. Send it once.",
+    );
   });
 
   it("keys of a map-valued body, which are not misspellings", () => {

@@ -242,10 +242,39 @@ export function coerce(value: unknown, param: WireParam): unknown {
   // other indexes (tm's folder_id) already carry it as documentation, and honouring it would
   // change what those products send. Elsewhere null stays refused by its type.
   if (value === null && param.accepts_null) return null;
-  const coerced = coerceType(value, param);
+  const coerced = renameFieldAliases(coerceType(value, param), param);
   checkConstraints(coerced, param);
   checkFields(coerced, param);
   return coerced;
+}
+
+/**
+ * Inside an object, or each item of an array, a field's alias is renamed to the field.
+ * An item is forwarded as sent, so an alias left in place would reach the API under a
+ * key it does not read. Sending both is refused rather than one silently winning.
+ */
+function renameFieldAliases(value: unknown, param: WireParam): unknown {
+  const aliased = (param.fields ?? []).filter((field) => field.aliases?.length);
+  if (aliased.length === 0) return value;
+  const rename = (item: unknown): unknown => {
+    if (!isRecord(item)) return item;
+    const out: Record<string, unknown> = { ...item };
+    for (const field of aliased) {
+      for (const alias of field.aliases!) {
+        if (!(alias in out)) continue;
+        if (field.name in out) {
+          throw new InvocationError(
+            `${param.name}.${field.name} was sent twice, as '${field.name}' and as ` +
+              `'${alias}'. Send it once, as '${field.name}'.`,
+          );
+        }
+        out[field.name] = out[alias];
+        delete out[alias];
+      }
+    }
+    return out;
+  };
+  return Array.isArray(value) ? value.map(rename) : rename(value);
 }
 
 function coerceType(
@@ -554,9 +583,21 @@ export function withoutFixed(
       // Aliases are forgiveness, not vocabulary: the contract publishes one name.
       // `form_name` is the multipart field a file travels under; the caller still
       // supplies the parameter by `name`.
-      .map(({ aliases, form_name, ...param }) => {
+      .map(({ aliases, form_name, ...declared }) => {
         void aliases;
         void form_name;
+        // Field aliases are forgiveness too, and stay out of the contract the same way.
+        const param = declared.fields?.some((field) => field.aliases)
+          ? {
+              ...declared,
+              fields: declared.fields.map(
+                ({ aliases: fieldAliases, ...field }) => {
+                  void fieldAliases;
+                  return field;
+                },
+              ),
+            }
+          : declared;
         // A wrapped body field is published under its position, which already says
         // where it goes; the pointer beside it would only repeat that.
         if (group === "body" && bodyKey(param, params ?? []) !== param.name) {
@@ -732,7 +773,16 @@ export function normalise(
         // Sent under its own name in the right place as well: the move would collide.
         continue;
       }
-      if (target.name in out[target.group]) continue;
+      if (target.name in out[target.group]) {
+        // The field is already there, sent at its position or under another spelling.
+        // Saying so beats leaving this key behind to be reported as unknown, which reads
+        // as if the name were wrong when it is accepted on its own.
+        throw new InvocationError(
+          `${target.group === "body" ? "body field" : target.group} ` +
+            `'${target.name}' was sent twice, as '${name}' and as '${target.name}'. ` +
+            `Send it once.`,
+        );
+      }
       delete out[group][name];
       out[target.group][target.name] = value;
     }

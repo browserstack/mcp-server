@@ -77,6 +77,13 @@ export interface WireField extends WireConstraints {
   type: string;
   required?: true;
   values?: unknown[];
+  /**
+   * Other keys a caller may send for this field, renamed to `name` before the request goes
+   * out. Fields inside an item are otherwise forwarded as sent, so a field renamed to its
+   * wire key needs its old name here, or a caller on the old contract sends a key the API
+   * ignores. Withheld from the published contract, like a parameter's aliases.
+   */
+  aliases?: string[];
 }
 
 export interface WireParam extends WireConstraints {

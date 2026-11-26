@@ -8330,22 +8330,34 @@
               {
                 "name": "buildName",
                 "type": "array",
-                "description": "Build names to filter by (singular key)."
+                "description": "Build names to filter by (singular key).",
+                "aliases": [
+                  "buildNames"
+                ]
               },
               {
                 "name": "branches",
                 "type": "array",
-                "description": "Branches to filter by."
+                "description": "Branches to filter by.",
+                "aliases": [
+                  "branchList"
+                ]
               },
               {
                 "name": "tcmTestPlanIds",
                 "type": "array",
-                "description": "Test Management test plan ids. The legacy key testPlanIds is also accepted for old persisted blobs."
+                "description": "Test Management test plan ids. The legacy key testPlanIds is also accepted for old persisted blobs.",
+                "aliases": [
+                  "testPlanIds"
+                ]
               },
               {
                 "name": "filterOrder",
                 "type": "array",
-                "description": "Filter display order."
+                "description": "Filter display order.",
+                "aliases": [
+                  "order"
+                ]
               },
               {
                 "name": "match",
@@ -8383,7 +8395,10 @@
               {
                 "name": "globalFilters",
                 "type": "object",
-                "description": "Widget-level global filters."
+                "description": "Widget-level global filters.",
+                "aliases": [
+                  "dashboardFilters"
+                ]
               },
               {
                 "name": "config",
@@ -8415,7 +8430,10 @@
               },
               {
                 "name": "globalFilters",
-                "type": "object"
+                "type": "object",
+                "aliases": [
+                  "dashboardFilters"
+                ]
               },
               {
                 "name": "config",
@@ -8597,7 +8615,10 @@
             "fields": [
               {
                 "name": "globalFilters",
-                "type": "object"
+                "type": "object",
+                "aliases": [
+                  "dashboardFilters"
+                ]
               },
               {
                 "name": "config",
@@ -8612,7 +8633,10 @@
             "fields": [
               {
                 "name": "globalFilters",
-                "type": "object"
+                "type": "object",
+                "aliases": [
+                  "dashboardFilters"
+                ]
               },
               {
                 "name": "config",

@@ -24,3 +24,6 @@ __pycache__/
 
 # Test and coverage reports (vitest --coverage, junit)
 reports/
+
+# Stryker mutation testing sandbox (npm run test:mutation)
+.stryker-tmp/

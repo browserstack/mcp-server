@@ -15,6 +15,9 @@ const load = (p: string) => {
 };
 const products = { tm: load("tm"), tra: load("tra") } as any;
 
+// Reads src/ as text; Stryker rewrites src/ with mutants, so skip only in a Stryker worker.
+const itSourceText = it.skipIf(!!process.env.STRYKER_MUTATOR_WORKER);
+
 describe("productAnchors", () => {
   const cases: [string, string[]][] = [
     ["What did the last report say?", []],
@@ -50,7 +53,7 @@ describe("searchCapability withholds the product names", () => {
   // the model before it calls anything — so a model that never called listProducts still
   // knew `tm` and `tra` existed and picked one. On the requests that routed silently,
   // listProducts was never called at all: there was nothing left to learn from it.
-  it("declares product as a free string, not an enum", async () => {
+  itSourceText("declares product as a free string, not an enum", async () => {
     const { readFileSync } = await import("node:fs");
     const src = readFileSync(
       "src/tools/capability-registry/register.ts",
@@ -64,7 +67,7 @@ describe("searchCapability withholds the product names", () => {
     expect(arg).not.toMatch(/product: productArg\(\)/);
   });
 
-  it("names listProducts as where a product name comes from", async () => {
+  itSourceText("names listProducts as where a product name comes from", async () => {
     const { readFileSync } = await import("node:fs");
     const src = readFileSync(
       "src/tools/capability-registry/register.ts",
@@ -95,7 +98,7 @@ describe("the user_words gate", () => {
     delete process.env.CAPABILITY_REGISTRY_BASE_URL_TM;
   });
 
-  it("judges the user's words, not the agent's rewrite of them", async () => {
+  itSourceText("judges the user's words, not the agent's rewrite of them", async () => {
     const { ambiguousProducts } =
       await import("../../src/tools/capability-registry/search.js");
     const { readFileSync } = await import("node:fs");
@@ -113,7 +116,7 @@ describe("the user_words gate", () => {
     expect(ambiguousProducts).toBeTypeOf("function");
   });
 
-  it("keeps a raised clash open until a product is actually named", async () => {
+  itSourceText("keeps a raised clash open until a product is actually named", async () => {
     const { readFileSync } = await import("node:fs");
     const src = readFileSync(
       "src/tools/capability-registry/register.ts",
@@ -231,7 +234,7 @@ describe("a clash announced by listProducts binds the next search", () => {
   // answered it twice. The gate downstream never fired because it judges the caller's
   // paraphrase when no user words are quoted, and a paraphrase carries none of the shared
   // words that caused the clash.
-  it("mints a token on the clash and on a blank request", async () => {
+  itSourceText("mints a token on the clash and on a blank request", async () => {
     const { readFileSync } = await import("node:fs");
     const src = readFileSync(
       "src/tools/capability-registry/register.ts",
@@ -260,7 +263,7 @@ describe("words that point at another product are evidence, not noise", () => {
     expect(verdict.settled).not.toBe("tm");
   });
 
-  it("guards the mismatch on the product, not merely on settling at all", async () => {
+  itSourceText("guards the mismatch on the product, not merely on settling at all", async () => {
     const { readFileSync } = await import("node:fs");
     const src = readFileSync(
       "src/tools/capability-registry/register.ts",

@@ -316,39 +316,48 @@ describe("withToolCall failure attribution", () => {
     },
   );
 
-  // The probe only fails when every host refused the account, so the US host's 401 or
-  // 403 is the account's own credentials, and its 429 the product's rate limit: blocked,
-  // like the 402. No answer, a timeout or a 5xx is the probe itself.
+  // The other regions always answer 401 to an account that is not theirs, so the
+  // account is refused (blocked) only when every host said so: no product, bad
+  // credentials, rate-limited. A host that never answered or returned 5xx may have been
+  // the account's own region (an EU account always gets 401 from the US host), and
+  // the failure is the probe itself.
   it.each([
-    [0, "mcp", "region_probe"],
-    [503, "mcp", "region_probe"],
-    [408, "mcp", "region_probe"],
-    [401, "caller", "blocked"],
-    [402, "caller", "blocked"],
-    [403, "caller", "blocked"],
-    [429, "caller", "blocked"],
+    [[0, 401, 401], "mcp", "region_probe"],
+    [[503, 401, 401], "mcp", "region_probe"],
+    [[408, 401, 401], "mcp", "region_probe"],
+    [[401, 0, 401], "mcp", "region_probe"],
+    [[401, 503, 401], "mcp", "region_probe"],
+    [[401, 401, 401], "caller", "blocked"],
+    [[402, 401, 401], "caller", "blocked"],
+    [[403, 401, 401], "caller", "blocked"],
+    [[429, 401, 401], "caller", "blocked"],
+    [[401, 401, 429], "caller", "blocked"],
   ])(
-    "attributes a region probe whose US host answered %i to %s (%s)",
-    async (usStatus, expected, reason) => {
+    "attributes a region probe whose hosts (US, EU, IN) answered %j to %s (%s)",
+    async (statuses, expected, reason) => {
       const row = await rowOf(() => {
-        trackMCP("invokeCapability", clientInfo, new Error("probe"), config, {
+        const error = new RegionProbeError(
+          "Unable to connect to BrowserStack Test Management",
+          statuses.map((status, i) => ({ host: `https://host${i}`, status })),
+        );
+        trackMCP("invokeCapability", clientInfo, error, config, {
           refusal_reason: "region_probe_failed",
-          probe_status: usStatus,
+          probe_status: error.usStatus,
         });
         return failed;
       });
       expect(row).toMatchObject({
         failure_class: expected,
         failure_reason: reason,
-        probe_status: usStatus,
+        probe_status: statuses[0],
       });
     },
   );
 
-  it("attributes a region probe on a direct tool by the US host, not the last host", async () => {
+  it("attributes a region probe on a direct tool by every host's answer, not the last", async () => {
     // The probe tries US, EU, IN; the other regions answer 401 to an account that is
     // not theirs, and a tool that catches the error and returns text would otherwise be
-    // classified by that 401. The error records the US answer on the way out.
+    // classified by that 401. The error records the hosts' answers on the way out.
     const row = await rowOf(() => {
       try {
         throw new RegionProbeError(

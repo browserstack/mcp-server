@@ -1,6 +1,7 @@
 import { AxiosError } from "axios";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import {
+  BLOCKED_STATUSES,
   markCallerFault,
   recordRegionProbeFailure,
 } from "./upstream-status.js";
@@ -106,8 +107,8 @@ export class CallerError extends Error {
 /**
  * The Test Management region probe found no host that accepted the account. The
  * message is what the user sees (unchanged); `results` keeps each host's answer so
- * telemetry can attribute the failure by what the US host did rather than by the last
- * host tried: a 402 is an account without the product, anything else is the probe itself.
+ * telemetry can tell a refused account (every host answered 401/402/403/429) from a
+ * probe that failed (some host timed out or answered 5xx — possibly the account's own).
  */
 export class RegionProbeError extends Error {
   constructor(
@@ -116,12 +117,24 @@ export class RegionProbeError extends Error {
   ) {
     super(message);
     this.name = "RegionProbeError";
-    recordRegionProbeFailure(this.usStatus);
+    recordRegionProbeFailure(this.usStatus, this.everyHostBlocked);
   }
 
   /** What the first (US) host answered; 0 when the connection was never answered. */
   get usStatus(): number {
     return this.results[0]?.status ?? 0;
+  }
+
+  /**
+   * Whether every host tried refused the account outright. The other regions always
+   * answer 401 to an account that is not theirs, so only when the account's own host
+   * did too is the failure the account's: a timeout or 5xx from any host is the probe.
+   */
+  get everyHostBlocked(): boolean {
+    return (
+      this.results.length > 0 &&
+      this.results.every((r) => BLOCKED_STATUSES.has(r.status))
+    );
   }
 }
 

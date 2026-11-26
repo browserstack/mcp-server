@@ -42,6 +42,23 @@ describe("attributeScanFailure", () => {
     });
   });
 
+  it("files a site's own limit or refusal as the caller's site, not the plan", () => {
+    // "Method Not Allowed" and "Time limit exceeded" are the site's words, not a plan
+    // limit, and a page's line never speaks for the plan whatever it says.
+    expect(
+      attributed({ pages: [page("[HTTP 405] Method Not Allowed")] }),
+    ).toEqual({ callerFault: true });
+    expect(attributed({ reason: "Time limit exceeded", pages: [] })).toEqual({
+      callerFault: true,
+    });
+    expect(
+      attributed({ pages: [page("Fair usage limit reached for your plan")] }),
+    ).toEqual({ callerFault: true });
+    expect(
+      attributed({ reason: "Usage limit exceeded for your plan", pages: [] }),
+    ).toEqual({ callerFault: true, blocked: true });
+  });
+
   it("lets the run's own reason decide over its pages' lines", () => {
     expect(
       attributed({

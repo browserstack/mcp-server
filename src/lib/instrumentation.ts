@@ -12,7 +12,11 @@ import { isKnownProduct } from "../tools/capability-registry/config.js";
 import { accountRegion } from "./account-region.js";
 import { AxiosError } from "axios";
 import { HttpError } from "./error.js";
-import { UpstreamScope, withUpstreamScope } from "./upstream-status.js";
+import {
+  BLOCKED_STATUSES,
+  UpstreamScope,
+  withUpstreamScope,
+} from "./upstream-status.js";
 import {
   AccountRegion,
   currentRegionScope,
@@ -293,7 +297,6 @@ const MCP_REFUSALS = new Set(["unexpected_error", "no_base_url"]);
 const PROGRAMMING_ERRORS = [TypeError, RangeError, ReferenceError, SyntaxError];
 
 /** 4xx that mean the account may not do this: entitlement, auth, rate limit. */
-const BLOCKED_STATUSES = new Set([401, 402, 403, 429]);
 
 /**
  * 4xx that can only mean the product no longer serves the request as the tool or index
@@ -324,16 +327,15 @@ function byStatus(status: number): Attribution | undefined {
 }
 
 /**
- * The Test Management region probe: attributed by what the US host answered, not by the
- * last host tried (the other regions always answer 401 to an account that is not theirs).
- * A 402 is an account without the product, a 401 or 403 is credentials no host accepted
- * (the probe only fails when every host refused, so the US answer is the account's own),
- * and a 429 is the product rate-limiting the account: all blocked. Everything else — a
- * timeout, a 5xx, no answer — is the probe itself, which runs before every call and is
- * this server's design.
+ * The Test Management region probe. The other regions always answer 401 to an account
+ * that is not theirs, so the failure is the account's own (blocked: no product, bad
+ * credentials, rate-limited) only when every host refused it with a 401/402/403/429.
+ * If any host timed out or answered 5xx that host may have been the account's region,
+ * and the failure is the probe itself, which runs before every call and is this
+ * server's design. The US status is still logged as `probe_status`.
  */
-function byProbe(usStatus: number): Attribution {
-  return BLOCKED_STATUSES.has(usStatus)
+function byProbe(everyHostBlocked: boolean): Attribution {
+  return everyHostBlocked
     ? { failure_class: "caller", failure_reason: "blocked" }
     : { failure_class: "mcp", failure_reason: "region_probe" };
 }
@@ -380,14 +382,13 @@ function failureClassOf(
   if (typeof reason === "string") {
     if (MCP_REFUSALS.has(reason)) return { failure_class: "mcp" };
     if (reason === "region_probe_failed")
-      return byProbe(
-        typeof extras?.probe_status === "number" ? extras.probe_status : 0,
-      );
+      return byProbe(scope.probeBlocked === true);
     if (reason === "token_mint_failed")
       return byTokenMint(extras?.auth_failure_kind);
     return { failure_class: "caller" };
   }
-  if (scope.probeStatus !== undefined) return byProbe(scope.probeStatus);
+  if (scope.probeStatus !== undefined)
+    return byProbe(scope.probeBlocked === true);
   if (status !== undefined && (status === 0 || status === 408 || status >= 500))
     return { failure_class: "upstream" };
   if (PROGRAMMING_ERRORS.some((kind) => error instanceof kind))

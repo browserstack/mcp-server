@@ -204,9 +204,12 @@ export function pageReasons(
   ].join("\n");
 }
 
-/** The scanner refusing the account: its plan's limit, not the page or the scanner. */
-const BLOCKED_REASON =
-  /fair usage|usage limit|limit (has been )?(reached|exceeded)|quota|not (allowed|permitted|entitled)|upgrade your plan/i;
+/**
+ * The scanner refusing the account for its plan: a limit on usage, not on the page.
+ * Only the plan's own words qualify; "limit exceeded" or "not allowed" alone also
+ * describe a site ("Time limit exceeded", "[HTTP 405] Method Not Allowed").
+ */
+const BLOCKED_REASON = /fair usage|usage limit|quota|upgrade your plan/i;
 /** The scanner failing on its own side, inside a run the API reports as a 200. */
 const UPSTREAM_REASON =
   /something went wrong|internal (server )?error|unexpected error/i;
@@ -217,8 +220,9 @@ const UPSTREAM_REASON =
  * (blocked); the scanner reporting its own fault is upstream; any other reason (the page
  * not reachable, the site answering 403, a redirect off the page) is the caller's site.
  * The run's own reason decides when there is one: a page's line ("Failed to start the
- * test") is the consequence of it, not a second cause. With no reason at all nothing is
- * recorded, and the row stays an unexplained failure rather than a guessed one.
+ * test") is the consequence of it, not a second cause. Only the run's reason can mean
+ * the plan: a page's line is about that page, whatever its words. With no reason at all
+ * nothing is recorded, and the row stays an unexplained failure rather than a guessed one.
  */
 export function attributeScanFailure(details: ScanFailureDetails): void {
   const run = details.reason?.trim();
@@ -229,7 +233,7 @@ export function attributeScanFailure(details: ScanFailureDetails): void {
       .filter(Boolean)
       .join("\n");
   if (!said) return;
-  if (BLOCKED_REASON.test(said)) return markCallerFault("blocked");
+  if (run && BLOCKED_REASON.test(run)) return markCallerFault("blocked");
   if (UPSTREAM_REASON.test(said)) return markUpstreamFault();
   markCallerFault();
 }

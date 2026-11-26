@@ -48,9 +48,11 @@ import logger from "../../logger.js";
 import {
   AskError,
   ELICITATION_TIMEOUT_MS,
+  RUN_SETTLE_INTERVAL_MS,
   agentUrl,
   authTokenUrl,
   isEnabled,
+  runSettleCeilingMs,
 } from "./config.js";
 import { fetchTokenTransport, mintCentralToken } from "./central-oauth.js";
 import { toAudienceResult } from "./result-audience.js";
@@ -102,6 +104,7 @@ import {
   conversationResult,
   conversationUrl,
   fetchGetTransport,
+  settleRun,
   withConversation,
 } from "./workflows.js";
 import {
@@ -812,10 +815,27 @@ export function addAskBrowserStackAITool(
       }
 
       // CHECKING on a conversation's agent.
+      //
+      // The reading is settled before it is shaped: a run that is still working is waited
+      // on here rather than handed straight back, because the alternative is the model
+      // calling again — a whole turn per check, and a gap it fills with guesses. The wait
+      // ends the moment anyone can act (an answer, an approval, a question) and on the
+      // ceiling regardless, where the payload is the same "still working" one as before.
       if (conversation_id && !run_id && !(query && query.trim())) {
-        const now = await getTransport(
-          conversationUrl(url, conversation_id, product),
-          headers,
+        const now = await settleRun(
+          () =>
+            getTransport(
+              conversationUrl(url, conversation_id, product),
+              headers,
+            ),
+          {
+            ceilingMs: runSettleCeilingMs(),
+            intervalMs: RUN_SETTLE_INTERVAL_MS,
+            onWait: (elapsed) =>
+              notify(
+                `BrowserStack AI is still working (${Math.round(elapsed / 1000)}s)`,
+              ),
+          },
         );
         return render(conversationResult(now, conversation_id, mode, product));
       }

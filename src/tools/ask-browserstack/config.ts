@@ -24,6 +24,47 @@ import logger from "../../logger.js";
 export const AGENT_TIMEOUT_MS = 330_000;
 export const ELICITATION_TIMEOUT_MS = 270_000;
 
+/**
+ * CONTRACT §4a — how long a check-back waits on a run that is still working before it
+ * hands the conversation id back to the model.
+ *
+ * A working run used to return at once, so the MODEL did the polling: one whole turn per
+ * check, and between them it narrates, guesses and goes looking for work. Waiting here
+ * instead collapses the common case to a single call and leaves it nothing to fill.
+ *
+ * IT NEVER WAITS FOR THE RUN TO FINISH. A run also stops to ask a human, so the wait ends
+ * on the first state anyone can act on — an answer, an approval, a question — or on the
+ * ceiling, whichever comes first. Waiting for "the result" would wait forever on a run
+ * that is itself waiting for the user.
+ *
+ * Two ceilings, because the transports have opposite constraints:
+ *
+ *   stdio    nothing in the middle: no HTTP hop, no pod, no deploy to cut it short. A
+ *            client call was measured surviving 670s+ with no progress notifications at
+ *            all, so the host is not the limit — this number is a product choice about
+ *            how long to go quiet, not a technical one.
+ *   hosted   each wait pins a session on remote-mcp-server, which runs ONE replica in
+ *            512Mi with terminationGracePeriodSeconds: 30 and drops sessions on SIGTERM
+ *            before draining. Anything past that grace period is severed by every rolling
+ *            deploy, so this stays well under it until that shutdown path drains first.
+ *
+ * `BROWSERSTACK_RUN_SETTLE_MS` overrides both, read per call so it can be tuned or taken
+ * to 0 (today's behaviour) without a release — the same reason `ASK_BROWSERSTACK_DISABLED`
+ * is not fixed at boot.
+ */
+export const RUN_SETTLE_STDIO_MS = 90_000;
+export const RUN_SETTLE_HOSTED_MS = 20_000;
+
+/** How often the wait re-reads the run. Also the progress-notification cadence. */
+export const RUN_SETTLE_INTERVAL_MS = 3_000;
+
+/** The ceiling for this process, honouring the override. 0 disables the wait entirely. */
+export function runSettleCeilingMs(): number {
+  const raw = process.env.BROWSERSTACK_RUN_SETTLE_MS;
+  if (raw !== undefined && /^\d+$/.test(raw.trim())) return Number(raw.trim());
+  return appConfig.REMOTE_MCP ? RUN_SETTLE_HOSTED_MS : RUN_SETTLE_STDIO_MS;
+}
+
 /** Thrown for anything this tool refuses to attempt. Never carries a credential. */
 export class AskError extends Error {}
 

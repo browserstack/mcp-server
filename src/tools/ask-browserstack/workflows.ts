@@ -100,6 +100,60 @@ function questionsOf(
  * the same `needs_approval` shape as any other (answered with `run_id` = the
  * conversation, `perm_id` and `decision`).
  */
+/**
+ * Atlas statuses that mean nobody — user or model — can act yet. Anything else, including
+ * an error or a non-2xx, ends the wait: the caller should see it rather than sit on it.
+ */
+const WORKING_STATUSES = new Set(["running", "queued", "pending"]);
+
+/** Whether this reading of a run leaves the caller with nothing to do but wait. */
+export function stillWorking(response: {
+  status: number;
+  body: unknown;
+}): boolean {
+  if (response.status < 200 || response.status >= 300) return false;
+  const status = asRecord(response.body).status;
+  return typeof status === "string" && WORKING_STATUSES.has(status);
+}
+
+/**
+ * Re-read a run until it reaches a state someone can act on, or the ceiling runs out.
+ *
+ * Returns the LAST reading either way, so the caller shapes a result from it exactly as it
+ * would have from a single read — on the ceiling that is the ordinary "still working"
+ * payload carrying the conversation id, which is what the model used to get immediately.
+ * So this changes when the answer arrives, never its shape, and a caller that followed
+ * `next_step` before still does.
+ *
+ * `sleep` and `now` are injected so a test can run the whole ladder without real time.
+ */
+export async function settleRun(
+  read: () => Promise<{ status: number; body: unknown }>,
+  opts: {
+    ceilingMs: number;
+    intervalMs: number;
+    onWait?: (elapsedMs: number) => void;
+    sleep?: (ms: number) => Promise<void>;
+    now?: () => number;
+  },
+): Promise<{ status: number; body: unknown }> {
+  const now = opts.now ?? (() => Date.now());
+  const sleep =
+    opts.sleep ?? ((ms: number) => new Promise((r) => setTimeout(r, ms)));
+  const started = now();
+  let latest = await read();
+  // `ceilingMs <= 0` disables the wait: one read, as before.
+  while (
+    stillWorking(latest) &&
+    now() - started + opts.intervalMs <= opts.ceilingMs
+  ) {
+    opts.onWait?.(now() - started);
+    await sleep(opts.intervalMs);
+    latest = await read();
+  }
+  return latest;
+}
+
 export function conversationResult(
   response: { status: number; body: unknown },
   conversationId: string,

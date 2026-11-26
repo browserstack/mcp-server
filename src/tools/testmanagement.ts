@@ -56,14 +56,6 @@ import {
 } from "./testmanagement-utils/add-test-result.js";
 
 import {
-  UploadFileSchema,
-  uploadFile,
-} from "./testmanagement-utils/upload-file.js";
-
-import { createTestCasesFromFile } from "./testmanagement-utils/testcase-from-file.js";
-import { CreateTestCasesFromFileSchema } from "./testmanagement-utils/TCG-utils/types.js";
-
-import {
   createLCASteps,
   CreateLCAStepsSchema,
 } from "./testmanagement-utils/create-lca-steps.js";
@@ -432,81 +424,6 @@ export async function addTestResultTool(
         {
           type: "text",
           text: `Failed to add test result: ${
-            err instanceof Error ? err.message : "Unknown error"
-          }. Please open an issue on GitHub if the problem persists`,
-        },
-      ],
-      isError: true,
-    };
-  }
-}
-
-/**
- * Uploads files such as PDRs or screenshots to BrowserStack Test Management and get file mapping ID back.
- */
-export async function uploadProductRequirementFileTool(
-  args: z.infer<typeof UploadFileSchema>,
-  config: BrowserStackConfig,
-  server: McpServer,
-): Promise<CallToolResult> {
-  try {
-    trackMCP(
-      "uploadProductRequirementFile",
-      server.server.getClientVersion()!,
-      undefined,
-      config,
-    );
-    return await uploadFile(args, config);
-  } catch (err) {
-    trackMCP(
-      "uploadProductRequirementFile",
-      server.server.getClientVersion()!,
-      err,
-      config,
-    );
-    return {
-      content: [
-        {
-          type: "text",
-          text: `Failed to upload file: ${
-            err instanceof Error ? err.message : "Unknown error"
-          }. Please open an issue on GitHub if the problem persists`,
-        },
-      ],
-      isError: true,
-    };
-  }
-}
-
-/**
- * Creates test cases from a file in BrowserStack Test Management.
- */
-export async function createTestCasesFromFileTool(
-  args: z.infer<typeof CreateTestCasesFromFileSchema>,
-  context: any,
-  config: BrowserStackConfig,
-  server: McpServer,
-): Promise<CallToolResult> {
-  try {
-    trackMCP(
-      "createTestCasesFromFile",
-      server.server.getClientVersion()!,
-      undefined,
-      config,
-    );
-    return await createTestCasesFromFile(args, context, config);
-  } catch (err) {
-    trackMCP(
-      "createTestCasesFromFile",
-      server.server.getClientVersion()!,
-      err,
-      config,
-    );
-    return {
-      content: [
-        {
-          type: "text",
-          text: `Failed to create test cases from file: ${
             err instanceof Error ? err.message : "Unknown error"
           }. Please open an issue on GitHub if the problem persists`,
         },
@@ -933,36 +850,6 @@ export default function addTestManagementTools(
       idempotentHint: false,
     },
     (args) => addTestResultTool(args, config, server),
-  );
-
-  tools.uploadProductRequirementFile = server.tool(
-    "uploadProductRequirementFile",
-    "Upload a requirements file (PDF, DOCX, XLSX, CSV, RTF, TXT, PNG or JPG) for test case generation. Returns a document ID." +
-      NEEDS_PROJECT_ID,
-    UploadFileSchema.shape,
-    {
-      title: "Upload Product Requirement File",
-      readOnlyHint: false,
-      openWorldHint: false,
-      destructiveHint: false,
-      idempotentHint: false,
-    },
-    (args) => uploadProductRequirementFileTool(args, config, server),
-  );
-
-  tools.createTestCasesFromFile = server.tool(
-    "createTestCasesFromFile",
-    "Generate test cases from a file in BrowserStack Test Management using the Test Case Generator AI Agent.",
-    CreateTestCasesFromFileSchema.shape,
-    {
-      title: "Create Test Cases from File",
-      readOnlyHint: false,
-      openWorldHint: false,
-      destructiveHint: false,
-      idempotentHint: false,
-    },
-    (args, context) =>
-      createTestCasesFromFileTool(args, context, config, server),
   );
 
   tools.createLCASteps = server.tool(

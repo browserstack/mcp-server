@@ -14197,6 +14197,74 @@
         }
       },
       {
+        "name": "create_test_run_public_link",
+        "method": "POST",
+        "path": "/api/v1/public_link_tokens",
+        "mode": "write",
+        "entity": "test_run",
+        "body": [
+          {
+            "name": "entity",
+            "type": "string",
+            "required": true,
+            "values": [
+              "test_run"
+            ],
+            "example": "test_run",
+            "description": "What is being shared. Only test runs are supported here."
+          },
+          {
+            "name": "entity_id",
+            "type": "integer",
+            "required": true,
+            "example": 177535184,
+            "description": "The run's INTEGER id (`uuid` on list_test_runs_by_integer_id rows), not its TR-NNN identifier."
+          },
+          {
+            "name": "project_id",
+            "type": "integer",
+            "required": true,
+            "example": 108092,
+            "description": "The INTEGER Test Management project id the run belongs to. A run outside this project is a 404."
+          }
+        ],
+        "intent": "Share a test run: create its public, shareable link (URL) so people without a BrowserStack login can view the run.",
+        "guidance": [
+          "Anyone with the link can view the run without signing in. Confirm with the user before creating one.",
+          "The response holds a token, not a URL. The link is the run's Test Management page with the token added: `https://test-management.browserstack.com/projects/{project_id}/test-runs/{entity_id}?public_token={token}&public_token_id={id}`, on the account's own Test Management host (`test-management-eu` or `test-management-in` for those regions).",
+          "A run has one public link per account: calling this again returns the existing token rather than a new one.",
+          "A user without permission to share public links in the project gets 403.",
+          "If public links are turned off for the account, the token is still returned but the link does not open.",
+          "A link is revoked from the run's Share option in Test Management; there is no capability for it here."
+        ],
+        "returns": [
+          "id",
+          "token",
+          "entity",
+          "entity_id"
+        ],
+        "responses": {
+          "200": {
+            "description": "The token for the run: `id`, `token`, `entity`, `entity_id`.",
+            "schema": {
+              "$schema": "PublicLinkToken"
+            }
+          },
+          "400": {
+            "description": "`entity` or `entity_id` is missing or not supported."
+          },
+          "401": {
+            "description": "Unauthorized — authentication missing or invalid."
+          },
+          "403": {
+            "description": "The user may not share public links in this project."
+          },
+          "404": {
+            "description": "The run is not in the given project."
+          }
+        }
+      },
+      {
         "name": "get_test_run_detail",
         "method": "GET",
         "path": "/api/v1/projects/{project_id}/test-runs/{test_run_id}/detail",
@@ -28932,6 +29000,27 @@
       }
     ],
     "schemas": {
+        "PublicLinkToken": {
+          "type": "object",
+          "description": "A public link token (POST /api/v1/public_link_tokens). The link itself is not returned; it is built from `id` and `token`.",
+          "properties": {
+            "success": {
+              "type": "boolean"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "token": {
+              "type": "string"
+            },
+            "entity": {
+              "type": "string"
+            },
+            "entity_id": {
+              "type": "integer"
+            }
+          }
+        },
       "TestRun": {
         "type": "object",
         "properties": {
@@ -50098,6 +50187,7 @@
           "list_closed_test_runs",
           "list_test_run_test_cases_by_integer_id",
           "get_test_run_by_integer_id",
+          "create_test_run_public_link",
           "get_test_run_detail",
           "get_test_run_progress",
           "list_test_run_test_cases",

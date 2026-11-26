@@ -3,8 +3,10 @@ import { AxiosError } from "axios";
 import { trackMCP, withToolCall } from "../../src/lib/instrumentation";
 import { apiClient } from "../../src/lib/apiClient";
 import { CallerError, HttpError, RegionProbeError } from "../../src/lib/error";
+import { AccountRegionUnknownError } from "../../src/lib/regional-host";
 import {
   markCallerFault,
+  markUpstreamFault,
   recordUpstreamStatus,
   trackedFetch,
 } from "../../src/lib/upstream-status";
@@ -314,33 +316,48 @@ describe("withToolCall failure attribution", () => {
     },
   );
 
+  // The other regions always answer 401 to an account that is not theirs, so the
+  // account is refused (blocked) only when every host said so: no product, bad
+  // credentials, rate-limited. A host that never answered or returned 5xx may have been
+  // the account's own region (an EU account always gets 401 from the US host), and
+  // the failure is the probe itself.
   it.each([
-    [0, "mcp", "region_probe"],
-    [429, "mcp", "region_probe"],
-    [503, "mcp", "region_probe"],
-    [402, "caller", "blocked"],
+    [[0, 401, 401], "mcp", "region_probe"],
+    [[503, 401, 401], "mcp", "region_probe"],
+    [[408, 401, 401], "mcp", "region_probe"],
+    [[401, 0, 401], "mcp", "region_probe"],
+    [[401, 503, 401], "mcp", "region_probe"],
+    [[401, 401, 401], "caller", "blocked"],
+    [[402, 401, 401], "caller", "blocked"],
+    [[403, 401, 401], "caller", "blocked"],
+    [[429, 401, 401], "caller", "blocked"],
+    [[401, 401, 429], "caller", "blocked"],
   ])(
-    "attributes a region probe whose US host answered %i to %s (%s)",
-    async (usStatus, expected, reason) => {
+    "attributes a region probe whose hosts (US, EU, IN) answered %j to %s (%s)",
+    async (statuses, expected, reason) => {
       const row = await rowOf(() => {
-        trackMCP("invokeCapability", clientInfo, new Error("probe"), config, {
+        const error = new RegionProbeError(
+          "Unable to connect to BrowserStack Test Management",
+          statuses.map((status, i) => ({ host: `https://host${i}`, status })),
+        );
+        trackMCP("invokeCapability", clientInfo, error, config, {
           refusal_reason: "region_probe_failed",
-          probe_status: usStatus,
+          probe_status: error.usStatus,
         });
         return failed;
       });
       expect(row).toMatchObject({
         failure_class: expected,
         failure_reason: reason,
-        probe_status: usStatus,
+        probe_status: statuses[0],
       });
     },
   );
 
-  it("attributes a region probe on a direct tool by the US host, not the last host", async () => {
+  it("attributes a region probe on a direct tool by every host's answer, not the last", async () => {
     // The probe tries US, EU, IN; the other regions answer 401 to an account that is
     // not theirs, and a tool that catches the error and returns text would otherwise be
-    // classified by that 401. The error records the US answer on the way out.
+    // classified by that 401. The error records the hosts' answers on the way out.
     const row = await rowOf(() => {
       try {
         throw new RegionProbeError(
@@ -380,6 +397,24 @@ describe("withToolCall failure attribution", () => {
       outcome: "threw",
       failure_class: "caller",
       failure_reason: "blocked",
+    });
+  });
+
+  it("files an unknown account region as this server's region probe, even when caught", async () => {
+    const row = await rowOf(() => {
+      try {
+        throw new AccountRegionUnknownError();
+      } catch (error) {
+        return {
+          content: [{ type: "text", text: (error as Error).message }],
+          isError: true,
+        };
+      }
+    });
+    expect(row).toMatchObject({
+      outcome: "error_result",
+      failure_class: "mcp",
+      failure_reason: "region_probe",
     });
   });
 
@@ -473,6 +508,34 @@ describe("withToolCall caller faults", () => {
       throw new CallerError("You must provide a desiredBrowser");
     });
     expect(row).toMatchObject({ outcome: "threw", failure_class: "caller" });
+  });
+
+  it("files a caller fault the handler marked as blocked with no status behind it", async () => {
+    // A fair-usage refusal the product wrote in prose inside a 200.
+    const row = await rowOf(() => {
+      recordUpstreamStatus(200);
+      markCallerFault("blocked");
+      return failed;
+    });
+    expect(row).toMatchObject({
+      failure_class: "caller",
+      failure_reason: "blocked",
+      upstream_status: 200,
+    });
+  });
+
+  it("files a product failure the handler read off a 2xx as upstream, over a caller tag", async () => {
+    const row = await rowOf(() => {
+      recordUpstreamStatus(200);
+      markCallerFault();
+      markUpstreamFault();
+      return failed;
+    });
+    expect(row).toMatchObject({
+      failure_class: "upstream",
+      upstream_status: 200,
+    });
+    expect(row).not.toHaveProperty("failure_reason");
   });
 
   it("keeps the blocked reason on a caller fault with an entitlement status", async () => {

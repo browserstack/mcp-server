@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { withUpstreamScope } from "../../src/lib/upstream-status.js";
 
 // What fetchAccessibilityIssues says of a run that did not check its pages: a run that
 // failed, pages a completed scan could not scan, and pages that showed an error page that
@@ -127,9 +128,13 @@ describe("fetchAccessibilityIssues for a run that failed", () => {
       pages: [{ pageUrl: "https://zz-unreachable.example/", status: "failure", reason: "Failed to start the test" }],
     });
 
-    const result = await fetchIssues()(RUN);
+    const scope: { callerFault?: boolean; upstreamFault?: boolean } = {};
+    const result = await withUpstreamScope(scope, () => fetchIssues()(RUN));
 
     expect(result.isError).toBe(true);
+    // The run's own reason is the site's: the failure is the caller's for telemetry, and
+    // the page's "Failed to start the test" is its consequence, not the scanner's fault.
+    expect(scope).toEqual({ callerFault: true });
     const out = text(result);
     expect(out).toContain("Scan run 2420156 of scan 4300543 failed, so no pages were checked: 0 issues does not mean the page is clean.");
     // The run's reason and the pages' lines come from the scan and the site: quoted as data.

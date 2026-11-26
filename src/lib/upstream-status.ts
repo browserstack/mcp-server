@@ -10,6 +10,17 @@ export interface UpstreamScope {
   status?: number;
   callerFault?: boolean;
   /**
+   * With `callerFault`: the account or plan refused the call. For a refusal the product
+   * reports in prose inside a 2xx (a fair-usage limit, a quota), where no 401/402/403/429
+   * ever reaches the status.
+   */
+  blocked?: boolean;
+  /**
+   * The product reported its own failure inside a successful answer ("something went
+   * wrong" in a 200). Attributed upstream, the same as a 5xx would be.
+   */
+  upstreamFault?: boolean;
+  /**
    * Set when the Test Management region probe failed before any product call: the
    * US host's answer (an HTTP status, or 0 when the connection was never answered).
    * Survives a catch block that rewraps the error into a returned result.
@@ -31,11 +42,25 @@ export function recordUpstreamStatus(status: number): void {
 
 /**
  * Marks the current tool call as failing on the caller's input or account set-up. For a
- * handler that returns its error; one that throws uses `CallerError`. A no-op outside a call.
+ * handler that returns its error; one that throws uses `CallerError`. Pass `"blocked"`
+ * when the product refused the account in prose (an entitlement, quota or rate limit
+ * with no 4xx behind it), so the row joins the blocked rate. A no-op outside a call.
  */
-export function markCallerFault(): void {
+export function markCallerFault(reason?: "blocked"): void {
   const scope = upstreamScope.getStore();
-  if (scope) scope.callerFault = true;
+  if (!scope) return;
+  scope.callerFault = true;
+  if (reason === "blocked") scope.blocked = true;
+}
+
+/**
+ * Marks the current tool call as failing in the product, for a handler that read the
+ * failure off a 2xx body rather than a status. Outranks a caller tag, as a 5xx does. A
+ * no-op outside a call.
+ */
+export function markUpstreamFault(): void {
+  const scope = upstreamScope.getStore();
+  if (scope) scope.upstreamFault = true;
 }
 
 /**

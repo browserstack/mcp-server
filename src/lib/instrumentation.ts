@@ -38,7 +38,8 @@ export type FailureClass = "caller" | "upstream" | "mcp" | "unknown";
  * report needs: `blocked` (a caller fault that is entitlement, auth or a rate limit,
  * reported as its own rate), `contract_drift` (the product rejected a request our own
  * validation had accepted: the index or tool disagrees with the API), `region_probe`
- * (the Test Management host probe failed before any product call), `central_auth` and
+ * (the Test Management host probe, or the account's region lookup, failed before any
+ * product call), `central_auth` and
  * `auth_scope` (a token could not be minted), `empty_error_result` (the tool reported
  * failure with no text).
  */
@@ -325,11 +326,14 @@ function byStatus(status: number): Attribution | undefined {
 /**
  * The Test Management region probe: attributed by what the US host answered, not by the
  * last host tried (the other regions always answer 401 to an account that is not theirs).
- * A 402 is an account without the product; everything else — a timeout, a 429, a 5xx —
- * is the probe itself, which runs before every call and is this server's design.
+ * A 402 is an account without the product, a 401 or 403 is credentials no host accepted
+ * (the probe only fails when every host refused, so the US answer is the account's own),
+ * and a 429 is the product rate-limiting the account: all blocked. Everything else — a
+ * timeout, a 5xx, no answer — is the probe itself, which runs before every call and is
+ * this server's design.
  */
 function byProbe(usStatus: number): Attribution {
-  return usStatus === 402
+  return BLOCKED_STATUSES.has(usStatus)
     ? { failure_class: "caller", failure_reason: "blocked" }
     : { failure_class: "mcp", failure_reason: "region_probe" };
 }
@@ -349,8 +353,9 @@ function byTokenMint(kind: unknown): Attribution {
 
 /**
  * Attributes a failed call. Evidence is read in order: the registry's refusal reason,
- * the region probe, an upstream outage, a programming error, a rejection of the caller's
- * input (`CallerError`, `markCallerFault`), the product's 4xx, then whether the handler
+ * the region probe, an upstream outage, a programming error, a product failure the
+ * handler read off a 2xx (`markUpstreamFault`), a rejection of the caller's input
+ * (`CallerError`, `markCallerFault`), the product's 4xx, then whether the handler
  * threw. A handler that knows better passes `failure_class` (and `failure_reason`) in
  * its trackMCP extras, which win because extras are spread last onto the row.
  *
@@ -387,8 +392,10 @@ function failureClassOf(
     return { failure_class: "upstream" };
   if (PROGRAMMING_ERRORS.some((kind) => error instanceof kind))
     return { failure_class: "mcp" };
+  if (scope.upstreamFault === true) return { failure_class: "upstream" };
   if (scope.callerFault === true)
-    return status !== undefined && BLOCKED_STATUSES.has(status)
+    return (status !== undefined && BLOCKED_STATUSES.has(status)) ||
+      scope.blocked === true
       ? { failure_class: "caller", failure_reason: "blocked" }
       : { failure_class: "caller" };
   if (status !== undefined && status >= 400) return byStatus(status);

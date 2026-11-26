@@ -575,8 +575,14 @@ export function addCapabilityRegistryTools(
         );
       const doc = bundle.entities[entity];
       if (!doc) {
-        return failed(
+        // A refusal, like the unknown product above, not a bare failed(): the row then
+        // carries refusal_reason and is the caller's, rather than an unexplained failure.
+        return refuse(
+          "describeEntity",
+          "unknown_entity",
           `unknown entity '${entity}' in ${product}; known: ${Object.keys(bundle.entities).sort().join(", ")}`,
+          undefined,
+          { product },
         );
       }
       return ok({ product, entity, ...doc });

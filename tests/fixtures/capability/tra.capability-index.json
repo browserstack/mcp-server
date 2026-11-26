@@ -14546,7 +14546,7 @@
             "name": "normalisedName",
             "type": "string",
             "required": true,
-            "description": "Project's normalised name."
+            "description": "Project's normalised name, or its display name as shown in TRA."
           }
         ],
         "query": [
@@ -14588,7 +14588,7 @@
           {
             "name": "dateRange",
             "type": "array",
-            "description": "Exactly two epoch-millisecond values [start, end] (@Size min=2,max=2).",
+            "description": "Exactly two epoch-millisecond values [start, end] (@Size min=2,max=2). Limits the listing to builds in that window.",
             "fields": [
               {
                 "name": "(item)",
@@ -14640,9 +14640,43 @@
           "activeCount",
           "closedCount"
         ],
+        "narrowable": {
+          "fields": [
+            "uuid",
+            "id",
+            "name",
+            "originalName",
+            "buildNumber",
+            "buildRunId",
+            "status",
+            "displayStatus",
+            "startedAt",
+            "finishedAt",
+            "createdAt",
+            "duration",
+            "user",
+            "tags",
+            "source",
+            "origins",
+            "statusStats",
+            "issueTypeAggregate",
+            "historyAggregate",
+            "qualityGateStatus",
+            "testCaseCount",
+            "isArchived",
+            "ciBuildData",
+            "versionControlInfo"
+          ],
+          "path": "builds",
+          "note": "The endpoint has no field selection, so this narrowing is applied after the call."
+        },
         "guidance": [
-          "PREFERRED build listing for agents: newest-first, `pageLimit` sets the page size (keep it at or below 50 \u2014 each row is large and a big page overflows the tool output), `search` filters by build name, and rows carry buildNumber, `buildRunId` (CI run id), statusStats, historyAggregate (flaky / newFailure / alwaysFailing counts) and qualityGateStatus, so one call answers 'last N builds with status'.",
-          "Takes the project's NORMALISED NAME in the path, not a numeric id. Uses the same large filter object as the build-groups listing.",
+          "PREFERRED build listing for agents: newest-first, `pageLimit` sets the page size (keep it at or below 50), `search` filters by build name, and rows carry buildNumber, `buildRunId` (CI run id), statusStats, historyAggregate (flaky / newFailure / alwaysFailing counts) and qualityGateStatus, so one call answers 'last N builds with status'.",
+          "Takes the project's normalised name in the path, not a numeric id. The display name works as is (`My Project` and `My+Project` both resolve), so no project lookup is needed first. Uses the same large filter object as the build-groups listing.",
+          "For builds in a period ('today', 'last night', two dates) pass `dateRange` with the window in epoch milliseconds: one call lists every build in it, including several builds with the same name. listBuildId and getBuildId return only the latest build for one name and take no date.",
+          "Rows are ordered by the internal build id, which follows creation order: newest first by default, oldest first with `sortOrder` `Asc`. There is no sort by `startedAt`.",
+          "`activeCount`, `closedCount`, `manualBuildCount` and `automationBuildCount` count the whole filtered result and are sent on the first page only; later pages return null by design. Read them from page 1.",
+          "Each row is about 3.5 KB. `select` with `fields` keeps only the named fields on every row, for example name, buildNumber, startedAt, displayStatus, tags, statusStats, issueTypeAggregate and historyAggregate for a triage listing; `pagingParams` and the counts are kept.",
           "SIDE EFFECT: this call marks the project as subscribed for the calling user \u2014 a read that quietly changes the user's subscription state. It also applies the group's custom data-retention window for the duration of the request, so builds older than the retention window will not appear regardless of `dateRange`.",
           "Cursor pagination via `pagingParams` / `searchAfter`; page through until the paging params report no next cursor. `pageLimit` defaults to 10.",
           "Each build row is a rich BuildSummary (status, statusStats, run/session counts, quality-gate status, tags, etc.), not the trimmed external shape.",

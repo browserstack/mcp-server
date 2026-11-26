@@ -1,0 +1,78 @@
+{
+  "empty_2xx": [],
+  "index": "capability/web_accessibility.capability-index.json",
+  "no_2xx": [],
+  "unbacked": {
+    "get_assisted_test_report": [
+      "data.assistiveTests",
+      "data.meta"
+    ],
+    "get_screen_reader_agent_run": [
+      "data.status",
+      "data.steps",
+      "data.summary",
+      "data.violations"
+    ],
+    "get_screen_reader_automation_report": [
+      "data.elements",
+      "data.name",
+      "data.pageCount",
+      "data.status",
+      "data.summary"
+    ],
+    "get_screen_reader_automation_scan_logs": [
+      "data.pageCount",
+      "data.scanLogs",
+      "data.status"
+    ],
+    "hide_screen_reader_agent_violation": [
+      "data.hidden"
+    ],
+    "list_screen_reader_agent_runs": [
+      "data.reports.id",
+      "data.reports.name",
+      "data.reports.status",
+      "data.total"
+    ],
+    "list_screen_reader_automation_reports": [
+      "data.reports",
+      "data.total"
+    ],
+    "list_suppressed_issue_duplicates": [
+      "data.duplicateCount",
+      "data.issues.buildName",
+      "data.issues.confirmed",
+      "data.issues.reportId",
+      "data.issues.suppressedAt",
+      "data.issues.suppressedBy",
+      "data.issues.target",
+      "data.issues.url",
+      "data.issues.uuid",
+      "data.pageInfo.nextCursor"
+    ],
+    "mark_preferred_behavior": [
+      "message",
+      "success"
+    ],
+    "search_build_test_cases": [
+      "info.next",
+      "testCases.browserData",
+      "testCases.file",
+      "testCases.id",
+      "testCases.name",
+      "testCases.osData",
+      "testCases.pages",
+      "testCases.status",
+      "testCases.summary",
+      "testCases.thBtcerId"
+    ],
+    "start_screen_reader_agent_run": [
+      "data.id",
+      "data.name",
+      "data.status"
+    ],
+    "unhide_screen_reader_agent_violation": [
+      "data.hidden"
+    ]
+  }
+}

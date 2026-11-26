@@ -260,6 +260,8 @@ export interface ScanSettings {
   advancedRules?: boolean;
   /** Run the experimental rules (API default true). */
   experimentalRules?: boolean;
+  /** Also run a screen reader on the scanned pages: NVDA (Windows) or VO (VoiceOver). Off by default. */
+  screenReader?: "NVDA" | "VO";
   /**
    * Scan only the first element of each page that a CSS selector or XPath matches; a page
    * with no match is not scanned. Read back from a scan, null is a scan of the whole page.

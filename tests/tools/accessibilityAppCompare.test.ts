@@ -5,7 +5,14 @@ import { beforeEach, describe, expect, it, Mock, vi } from "vitest";
 // Espresso / XCUITest run.
 
 vi.mock("../../src/lib/apiClient.js", () => ({
-  apiClient: { get: vi.fn() },
+  apiClient: {
+    get: vi.fn(),
+    // The App Accessibility dashboard's token.
+    post: vi.fn(async () => ({
+      status: 200,
+      data: { access_token: "agent-token", expires_in: 3600 },
+    })),
+  },
 }));
 
 import { apiClient } from "../../src/lib/apiClient.js";
@@ -18,7 +25,7 @@ import {
 
 const get = apiClient.get as Mock;
 const APP_API =
-  "https://api-app-accessibility.browserstack.com/automate/api/v1";
+  "https://app-accessibility.browserstack.com/automate/api/v1";
 const DASHBOARD = "https://app-accessibility.browserstack.com";
 const BUILD_ID = "m3k8p2q7w1x5c9v4b6n0z2r8t3y7u1i5o9a4s2df";
 const EARLIER_ID = "c4v8b2n6m0z3x7q1w5e9r2t6y0u4i8o3p7a1s5dg";

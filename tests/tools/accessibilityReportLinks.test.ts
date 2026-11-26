@@ -5,7 +5,12 @@ import { beforeEach, describe, expect, it, Mock, vi } from "vitest";
 // the scan is; a Workflow Analyzer link carries the report's id in `ids`.
 
 vi.mock("../../src/lib/apiClient.js", () => ({
-  apiClient: { get: vi.fn() },
+  apiClient: { get: vi.fn(), post: vi.fn() },
+}));
+// Web builds are looked up on the Accessibility dashboard with a minted token; no auth server here.
+vi.mock("../../src/tools/capability-registry/egress.js", async (original) => ({
+  ...(await original<typeof import("../../src/tools/capability-registry/egress.js")>()),
+  authHeaders: vi.fn(async () => ({ Authorization: "Bearer test-token" })),
 }));
 
 import { apiClient } from "../../src/lib/apiClient.js";
@@ -21,16 +26,11 @@ import {
 beforeEach(() => foundScanRuns.clear());
 
 const get = apiClient.get as Mock;
-const API = "https://api-accessibility.browserstack.com/api";
+const post = apiClient.post as Mock;
 const DASHBOARD = "https://accessibility.browserstack.com";
 const TH_BUILD = "k3v9q2m7x1c8b4n6z0w5r2t9y4p1s8d3f6g0h2ja";
 
 const ok = (data: unknown) => ({ ok: true, status: 200, data: { success: true, data } });
-const failed = (status: number, error: unknown) => ({
-  ok: false,
-  status,
-  data: { success: false, data: null, error },
-});
 
 function fetcher() {
   const f = new AccessibilityReportFetcher();
@@ -54,45 +54,36 @@ describe("a Website Scanner report link", () => {
     expect(get).not.toHaveBeenCalled();
   });
 
-  it("is read through the issues route that takes the build id", async () => {
-    get
-      .mockResolvedValueOnce(ok({ task_id: "ext_api_issues:WebsiteScannerTest:x:1:2", message: "started" }))
-      .mockResolvedValueOnce(ok({ thBuildId: TH_BUILD, reportLink: "https://csv" }));
+  it("is exported through the dashboard by its build id", async () => {
+    post.mockResolvedValueOnce(ok({ id: 42 }));
+    get.mockResolvedValueOnce(ok({ url: "https://csv" }));
 
     await expect(
       fetcher().getReportLink({ kind: "scanBuild", thBuildId: TH_BUILD, scanName: "checkout fix" }),
     ).resolves.toBe("https://csv");
+    expect(post.mock.calls[0][0].body).toEqual({ type: "websiteScan", th_build_id: TH_BUILD });
     expect(get.mock.calls.map(([options]) => options.url)).toEqual([
-      `${API}/website-scanner/v1/scan_runs/issues?thBuildId=${TH_BUILD}`,
-      `${API}/website-scanner/v1/scan_runs/issues?task_id=ext_api_issues%3AWebsiteScannerTest%3Ax%3A1%3A2`,
+      "https://accessibility.browserstack.com/api/export_reports/42",
     ]);
   });
 
-  it("says when the API does not know the run by its build id, so the caller can search instead", async () => {
-    get.mockResolvedValueOnce(failed(404, "Scan run not found. Invalid thBuildId or task id."));
-
-    await expect(
-      fetcher().getReportLink({ kind: "scanBuild", thBuildId: TH_BUILD }),
-    ).rejects.toBeInstanceOf(ScanRunNotFoundError);
-  });
-
-  it("tells an API without the route from one that does not know the run", async () => {
-    get.mockResolvedValueOnce({ ok: false, status: 404, data: "<html>Not Found</html>" });
+  it("says when the dashboard does not know the run by its build id, so the caller can search instead", async () => {
+    post.mockResolvedValueOnce({ ok: false, status: 404, data: { success: false, message: "TestRun Not Found" } });
 
     const error = await fetcher()
       .getReportLink({ kind: "scanBuild", thBuildId: TH_BUILD })
       .catch((e) => e);
 
     expect(error).toBeInstanceOf(ScanRunNotFoundError);
-    expect(error.routeMissing).toBe(true);
+    expect(error.routeMissing).toBe(false);
   });
 
-  it("passes on the API's reason for any other refusal", async () => {
-    get.mockResolvedValueOnce(failed(422, ["thBuildId must be the build id from the report link"]));
+  it("passes on the dashboard's reason for any other refusal", async () => {
+    post.mockResolvedValueOnce({ ok: false, status: 422, data: { success: false, message: "th_build_id is invalid" } });
 
     await expect(
       fetcher().getReportLink({ kind: "scanBuild", thBuildId: "bad" }),
-    ).rejects.toThrow("thBuildId must be the build id from the report link");
+    ).rejects.toThrow("th_build_id is invalid");
   });
 
   it("is named again by a clean link, for the next page", () => {

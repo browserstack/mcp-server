@@ -103,6 +103,8 @@ const WRITE_VERBS = new Set([
   "upload",
   "import",
   "clone",
+  "hide",
+  "unhide",
 ]);
 
 // Words that mean "give me many", which is what makes a single-record getter the wrong answer.

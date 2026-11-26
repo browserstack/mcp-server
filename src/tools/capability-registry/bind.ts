@@ -237,6 +237,10 @@ function pathSegment(value: unknown, name: string): string {
  * string ids that carry no type constraint worth the name.
  */
 export function coerce(value: unknown, param: WireParam): unknown {
+  // Only where the capability opts in with `accepts_null`. OpenAPI's `nullable` is NOT read here:
+  // other indexes (tm's folder_id) already carry it as documentation, and honouring it would
+  // change what those products send. Elsewhere null stays refused by its type.
+  if (value === null && param.accepts_null) return null;
   const coerced = coerceType(value, param);
   checkConstraints(coerced, param);
   checkFields(coerced, param);

@@ -786,7 +786,7 @@ export default function addTestManagementTools(
 
   tools.listTestCases = server.tool(
     "listTestCases",
-    "List test cases in a project, optionally one folder (see listFolders). Filters: case_type, priority, paging." +
+    "List test cases in a project or one folder (see listFolders). Filters: id, case_type, priority, paging." +
       NEEDS_PROJECT_ID,
     ListTestCasesSchema.shape,
     {

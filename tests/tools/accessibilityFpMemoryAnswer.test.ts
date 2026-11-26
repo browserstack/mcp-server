@@ -280,7 +280,8 @@ describe("fetchAccessibilityIssues first page, with saved false positives on lat
       { cursor: 400, records: big(150) },
       { cursor: 900, records: big(150) },
     ]);
-    report.records = Array.from({ length: 64 }, (_, i) => ({
+    // Sized so the page, with its other notes, leaves room to list a few later rows.
+    report.records = Array.from({ length: 62 }, (_, i) => ({
       ...issue("image-alt", `img#i${i}`),
       HTML_snippet: `<img id="i${i}" src="${"s".repeat(400)}">`,
     }));

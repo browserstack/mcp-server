@@ -55,6 +55,19 @@ describe("choosing the endpoint to probe with", () => {
     expect(probePath({ ...bundle, probe_path: "/api/v1/ping" })).toBe("/api/v1/ping");
   });
 
+  it("never probes with a capability served elsewhere or signing in differently", () => {
+    const list = { mode: "read", paginated: true, method: "GET", entity: "x" } as const;
+    expect(
+      probePath({
+        capabilities: [
+          { ...list, name: "a", path: "/a", host: "dashboard" },
+          { ...list, name: "b", path: "/b", auth: { type: "oauth2" } },
+          { ...list, name: "c", path: "/api/v1/things" },
+        ],
+      } as never),
+    ).toBe("/api/v1/things");
+  });
+
   it("has nothing to derive from when no capability qualifies", () => {
     expect(probePath({ capabilities: [] })).toBeUndefined();
   });

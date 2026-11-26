@@ -10319,7 +10319,7 @@
         "intent": "Find test cases in an Automated Tests build by name text, status or page visited, each with file, status, browser and OS, pages and issue counts - the filtered version of list_build_test_cases.",
         "guidance": [
           "Same response as list_build_test_cases: top-level {success, filters, testCases, th_build_id, info}, no data wrapper. testCases[].id or thBtcerId is what get_build_test_case_overview takes.",
-          "name, status and pages are sent flat; this surface nests them under filters. With no filter it returns every test case, like list_build_test_cases.",
+          "name, status and pages go inside a `filters` object: send {\"filters\": {\"name\": …, \"status\": […], \"pages\": […]}}. With no filter it returns every test case, like list_build_test_cases.",
           "A pages filter that matches no test case answers 500 with an empty body, not an empty list; read it as no match. A build with no ingested test cases also answers 500.",
           "Paging: follow info.next until null.",
           "Wrong central_scanner answers 404 \"TestRun Not Found\"; a missing th_build_id answers 422."

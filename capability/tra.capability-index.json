@@ -8328,28 +8328,24 @@
                 "type": "array"
               },
               {
-                "name": "buildNames",
+                "name": "buildName",
                 "type": "array",
-                "description": "Wire key is buildName (singular).",
-                "json_path": "/filters/buildName"
+                "description": "Build names to filter by (singular key)."
               },
               {
-                "name": "branchList",
+                "name": "branches",
                 "type": "array",
-                "description": "Wire key is branches.",
-                "json_path": "/filters/branches"
+                "description": "Branches to filter by."
               },
               {
-                "name": "testPlanIds",
+                "name": "tcmTestPlanIds",
                 "type": "array",
-                "description": "Wire key is tcmTestPlanIds; the legacy alias testPlanIds is also accepted for old persisted blobs.",
-                "json_path": "/filters/tcmTestPlanIds"
+                "description": "Test Management test plan ids. The legacy key testPlanIds is also accepted for old persisted blobs."
               },
               {
-                "name": "order",
+                "name": "filterOrder",
                 "type": "array",
-                "description": "Filter display order. Wire key is filterOrder.",
-                "json_path": "/filters/filterOrder"
+                "description": "Filter display order."
               },
               {
                 "name": "match",
@@ -8385,10 +8381,9 @@
                 "description": "e.g. TABULAR_TEST_RUNS."
               },
               {
-                "name": "dashboardFilters",
+                "name": "globalFilters",
                 "type": "object",
-                "description": "Widget-level global filters. Wire key is globalFilters.",
-                "json_path": "/reports/globalFilters"
+                "description": "Widget-level global filters."
               },
               {
                 "name": "config",
@@ -8419,9 +8414,8 @@
                 "type": "string"
               },
               {
-                "name": "dashboardFilters",
-                "type": "object",
-                "json_path": "/widgets/globalFilters"
+                "name": "globalFilters",
+                "type": "object"
               },
               {
                 "name": "config",
@@ -8602,9 +8596,8 @@
             "description": "Replacement widget set for a report-typed record. Omit to keep the existing widgets. Item shape as in create.",
             "fields": [
               {
-                "name": "dashboardFilters",
-                "type": "object",
-                "json_path": "/reports/globalFilters"
+                "name": "globalFilters",
+                "type": "object"
               },
               {
                 "name": "config",
@@ -8618,9 +8611,8 @@
             "description": "Replacement widget set for a dashboard-typed record. Omit to keep the existing widgets.",
             "fields": [
               {
-                "name": "dashboardFilters",
-                "type": "object",
-                "json_path": "/widgets/globalFilters"
+                "name": "globalFilters",
+                "type": "object"
               },
               {
                 "name": "config",
@@ -8787,10 +8779,12 @@
             "description": "Widget report type. Only TABULAR_TEST_RUNS is implemented; any other value returns a 200 with a null body, not an error. Missing reportType is 400 'Report type is required'."
           },
           {
-            "name": "dashboardFilters",
+            "name": "globalFilters",
             "type": "object",
-            "description": "Widget global filters. Wire key is globalFilters.",
-            "json_path": "/globalFilters"
+            "description": "Widget global filters (DashboardFilters).",
+            "aliases": [
+              "dashboardFilters"
+            ]
           },
           {
             "name": "config",
@@ -8835,7 +8829,7 @@
           "`config` keys are UPPER_SNAKE WidgetsConfig sections (@JsonProperty): send config.DATASETS.value = [{name, filters:{projects:[<project id>]}}] at minimum. A lowercase `datasets` key is silently dropped, the handler dereferences a null DATASETS and returns 500 'Error while fetching report data'. The path {id} is ignored but must still be a UUID (any placeholder UUID works).",
           "Only reportType TABULAR_TEST_RUNS is implemented; any other type returns a 200 with a null body rather than erroring.",
           "The {id} in the path is ignored entirely \u2014 everything comes from the body, so the path id is just a placeholder.",
-          "Widget global filters are sent under the key globalFilters, NOT dashboardFilters.",
+          "Widget global filters go under globalFilters (the DTO field is named dashboardFilters, but that is not the key the API reads).",
           "Rows come back under data with a summary; summary.totalDatasets is -1 (not a real total), so page through using page / per_page and summary.hasNext rather than trusting a count.",
           "A validation failure other than a known ObservabilityException is only logged, not surfaced \u2014 a 200 with empty data can mask a silently dropped dataset."
         ],
@@ -8901,10 +8895,12 @@
             "description": "Widget report type. Only TABULAR_TEST_RUNS is implemented; any other value returns a 200 with a null body. Missing reportType is 400 'Report type is required'."
           },
           {
-            "name": "dashboardFilters",
+            "name": "globalFilters",
             "type": "object",
-            "description": "Widget global filters. Wire key is globalFilters.",
-            "json_path": "/globalFilters"
+            "description": "Widget global filters (DashboardFilters).",
+            "aliases": [
+              "dashboardFilters"
+            ]
           },
           {
             "name": "config",

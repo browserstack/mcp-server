@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   bind,
@@ -236,5 +236,108 @@ describe("the shipped indexes", () => {
       browserName: "chrome",
       "bstack:options": { os: "Windows", osVersion: "11" },
     });
+  });
+
+  it("mobiledevicecontrol create_session: readable names and the W3C body give the same request", () => {
+    const cap = find("mobiledevicecontrol", "create_session");
+    const readable = bind(cap, {
+      body: { platform_name: "android", device_name: "Pixel 8", app: "bs://a" },
+    }).body;
+    const wire = bind(cap, {
+      body: {
+        capabilities: {
+          alwaysMatch: {
+            platformName: "android",
+            "appium:deviceName": "Pixel 8",
+            "appium:app": "bs://a",
+          },
+        },
+      },
+    }).body;
+    expect(wire).toEqual(readable);
+  });
+
+  const a11yRun = { project_name: "p", test_run_name: "r" };
+
+  it("web_accessibility search: name, status and pages go inside filters", () => {
+    const cap = find("web_accessibility", "search_build_test_cases");
+    const nested = bind(cap, {
+      path_params: a11yRun,
+      body: {
+        th_build_id: "b",
+        filters: { name: "login", status: ["failed"] },
+      },
+    }).body;
+    expect(nested).toEqual({
+      th_build_id: "b",
+      filters: { name: "login", status: ["failed"] },
+    });
+    expect(
+      bind(cap, {
+        path_params: a11yRun,
+        body: { th_build_id: "b", name: "login", status: ["failed"] },
+      }).body,
+    ).toEqual(nested);
+  });
+
+  it("web_accessibility details: test_case_ids and the API's testCaseIds give the same request", () => {
+    const cap = find("web_accessibility", "get_build_test_case_details");
+    const expected = { th_build_id: "b", testCaseIds: [1] };
+    for (const body of [
+      { th_build_id: "b", test_case_ids: [1] },
+      { th_build_id: "b", testCaseIds: [1] },
+    ]) {
+      expect(bind(cap, { path_params: a11yRun, body }).body).toEqual(expected);
+    }
+  });
+
+  it.each(["get_report_dataset_rows", "get_report_stat_tiles"])(
+    "tra %s: filters are published as globalFilters, and dashboardFilters still binds",
+    (name) => {
+      const cap = find("tra", name);
+      expect(withoutFixed(cap).body?.map((param) => param.name)).toContain(
+        "globalFilters",
+      );
+      const path_params = { id: "11111111-1111-4111-8111-111111111111" };
+      const expected = {
+        reportType: "TABULAR_TEST_RUNS",
+        globalFilters: { projects: [1] },
+      };
+      for (const key of ["globalFilters", "dashboardFilters"]) {
+        expect(
+          bind(cap, {
+            path_params,
+            body: { reportType: "TABULAR_TEST_RUNS", [key]: { projects: [1] } },
+          }).body,
+        ).toEqual(expected);
+      }
+    },
+  );
+
+  it("names every item field by the key the API reads", () => {
+    // Fields inside an array item or object are passed through as sent, never renamed, so
+    // a field named differently from its wire key would reach the API under the wrong key.
+    const renamed: string[] = [];
+    for (const file of readdirSync("capability")) {
+      if (!file.endsWith(".capability-index.json")) continue;
+      const raw = JSON.parse(readFileSync(`capability/${file}`, "utf8"));
+      const products = raw.products ?? {
+        [file.split(".")[0]]: raw[file.split(".")[0]],
+      };
+      for (const product of Object.values(products) as any[]) {
+        for (const cap of product.capabilities as Capability[]) {
+          for (const group of ["path_params", "query", "body"] as const) {
+            for (const param of (cap[group] as WireParam[] | undefined) ?? []) {
+              for (const field of param.fields ?? []) {
+                const at = (field.json_path ?? "").split("/").filter(Boolean);
+                if (at.length > 0 && at[at.length - 1] !== field.name)
+                  renamed.push(`${cap.name} ${param.name}.${field.name}`);
+              }
+            }
+          }
+        }
+      }
+    }
+    expect(renamed).toEqual([]);
   });
 });

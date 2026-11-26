@@ -43,10 +43,15 @@ export const ELICITATION_TIMEOUT_MS = 270_000;
  *            client call was measured surviving 670s+ with no progress notifications at
  *            all, so the host is not the limit — this number is a product choice about
  *            how long to go quiet, not a technical one.
- *   hosted   each wait pins a session on remote-mcp-server, which runs ONE replica in
- *            512Mi with terminationGracePeriodSeconds: 30 and drops sessions on SIGTERM
- *            before draining. Anything past that grace period is severed by every rolling
- *            deploy, so this stays well under it until that shutdown path drains first.
+ *   hosted   remote-mcp-server in prod (ai-common, mcp.browserstack.com) runs TWO fixed
+ *            replicas with autoscaling off, 200m/256Mi each, and sessions off — so every
+ *            request builds its own server and transport and holds them for as long as the
+ *            call lasts. There is no elasticity to absorb held calls, and
+ *            terminationGracePeriodSeconds is 30 (chart default, not overridden), so a
+ *            wait longer than that is cut short by every rolling deploy. Staging is
+ *            sessions-on and single-replica, where `shutdown()` severs in-flight calls
+ *            outright via dropAllSessions(). This stays under the grace period until the
+ *            shutdown path drains first.
  *
  * `BROWSERSTACK_RUN_SETTLE_MS` overrides both, read per call so it can be tuned or taken
  * to 0 (today's behaviour) without a release — the same reason `ASK_BROWSERSTACK_DISABLED`

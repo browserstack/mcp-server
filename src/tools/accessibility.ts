@@ -47,11 +47,11 @@ import {
 } from "./accessiblity-utils/report-parser.js";
 import { wrapUntrusted } from "../lib/untrusted-content.js";
 import { isLocalURL } from "../lib/local.js";
-import { queryAccessibilityRAG } from "./accessiblity-utils/accessibility-rag.js";
 import { BrowserStackConfig } from "../lib/types.js";
 import { elicitCredentialsIfSupported } from "../lib/elicit-credentials.js";
 import logger from "../logger.js";
 import { NEEDS_A11Y_CONFIG_ID, NEEDS_A11Y_SCAN_ID } from "./tool-handoff.js";
+import { isEnabled as capabilityRegistryEnabled } from "./capability-registry/config.js";
 import {
   applyMemory,
   LATER_CHARACTERS,
@@ -80,10 +80,7 @@ import {
   asSentence,
 } from "./accessiblity-utils/error-messages.js";
 import {
-  EXPERT_QUERY_MAX_CHARS,
-  fitExpertQuery,
-} from "./accessiblity-utils/expert-query.js";
-import {
+  attributeScanFailure,
   buildIdNotFound,
   errorPagesNote,
   failedRunResponse,
@@ -122,8 +119,7 @@ import {
   type ScanArgs,
 } from "./accessiblity-utils/scan-rerun.js";
 import { CallerError } from "../lib/error.js";
-
-export { EXPERT_QUERY_MAX_CHARS };
+import { markCallerFault } from "../lib/upstream-status.js";
 
 interface FormAuthArgs {
   name: string;
@@ -173,48 +169,6 @@ async function initializeReportFetcher(
   const auth = setupAuth(config);
   reportFetcher.setAuth(auth);
   return reportFetcher;
-}
-
-/**
- * accessibilityExpert is going away; until it is removed it still answers, with this note,
- * which names what to use instead so an agent stops reaching for it.
- */
-const ACCESSIBILITY_EXPERT_DEPRECATED =
-  "Note: accessibilityExpert is deprecated and will be removed in a future release. To list or filter a report's issues, for example those failing a WCAG criterion, use fetchAccessibilityIssues and answer from its result; to scan a page, use startAccessibilityScan. For advice on a report, such as how to raise its score or which issues to fix first, call askBrowserStackAI with product a11y and give the user its answer. For a general WCAG or ARIA question, call askBrowserStackAI with product a11y too. If askBrowserStackAI says it is not enabled for this account, answer from the report's issues. " +
-  FIX_WORKFLOW_POINTER;
-
-async function executeAccessibilityRAG(
-  args: { query: string },
-  server: McpServer,
-  config: BrowserStackConfig,
-): Promise<CallToolResult> {
-  try {
-    trackMCP(
-      "accessibilityExpert",
-      server.server.getClientVersion()!,
-      undefined,
-      config,
-    );
-    const { query, shortened, kept } = fitExpertQuery(args.query);
-    const answer = await queryAccessibilityRAG(query, config);
-    return {
-      ...answer,
-      content: [
-        { type: "text", text: ACCESSIBILITY_EXPERT_DEPRECATED },
-        ...(shortened
-          ? [
-              {
-                type: "text" as const,
-                text: `The question was ${args.query.length} characters; the knowledge base takes at most ${EXPERT_QUERY_MAX_CHARS}, so ${query.length} were sent: its ${kept ?? "opening"}. If the answer misses the point, ask again more briefly.`,
-              },
-            ]
-          : []),
-        ...(answer.content ?? []),
-      ],
-    };
-  } catch (error) {
-    return handleMCPError("accessibilityExpert", server, config, error);
-  }
 }
 
 interface FetchIssuesArgs {
@@ -286,7 +240,11 @@ async function executeFetchAccessibilityIssues(
       return createSuccessResponse([fixWorkflowForAgent()]);
     }
     const source = issueSourceFrom(args);
-    if (typeof source === "string") return createErrorResponse(source);
+    if (typeof source === "string") {
+      // The arguments name no source, or two: the caller's, and said so for telemetry.
+      markCallerFault();
+      return createErrorResponse(source);
+    }
     const result = await fetchAccessibilityIssues(
       source,
       config,
@@ -320,6 +278,8 @@ function excludedIssuesNote(
   duplicates: number | null,
   unlinked: number,
   hidden: number | null,
+  // Web exports also drop rows a reviewer marked "Not an issue"; app reports have no such rows.
+  includesNotAnIssue = false,
 ): string[] {
   const notes: string[] = [];
   if (duplicates) {
@@ -336,7 +296,7 @@ function excludedIssuesNote(
   }
   if (hidden) {
     notes.push(
-      `${hidden} issues hidden in the dashboard are not included, as the dashboard leaves them out of its count too.`,
+      `${hidden} issues ${includesNotAnIssue ? 'hidden or marked "Not an issue"' : "hidden"} in the dashboard are not included, as the dashboard leaves them out of its count too.`,
     );
   }
   return notes;
@@ -606,6 +566,12 @@ function askAiNote(source: IssueSource): string {
 const WEB_ISSUES_NOTE =
   "Each issue names its rule (issue_type): the rule's name, description, WCAG criteria and usual fix are under rules, and an issue has its own how_to_fix only when it differs. An issue with needs_review is one the engine could not decide, so a person confirms it: the value is its review status, and until it is confirmed it is not a confirmed failure. An issue with no needs_review, whose rule is not a best practice (best_practice under rules), is a confirmed WCAG failure.";
 
+// In isolated agent sessions this tool answered questions it only half covers (a build's test
+// cases, issues by WCAG guideline, the elements behind a rule, one issue's detail, merging
+// reports) and once told the user test cases "aren't available". Point at the dashboard views.
+const WEB_MORE_VIEWS_NOTE =
+  "This answer is the issue list only. For a build's or scan run's test cases, its issues grouped by rule or by WCAG guideline, the elements behind a rule or guideline, one issue's full detail, or several Workflow Analyzer reports merged into one, call searchCapability with product web_accessibility: those are separate dashboard views. Check searchCapability before telling the user one is unavailable, and if a view then refuses (for example a 403 for the token's permissions, plan or access), relay that refusal as it came.";
+
 /** The CSV link, with what it is for: an answer gives a page of issues at a time. */
 function fullReportLine(
   reportLink: string,
@@ -872,10 +838,8 @@ async function appBuildMessages(
 }
 
 /**
- * A manual report's issues come inline from its scanned screens: the dashboard's own, with
- * its duplicates left out, when its route takes the access key; else every occurrence the
- * Manual Reports API lists, which does not mark duplicates, so the dashboard's count is
- * stated next to the total rather than reproduced.
+ * A manual report's issues come inline from the dashboard's scanned screens, with its
+ * duplicates left out as the dashboard leaves them out of its count.
  */
 async function appReportMessages(
   reportFetcher: AccessibilityReportFetcher,
@@ -911,20 +875,19 @@ async function appReportMessages(
     report.device ? ` on ${report.device}` : ""
   }`;
   const dashboardNote =
-    report.duplicate_occurrences === 0
-      ? []
-      : report.deduplicated
-        ? [
-            `${report.duplicate_occurrences} duplicate occurrences are left out, as the dashboard leaves them out of its count.`,
-          ]
+    report.duplicate_occurrences === null || report.hidden_issues === null
+      ? [
+          "The dashboard's duplicate and hidden issue counts could not be read for this report.",
+        ]
+      : report.duplicate_occurrences === 0
+        ? []
         : [
-            `The dashboard counts ${report.dashboard_count} issues for this report: ${report.duplicate_occurrences} of the occurrences are duplicates it folds, which the API does not mark.`,
+            `${report.duplicate_occurrences} duplicate occurrences are left out, as the dashboard leaves them out of its count.`,
           ];
-  const counted = report.deduplicated ? "issues" : "issue occurrences";
   return [
     ...preface,
     ...processingNote(processing),
-    `Retrieved ${page_length} accessibility ${counted} (Total: ${total_issues}) from the App Accessibility manual report below (${where})`,
+    `Retrieved ${page_length} accessibility issues (Total: ${total_issues}) from the App Accessibility manual report below (${where})`,
     details,
     ...(cursor === 0 ? summaryNote(report.summary, total_issues) : []),
     ...(report.screens_read !== undefined
@@ -949,7 +912,9 @@ function exportPendingMessages(
 ): string[] {
   return [
     `This report's CSV export is still being generated (waited ${formatDuration(error.waitedMs)}; large reports can take a few minutes). No issues have been read yet.`,
-    `Call fetchAccessibilityIssues again with ${sourceArgs(source)}${extraArgs} and exportTaskId: "${error.taskId}" to continue this export instead of starting a new one.`,
+    error.taskId
+      ? `Call fetchAccessibilityIssues again with ${sourceArgs(source)}${extraArgs} and exportTaskId: "${error.taskId}" to continue this export instead of starting a new one.`
+      : `Another export of this report, started elsewhere, is still running. Call fetchAccessibilityIssues again with ${sourceArgs(source)}${extraArgs} in a minute.`,
   ];
 }
 
@@ -1260,9 +1225,12 @@ async function fetchAccessibilityIssues(
         duplicate_issues,
         unlinked_duplicates,
         hidden_issues,
+        true,
       ),
       fullReportLine(csvLink, fp),
       WEB_ISSUES_NOTE,
+      // Said once, on the first page, and only when searchCapability is there to follow it to.
+      ...(cursor || !capabilityRegistryEnabled() ? [] : [WEB_MORE_VIEWS_NOTE]),
       ...fp.notes,
       `Issues: ${wrapUntrusted("accessibility scan results", JSON.stringify({ issues: fp.records, rules }))}`,
       ...fp.later,
@@ -1578,6 +1546,9 @@ function scanSettingsNote(
       settings.experimentalRules !== undefined
         ? `experimental rules ${onOff(settings.experimentalRules)}`
         : "",
+      settings.screenReader !== undefined
+        ? `screen reader ${settings.screenReader === "VO" ? "VoiceOver" : settings.screenReader}`
+        : "",
       settings.scanScope
         ? `part of the page only (${scopeKind(settings.scanScope)})`
         : "",
@@ -1653,6 +1624,7 @@ function startNewScan(
       needsReview: args.needsReview,
       advancedRules: args.advancedRules,
       experimentalRules: args.experimentalRules,
+      screenReader: args.screenReader,
       scanScope: args.scanScope,
     },
     args.localIdentifier,
@@ -1880,8 +1852,10 @@ function createScanSuccessResponse(
       report.duplicate_issues,
       report.unlinked_duplicates,
       report.hidden_issues,
+      true,
     ),
     WEB_ISSUES_NOTE,
+    ...(capabilityRegistryEnabled() ? [WEB_MORE_VIEWS_NOTE] : []),
     ...fp.notes,
     `Scan results: ${wrapUntrusted("accessibility scan results", JSON.stringify({ issues: fp.records, rules: report.rules }))}`,
     ...fp.later,
@@ -1942,6 +1916,7 @@ async function scanOutcome(
       scanner.dashboardLink(scanId),
       scanner.failureDetails(scanId, scanRunId),
     ]);
+    attributeScanFailure(details);
     return [
       createScanFailureResponse(
         scanName,
@@ -2179,28 +2154,6 @@ export default function addAccessibilityTools(
 ) {
   const tools: Record<string, any> = {};
 
-  tools.accessibilityExpert = server.tool(
-    "accessibilityExpert",
-    "Deprecated, to be removed: answers accessibility, a11y, and WCAG questions from BrowserStack's accessibility knowledge base.",
-    {
-      query: z
-        .string()
-        .describe(
-          "Any accessibility, a11y, WCAG, or web accessibility question",
-        ),
-    },
-    {
-      title: "Accessibility Expert (deprecated)",
-      readOnlyHint: true,
-      openWorldHint: false,
-      destructiveHint: false,
-      idempotentHint: true,
-    },
-    async (args) => {
-      return await executeAccessibilityRAG(args, server, config);
-    },
-  );
-
   tools.startAccessibilityScan = server.tool(
     "startAccessibilityScan",
     "Scan a web page URL for accessibility issues and get a CSV report. For a mobile app, run it on App Automate with accessibility on (setupBrowserStackAppAutomateTests), then fetchAccessibilityIssues.",
@@ -2225,14 +2178,12 @@ export default function addAccessibilityTools(
         .min(1)
         .optional()
         .describe(
-          "ID of a BrowserStack Local tunnel you started, for localhost or internal URLs.",
+          "BrowserStack Local tunnel ID, for localhost or internal URLs.",
         ),
       advancedRules: z
         .boolean()
         .optional()
-        .describe(
-          "Run advanced rules (default true; off if the plan lacks them).",
-        ),
+        .describe("Run advanced rules (default true if the plan has them)."),
       wcagVersion: z
         .enum(Object.keys(WCAG_VERSIONS) as [keyof typeof WCAG_VERSIONS])
         .optional()
@@ -2253,7 +2204,13 @@ export default function addAccessibilityTools(
         .boolean()
         .optional()
         .describe(
-          "Run experimental rules (default true; off if the plan lacks them).",
+          "Run experimental rules (default true if the plan has them).",
+        ),
+      screenReader: z
+        .enum(["NVDA", "VO"])
+        .optional()
+        .describe(
+          "Also run a screen reader (VO: VoiceOver); the plan needs it.",
         ),
       scanScope: z
         .object({
@@ -2262,7 +2219,7 @@ export default function addAccessibilityTools(
         })
         .optional()
         .describe(
-          'Scan only the first element this CSS selector or XPath matches, e.g. {"type":"css","value":"main"}.',
+          'Only the first element matched, e.g. {"type":"css","value":"main"}.',
         ),
     },
     {
@@ -2335,7 +2292,8 @@ export default function addAccessibilityTools(
         );
 
         if (!creds.username || !creds.password) {
-          const error = new Error(
+          // Declined or empty credentials are the caller's, not a failure of ours.
+          const error = new CallerError(
             "Username and password are required to create an auth config. Provide them when prompted, or pass them as arguments.",
           );
           trackMCP(

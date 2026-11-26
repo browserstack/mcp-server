@@ -33,6 +33,7 @@ import { Credentials, Transport, fetchTransport } from "./egress.js";
 import {
   CapabilityRegistry,
   InvocationError,
+  isReadOnly,
   ResponseSelection,
   resolveResponses,
 } from "./index-loader.js";
@@ -104,6 +105,11 @@ function announceLoad(registry: CapabilityRegistry): void {
   // WITHHELD CAPABILITIES ARE LOGGED, because they are otherwise undetectable from
   // outside: the flag's whole job is to make them invisible, so the count at startup is
   // the only place an operator can see that the surface is smaller than the artifact.
+  if (isReadOnly()) {
+    logger.info(
+      "capability registry is read-only (CAPABILITY_REGISTRY_READ_ONLY): writes and deletes are withheld",
+    );
+  }
   const withheld = registry.disabledCounts();
   if (Object.keys(withheld).length) {
     logger.info(
@@ -544,9 +550,7 @@ export function addCapabilityRegistryTools(
     "describeEntity",
     "Describe an entity: identifiers, relations and product vocabulary. Read before filtering or writing; ids often need resolving first.",
     {
-      product: productArg().describe(
-        `Which product the entity belongs to: ${productList}.`,
-      ),
+      product: productArg().describe(`The entity's product: ${productList}.`),
       entity: z.string().describe("Entity name, as listProducts returns it."),
     },
     {
@@ -569,8 +573,14 @@ export function addCapabilityRegistryTools(
         );
       const doc = bundle.entities[entity];
       if (!doc) {
-        return failed(
+        // A refusal, like the unknown product above, not a bare failed(): the row then
+        // carries refusal_reason and is the caller's, rather than an unexplained failure.
+        return refuse(
+          "describeEntity",
+          "unknown_entity",
           `unknown entity '${entity}' in ${product}; known: ${Object.keys(bundle.entities).sort().join(", ")}`,
+          undefined,
+          { product },
         );
       }
       return ok({ product, entity, ...doc });
@@ -983,7 +993,7 @@ export function addCapabilityRegistryTools(
 
   tools.describeCapability = server.tool(
     "describeCapability",
-    "Full contract (parameters, returns, response shapes) for ONE capability from searchCapability. Call it before invokeCapability. Identify by `name`; use `method` + `path` only when no name was returned.",
+    "Full contract for ONE capability from searchCapability: parameters, their allowed `values`, returns. Call it before invokeCapability, and before asking the user to choose a value: offer only those.",
     {
       name: z
         .string()
@@ -1083,6 +1093,8 @@ export function addCapabilityRegistryTools(
           send_empty_body,
           local_only,
           disabled,
+          // How the server signs in for this capability: plumbing, like host.
+          auth: signIn,
           ...contract
         } = capability;
         void unresolved;
@@ -1091,6 +1103,7 @@ export function addCapabilityRegistryTools(
         void send_empty_body;
         void local_only;
         void disabled;
+        void signIn;
         return ok({
           // No build_id here either, same reason. `product` stays: describeCapability
           // resolves by NAME and its product argument is optional, so the answer has to
@@ -1141,9 +1154,13 @@ export function addCapabilityRegistryTools(
     },
   );
 
+  const readOnly = isReadOnly();
   tools.invokeCapability = server.tool(
     "invokeCapability",
-    "Run a capability after describeCapability, by `name` (or `method` + `path` if unnamed); args go in path_params / query / body. `select` narrows the response only where the contract carries `narrowable`. If `completed` is false, fetch the next page with the capability's own page parameter, not `offset`. Writes: ask the user first, then resend with user_permission='granted' and a change_summary. Deletes are refused; archive, close and merge are writes.",
+    "Run a capability after describeCapability, by `name` (or `method` + `path` if unnamed); args go in path_params / query / body. `select` narrows the response only where the contract carries `narrowable`. If `completed` is false, fetch the next page with the capability's own page parameter, not `offset`." +
+      (readOnly
+        ? " Read-only: writes and deletes are not available."
+        : " Writes: ask the user first, then resend with user_permission='granted' and a change_summary. Deletes are refused; archive, close and merge are writes."),
     {
       name: z
         .string()
@@ -1178,16 +1195,20 @@ export function addCapabilityRegistryTools(
       product: productArg()
         .optional()
         .describe("Owning product; needed only when names or paths collide."),
-      user_permission: z
-        .enum(PERMISSION_VALUES)
-        .optional()
-        .describe(
-          "Set to 'granted' only after the user has confirmed a write.",
-        ),
-      change_summary: z
-        .string()
-        .optional()
-        .describe("What will change. Required for writes."),
+      ...(readOnly
+        ? {}
+        : {
+            user_permission: z
+              .enum(PERMISSION_VALUES)
+              .optional()
+              .describe(
+                "Set to 'granted' only after the user has confirmed a write.",
+              ),
+            change_summary: z
+              .string()
+              .optional()
+              .describe("What will change. Required for writes."),
+          }),
       select: z
         .object({
           where: z
@@ -1221,9 +1242,10 @@ export function addCapabilityRegistryTools(
       // destructive endpoints are refused before binding — the refusal is enforced here,
       // not merely hinted at. Not idempotent: it creates, clones and starts runs. Closed
       // world: it reaches BrowserStack products the index describes, nothing else.
-      readOnlyHint: false,
+      // Under CAPABILITY_REGISTRY_READ_ONLY every write is withheld at load, so it reads only.
+      readOnlyHint: readOnly,
       destructiveHint: false,
-      idempotentHint: false,
+      idempotentHint: readOnly,
       openWorldHint: false,
     },
     async (input): Promise<CallToolResult> => {
@@ -1350,6 +1372,9 @@ export function addCapabilityRegistryTools(
               transport,
               registry.index.products[product]?.auth,
               product,
+              // Optional chaining, not `!`: attribution must never decide whether the
+              // call is made, the same rule `track` follows.
+              server.server?.getClientVersion()?.name,
             ),
           (name) => registry.byNameLookup(name, product).capability,
         );

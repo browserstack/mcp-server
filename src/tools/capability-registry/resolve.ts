@@ -15,7 +15,14 @@
 
 import { invalidateToken } from "../../lib/central-oauth.js";
 import { bind, GroupedArguments } from "./bind.js";
-import { authHeaders, Credentials, Transport } from "./egress.js";
+import {
+  authHeaders,
+  clientHeaders,
+  Credentials,
+  PRODUCT_UNREACHABLE,
+  Transport,
+} from "./egress.js";
+import { retryRead } from "../../lib/read-retry.js";
 import { resolveScope, resolveTokenUrl } from "./oauth.js";
 import { AuthScheme } from "./types.js";
 import { openAsBlob } from "node:fs";
@@ -56,7 +63,11 @@ function hasNextPage(body: unknown): boolean {
   // Accessibility's lists page under data.pagination instead, camelCase on some and
   // snake_case on others.
   const pagination = record(record(envelope.data)?.pagination);
-  return pagination?.hasNext === true || pagination?.has_next === true;
+  if (pagination?.hasNext === true || pagination?.has_next === true)
+    return true;
+  // The bulk-review reads page under data.meta.nextPage: a page number, or null on the last.
+  const metaNext = record(record(envelope.data)?.meta)?.nextPage;
+  return metaNext !== null && metaNext !== undefined && metaNext !== false;
 }
 
 /**
@@ -133,6 +144,8 @@ export async function invoke(
   transport: Transport,
   auth?: AuthScheme,
   product?: string,
+  /** The connected MCP client's name, sent as `x-mcp-client`. */
+  client?: string,
 ): Promise<InvokeResult> {
   if (!baseUrl)
     throw new InvocationError("no base URL is configured for that product");
@@ -145,8 +158,15 @@ export async function invoke(
     capability.encoding === "multipart"
       ? await multipartBody(capability, bound.body)
       : undefined;
+  // A capability may sign in differently from its product (see Capability.auth). Headers,
+  // the 401 replay and the token it discards must all use this one scheme: web_accessibility
+  // signs in with Basic while its dashboard capabilities mint an oauth2 token.
+  const effectiveAuth = capability.auth ?? auth;
   const send = async () => {
-    const headers = await authHeaders(credentials, auth, product);
+    const headers = {
+      ...(await authHeaders(credentials, effectiveAuth, product)),
+      ...clientHeaders(client),
+    };
     if (multipart) {
       // fetch writes its own Content-Type with the boundary. Leaving the JSON one on sends
       // a body the product cannot parse, under a header that says it should be able to.
@@ -164,7 +184,15 @@ export async function invoke(
     });
   };
 
-  let response = await send();
+  // Only an unanswered read is retried; a product's own error status is returned as sent.
+  let response =
+    capability.mode === "read"
+      ? await retryRead(
+          send,
+          (r) => r.status === 0 && r.error === PRODUCT_UNREACHABLE,
+          { retryOnError: false },
+        )
+      : await send();
 
   /**
    * One replay, for a minted token the product rejected.
@@ -178,10 +206,10 @@ export async function invoke(
    * fails identically, and a loop here would hammer the token endpoint on every wrong
    * password.
    */
-  if (response.status === 401 && auth?.type === "oauth2") {
+  if (response.status === 401 && effectiveAuth?.type === "oauth2") {
     invalidateToken(
-      resolveTokenUrl(product ?? "this product", auth),
-      resolveScope(auth),
+      resolveTokenUrl(product ?? "this product", effectiveAuth),
+      resolveScope(effectiveAuth),
       credentials,
     );
     response = await send();
@@ -195,7 +223,7 @@ export async function invoke(
       status: response.status,
       body: response.body,
       ...(response.status === 0
-        ? { error: response.error || "the product could not be reached" }
+        ? { error: response.error || PRODUCT_UNREACHABLE }
         : {}),
     },
   };

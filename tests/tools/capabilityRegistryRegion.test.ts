@@ -325,6 +325,19 @@ describe("products follow the account's region", () => {
     },
   );
 
+  // Testing Toolkit is not offered to accounts routed to another region, so Bug Capture
+  // needs no region check of its own: one host, and no region lookup to fail on.
+  it.each(["eu", "in", "unknown", undefined])(
+    "serves bug_capture from its one host when the region is %s",
+    async (region) => {
+      const resolveBaseUrl = await resolveIn(region);
+      const toolkit = "https://toolkit.browserstack.com";
+      expect(
+        await resolveBaseUrl("bug_capture", CONFIG, { base_url: toolkit }),
+      ).toBe(toolkit);
+    },
+  );
+
   it("refuses load testing when the region is unknown", async () => {
     const resolveBaseUrl = await resolveIn("unknown");
     await expect(

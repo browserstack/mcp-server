@@ -194,12 +194,16 @@ function runStartedMessage(
   buildId: string,
   accessibility: boolean,
   devices: string,
+  screenReader = false,
 ): string {
   const link = `https://app-automate.browserstack.com/builds/${buildId}`;
   const a11y = accessibility
     ? `\n\n♿ App Accessibility checks are on. ${NATIVE_ACCESSIBILITY_SETUP[framework] ?? ""}\nWhen the build finishes (typically 10–20 minutes), read the issues with fetchAccessibilityIssues, reportUrl: ${link} — it maps the build to its accessibility report and waits while the report is still processing.`
     : "";
-  return `✅ ${framework} run started successfully!\n\n🔧 Build ID: ${buildId}\n🔗 View your build: ${link}${devices}${a11y}`;
+  const sr = screenReader
+    ? `\n\n🔊 Screen Reader Automation is on. Its report is listed apart from ordinary builds: read it with list_app_accessibility_screen_reader_builds (product app_accessibility) under the build's project. It needs Screen Reader Automation on the account's plan; without it the build runs with the accessibility checks only.`
+    : "";
+  return `✅ ${framework} run started successfully!\n\n🔧 Build ID: ${buildId}\n🔗 View your build: ${link}${devices}${a11y}${sr}`;
 }
 
 /**
@@ -239,10 +243,26 @@ async function runAppTestsOnBrowserStack(
     project: string;
     detectedAutomationFramework: string;
     accessibility?: boolean;
+    screenReader?: boolean;
+    screenReaderLinearNavigation?: boolean;
   },
   config: BrowserStackConfig,
 ): Promise<CallToolResult> {
-  const accessibility = args.accessibility === true;
+  // Linear navigation is a screen reader option, so asking for it turns the screen reader on.
+  const screenReader =
+    args.screenReader === true || args.screenReaderLinearNavigation === true;
+  // Screen Reader Automation runs inside the accessibility run, so it turns the checks on.
+  const accessibility = args.accessibility === true || screenReader;
+  const nativeOptions = {
+    accessibility,
+    ...(screenReader
+      ? {
+          screenReader: {
+            linearNavigation: args.screenReaderLinearNavigation === true,
+          },
+        }
+      : {}),
+  };
   // Validate that either paths or URLs are provided for both app and test suite
   if (!args.browserstackAppUrl && !args.appPath) {
     throw new CallerError(
@@ -298,7 +318,7 @@ async function runAppTestsOnBrowserStack(
           deviceStrings,
           args.project,
           config,
-          { accessibility },
+          nativeOptions,
         );
 
         return {
@@ -310,6 +330,7 @@ async function runAppTestsOnBrowserStack(
                 build_id,
                 accessibility,
                 devices,
+                screenReader,
               ),
             },
           ],
@@ -350,7 +371,7 @@ async function runAppTestsOnBrowserStack(
           deviceStrings,
           args.project,
           config,
-          { accessibility },
+          nativeOptions,
         );
         return {
           content: [
@@ -361,6 +382,7 @@ async function runAppTestsOnBrowserStack(
                 build_id,
                 accessibility,
                 devices,
+                screenReader,
               ),
             },
           ],

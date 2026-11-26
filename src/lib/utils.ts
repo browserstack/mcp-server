@@ -6,6 +6,7 @@ import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { trackMCP } from "../index.js";
 import { HttpError, CallerError } from "./error.js";
 import { trackedFetch } from "./upstream-status.js";
+import { isTransientResponse, retryRead } from "./read-retry.js";
 
 export function sanitizeUrlParam(param: string): string {
   // Remove any characters that could be used for command injection
@@ -36,8 +37,9 @@ export async function fetchFromBrowserStackAPI(
   const auth = Buffer.from(authString).toString("base64");
 
   const init = { headers: { Authorization: `Basic ${auth}` } };
-  const res = await trackedFetch(url, init).catch(() =>
-    trackedFetch(url, init),
+  const res = await retryRead(
+    () => trackedFetch(url, init),
+    isTransientResponse,
   );
 
   if (!res.ok) {

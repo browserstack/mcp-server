@@ -4,7 +4,9 @@ import {
   ambiguousProducts,
   impliedTerms,
   productAnchors,
+  productHosts,
   unreadable,
+  withOwnHosts,
 } from "../../src/tools/capability-registry/search.js";
 import {
   readRouting,
@@ -142,6 +144,60 @@ describe("a pasted address names `url`", () => {
     expect(
       productAnchors(shipped, "https://example.com please").products,
     ).toEqual(["devicecontrol"]));
+});
+
+// A product that shares its records as links claims its host as a routing term. That
+// host decides the request on its own; reading the link as `url` too made device control
+// a second decider, and the path's own words (`workspace`, `collection`, `session`) then
+// picked a product neither one named. `linked` stands in for any such product: it shares
+// `bug` with tm, as a product of bug recordings would.
+describe("an address on a product's own host names that product, not `url`", () => {
+  const catalog = {
+    ...shipped,
+    linked: {
+      summary: "Bug recordings, shared as links.",
+      routing_terms: ["bug", "links.example.com"],
+      capabilities: [],
+      entities: {},
+    },
+  };
+  const LINK =
+    "https://links.example.com/workspaces/w1/collections/c1/sessions/x9";
+  const hosts = productHosts(catalog);
+
+  it("lists only the hosts products claim", () =>
+    expect([...hosts]).toEqual(["links.example.com"]));
+
+  it("implies nothing for a link on a claimed host", () =>
+    expect(impliedTerms(`review this bug ${LINK}`, hosts)).toEqual([]));
+
+  it("still implies `url` for any other address beside it", () =>
+    expect(
+      impliedTerms(`compare ${LINK} with https://example.com`, hosts),
+    ).toEqual(["url"]));
+
+  it("reads the link as its host alone", () =>
+    expect(withOwnHosts(`open ${LINK} now`, hosts)).toBe(
+      "open links.example.com now",
+    ));
+
+  it.each([LINK, "https://links.example.com/x9", "links.example.com/x9"])(
+    "routes %s to its product without asking",
+    (link) =>
+      expect(
+        ambiguousProducts(catalog, `Review this bug and propose a fix: ${link}`)
+          .settled,
+      ).toBe("linked"),
+  );
+
+  it("anchors device control only for an address on another host", () => {
+    expect(productAnchors(catalog, `${LINK} please`).products).not.toContain(
+      "devicecontrol",
+    );
+    expect(
+      productAnchors(catalog, "https://example.com please").products,
+    ).toEqual(["devicecontrol"]);
+  });
 });
 
 describe("a summary that points at a separate product does not claim its words", () => {

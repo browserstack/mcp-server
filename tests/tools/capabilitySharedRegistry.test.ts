@@ -228,6 +228,21 @@ describe("sharedRegistry", () => {
     ).toBe(false);
   });
 
+  it("reloads when read-only mode changes", async () => {
+    writeFileSync(file, index(THING));
+    const sharedRegistry = await load();
+    const before = sharedRegistry([file]);
+
+    vi.stubEnv("CAPABILITY_REGISTRY_READ_ONLY", "true");
+    try {
+      const after = sharedRegistry([file]);
+      expect(after.loaded).toBe(true);
+      expect(after.registry).not.toBe(before.registry);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
   it("does not remember a failed load", async () => {
     writeFileSync(file, "{ not json");
     const sharedRegistry = await load();

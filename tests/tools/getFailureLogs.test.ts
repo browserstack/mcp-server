@@ -58,7 +58,7 @@ vi.mock('../../src/tools/failurelogs-utils/app-automate', () => ({
   retrieveAppiumLogs: vi.fn(),
   retrieveCrashLogs: vi.fn(),
   filterDeviceFailures: vi.fn(() => []),
-  filterAppiumFailures: vi.fn(() => []),
+  summarizeAppiumFailures: vi.fn(() => ({ failures: [], totalLines: 0, omitted: 0 })),
   filterCrashFailures: vi.fn(() => []),
 }));
 
@@ -224,6 +224,24 @@ describe('BrowserStack Failure Logs', () => {
       expect(automate.retrieveSessionFailures).not.toHaveBeenCalled();
       const texts = result.content.map((c: any) => c.text).join('\n');
       expect(texts).toContain("'networkLogs' is not available for app-automate sessions.");
+    });
+
+    it('reports a swapped or unavailable log type before the logs', async () => {
+      const mockServer = { server: { getClientVersion: () => "test-version" } };
+      (detectSession as any).mockResolvedValue({ sessionType: 'app-automate', hashedBuildId: 'app-build' });
+      vi.mocked(appAutomate.retrieveAppiumLogs).mockResolvedValue('appium logs');
+
+      const result = await getFailureLogs({
+        sessionId: 'test-session',
+        logTypes: ['sessionLogs', 'networkLogs'],
+        sessionType: 'app-automate'
+      }, mockServer);
+
+      const texts = result.content.map((c: any) => c.text);
+      expect(texts).toHaveLength(2);
+      expect(texts[0]).toContain("'sessionLogs' is not available for app-automate sessions; fetched 'appiumLogs' instead.");
+      expect(texts[0]).toContain("'networkLogs' is not available for app-automate sessions.");
+      expect(texts[1]).toBe('appium logs');
     });
 
     it('throws when mismatched log types name a session neither product knows', async () => {
@@ -409,7 +427,6 @@ describe('BrowserStack Failure Logs', () => {
       });
 
       vi.mocked(appAutomate.filterDeviceFailures).mockReturnValue([]);
-      vi.mocked(appAutomate.filterAppiumFailures).mockReturnValue([]);
       vi.mocked(appAutomate.filterCrashFailures).mockReturnValue([]);
     });
 
@@ -451,13 +468,11 @@ console.error('Uncaught TypeError')
       vi.mocked(automate.filterSessionFailures).mockReturnValue(emptyResult);
       vi.mocked(automate.filterConsoleFailures).mockReturnValue(emptyResult);
       vi.mocked(appAutomate.filterDeviceFailures).mockReturnValue(emptyResult);
-      vi.mocked(appAutomate.filterAppiumFailures).mockReturnValue(emptyResult);
       vi.mocked(appAutomate.filterCrashFailures).mockReturnValue(emptyResult);
 
       expect(automate.filterSessionFailures('')).toEqual([]);
       expect(automate.filterConsoleFailures('')).toEqual([]);
       expect(appAutomate.filterDeviceFailures('')).toEqual([]);
-      expect(appAutomate.filterAppiumFailures('')).toEqual([]);
       expect(appAutomate.filterCrashFailures('')).toEqual([]);
     });
   });

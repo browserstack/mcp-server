@@ -95,10 +95,13 @@ export async function retrieveAppiumLogs(
     typeof response.data === "string"
       ? response.data
       : JSON.stringify(response.data);
-  const logs = filterAppiumFailures(logText);
-  return logs.length > 0
-    ? `Appium Failures (${logs.length} found):\n${wrapUntrusted("Appium logs", JSON.stringify(logs, null, 2))}`
-    : "No Appium failures found";
+  const { failures, totalLines, omitted } = summarizeAppiumFailures(logText);
+  if (failures.length === 0) return "No Appium failures found";
+  const omittedNote =
+    omitted > 0
+      ? `\n${omitted} more distinct failures omitted; open the session in the BrowserStack dashboard for the full log.`
+      : "";
+  return `Appium Failures (${failures.length} distinct, ${totalLines} lines; each with the command that was running):\n${wrapUntrusted("Appium logs", JSON.stringify(failures, null, 2))}${omittedNote}`;
 }
 
 // CRASH LOGS
@@ -158,20 +161,163 @@ export function filterDeviceFailures(logText: string): string[] {
   return filterLinesByKeywords(logText, keywords);
 }
 
-export function filterAppiumFailures(logText: string): string[] {
-  const keywords = [
-    "error",
-    "fail",
-    "exception",
-    "not found",
-    "no such element",
-    "unable to",
-    "stacktrace",
-    "appium exited",
-    "command failed",
-    "invalid selector",
-  ];
-  return filterLinesByKeywords(logText, keywords);
+export interface AppiumFailure {
+  error: string;
+  count: number;
+  first_seen?: string;
+  last_seen?: string;
+  command?: string;
+  previous_command?: string;
+}
+
+const APPIUM_KEYWORDS = [
+  "error",
+  "fail",
+  "exception",
+  "not found",
+  "no such element",
+  "unable to",
+  "appium exited",
+  "command failed",
+  "invalid selector",
+];
+const APPIUM_TIMESTAMP =
+  /^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}[:.]\d{3})\s*-\s*/;
+const APPIUM_TAGS = /^(\[[^\]]*\]\s*)+/;
+const APPIUM_CALL = /Calling \w+\.(\w+)\(\) with args: (.*)$/;
+const APPIUM_HTTP_REQUEST = /\[HTTP\] --> (GET|POST|PUT|PATCH|DELETE) (\S+)/;
+const APPIUM_HTTP_BODY = /\[HTTP\] (\{.*\})\s*$/;
+const MAX_APPIUM_FAILURES = 50;
+const MAX_APPIUM_TEXT = 600;
+const APPIUM_FAILURES_BUDGET = 30_000;
+
+// Commands whose first argument is text typed into the app, such as a password.
+const TYPING_COMMANDS = new Set([
+  "setValue",
+  "replaceValue",
+  "setValueImmediate",
+  "keys",
+]);
+const TYPING_PATH = /\/(value|keys|actions)$/;
+const JSON_VALUE = String.raw`("(?:[^"\\]|\\.)*"|\[[^\]]*\])`;
+const TYPED_TEXT = new RegExp(
+  String.raw`"(text|keys)"\s*:\s*` + JSON_VALUE,
+  "g",
+);
+const TYPED_VALUE = new RegExp(String.raw`"(value)"\s*:\s*` + JSON_VALUE, "g");
+const REDACTED = "[redacted]";
+
+function redactTypedFields(json: string, valuesAreTyped: boolean): string {
+  const redacted = json.replace(TYPED_TEXT, `"$1":"${REDACTED}"`);
+  return valuesAreTyped
+    ? redacted.replace(TYPED_VALUE, `"$1":"${REDACTED}"`)
+    : redacted;
+}
+
+function redactCallArgs(method: string, args: string): string {
+  if (!TYPING_COMMANDS.has(method))
+    return redactTypedFields(args, method === "performActions");
+  try {
+    const parsed = JSON.parse(args);
+    if (Array.isArray(parsed) && parsed.length > 0) {
+      return JSON.stringify([REDACTED, ...parsed.slice(1)]);
+    }
+    return REDACTED;
+  } catch {
+    return REDACTED;
+  }
+}
+
+function cap(text: string): string {
+  return text.length > MAX_APPIUM_TEXT
+    ? `${text.slice(0, MAX_APPIUM_TEXT)}…`
+    : text;
+}
+
+/**
+ * Distinct Appium failures, each with the command (and locator) that was running and the
+ * command before it. Repeats of the same error under the same command are counted, not listed.
+ */
+export function summarizeAppiumFailures(logText: string): {
+  failures: AppiumFailure[];
+  totalLines: number;
+  omitted: number;
+} {
+  const groups = new Map<string, AppiumFailure>();
+  let totalLines = 0;
+  let command: string | undefined;
+  let previousCommand: string | undefined;
+  // The HTTP request, its body and the "Calling ..." line that follow describe one command.
+  let fromRequest = false;
+
+  const startCommand = (next: string) => {
+    if (command && command !== next) previousCommand = command;
+    command = next;
+  };
+
+  for (const rawLine of logText.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line) continue;
+    const timestamp = line.match(APPIUM_TIMESTAMP)?.[1];
+    const body = line.replace(APPIUM_TIMESTAMP, "");
+
+    const request = body.match(APPIUM_HTTP_REQUEST);
+    if (request) {
+      startCommand(`${request[1]} ${request[2]}`);
+      fromRequest = true;
+      continue;
+    }
+    const requestBody = body.match(APPIUM_HTTP_BODY);
+    if (requestBody && fromRequest) {
+      const json = redactTypedFields(
+        requestBody[1],
+        TYPING_PATH.test(command ?? ""),
+      );
+      command = cap(`${command} ${json}`);
+      continue;
+    }
+    const call = body.match(APPIUM_CALL);
+    if (call) {
+      const next = cap(`${call[1]}(${redactCallArgs(call[1], call[2])})`);
+      if (fromRequest) command = next;
+      else startCommand(next);
+      fromRequest = false;
+      continue;
+    }
+
+    const message = body.replace(APPIUM_TAGS, "").trim();
+    if (/^at\s/.test(message)) continue;
+    const lower = message.toLowerCase();
+    if (!APPIUM_KEYWORDS.some((keyword) => lower.includes(keyword))) continue;
+
+    totalLines++;
+    const error = cap(message);
+    const key = `${error}\u0000${command ?? ""}`;
+    const existing = groups.get(key);
+    if (existing) {
+      existing.count++;
+      if (timestamp) existing.last_seen = timestamp;
+      continue;
+    }
+    groups.set(key, {
+      error,
+      count: 1,
+      ...(timestamp && { first_seen: timestamp }),
+      ...(command && { command }),
+      ...(previousCommand && { previous_command: previousCommand }),
+    });
+  }
+
+  const all = [...groups.values()];
+  const failures: AppiumFailure[] = [];
+  let size = 0;
+  for (const failure of all) {
+    size += JSON.stringify(failure).length;
+    if (failures.length >= MAX_APPIUM_FAILURES || size > APPIUM_FAILURES_BUDGET)
+      break;
+    failures.push(failure);
+  }
+  return { failures, totalLines, omitted: all.length - failures.length };
 }
 
 export function filterCrashFailures(logText: string): string[] {

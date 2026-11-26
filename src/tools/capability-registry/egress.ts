@@ -21,6 +21,7 @@ import {
   fetchTokenTransport,
   TokenTransport,
 } from "../../lib/central-oauth.js";
+import { MCP_VERSION } from "../../lib/instrumentation.js";
 import { InvocationError } from "./index-loader.js";
 import { bearerToken } from "./oauth.js";
 import { AuthScheme } from "./types.js";
@@ -67,6 +68,8 @@ export function replyCutOffMessage(detail: string): string {
     "before retrying."
   );
 }
+
+export const PRODUCT_UNREACHABLE = "the product could not be reached";
 
 /** What this server can put into a credential template. Nothing else is fillable. */
 const PLACEHOLDERS = ["username", "access_key"] as const;
@@ -133,8 +136,10 @@ export async function authHeaders(
   }
 
   const common = {
-    // Attribution, so the downstream service can see the call came from an agent.
+    // Attribution, so the downstream service can see the call came from an agent — and
+    // from which build, so it can spot callers too old to honour a newer index flag.
     "request-source": "ai-chatbot",
+    "x-mcp-version": MCP_VERSION,
     "Content-Type": "application/json",
   };
   if (auth.type === "oauth2") {
@@ -188,6 +193,21 @@ export async function authHeaders(
     `unsupported auth scheme for this product: ` +
       `${JSON.stringify({ type: auth.type, scheme: auth.scheme })}`,
   );
+}
+
+/**
+ * `x-mcp-client`: the connected MCP client's `clientInfo.name`, or nothing.
+ *
+ * The name is whatever the client chose to send, so only printable ASCII survives: fetch
+ * throws on a value outside Latin-1 or carrying CR/LF, and the transport would then report
+ * the product as unreachable — an emoji in a client's name would fail every call.
+ */
+export function clientHeaders(name?: string): Record<string, string> {
+  const value = (name ?? "")
+    .replace(/[^\x20-\x7e]/g, "")
+    .trim()
+    .slice(0, 100);
+  return value ? { "x-mcp-client": value } : {};
 }
 
 /** Longest response text kept when it is not JSON. Enough for an error, not a whole page. */
@@ -315,7 +335,7 @@ export function fetchTransport(defaultTimeoutMs = 45_000): Transport {
             )
           : timedOut
             ? timedOutMessage(timeoutMs)
-            : "the product could not be reached",
+            : PRODUCT_UNREACHABLE,
       };
     } finally {
       clearTimeout(timer);

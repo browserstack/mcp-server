@@ -115,6 +115,18 @@ export interface AgentRequest {
   conversation_id?: string;
   /** Uploaded files attached to this turn. */
   attachment_ids?: string[];
+  /**
+   * What the turn refers to. An `agent` mention starts that agent, as an `@agent` does in
+   * chat; read by BrowserStack AI only on contract 3 and later.
+   */
+  context?: { mentions: AgentMention[] };
+}
+
+/** An `@agent` mention: `id` is the agent's name in BrowserStack AI. */
+export interface AgentMention {
+  type: "agent";
+  id: string;
+  title?: string;
 }
 
 /** CONTRACT §5 — one entry in an approval trail, in the order the asks arrived. */

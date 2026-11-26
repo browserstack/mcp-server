@@ -12,7 +12,7 @@ searchCapability  →  describeCapability  →  invokeCapability
 
 > **Remote MCP note:** Tools marked _(not available in Remote MCP)_ rely on local file/process state and are disabled in the multi-tenant [Remote MCP Server](../README.md#-remote-mcp-server). They are available in the local (npx) setup.
 
-> **File & app uploads:** tools that upload a local file/app (`uploadProductRequirementFile`, `takeAppScreenshot`, `runAppTestsOnBrowserStack`, `runAppLiveSession`) require the `MCP_UPLOAD_BASE_DIR` env var set to a directory containing those files; uploads are restricted to it.
+> **File & app uploads:** tools that upload a local file/app (`testManagementAIAgents` with `files`, `takeAppScreenshot`, `runAppTestsOnBrowserStack`, `runAppLiveSession`) require the `MCP_UPLOAD_BASE_DIR` env var set to a directory containing those files; uploads are restricted to it.
 
 ---
 
@@ -34,8 +34,6 @@ searchCapability  →  describeCapability  →  invokeCapability
 |---|---|
 | `fetchSelfHealedSelectors` | Retrieve AI self-healed selectors (plus test source) to fix flaky tests caused by DOM changes. |
 | `createLCASteps` | Generate Low Code Automation (LCA) steps from a manual test case in Test Management. |
-| `createTestCasesFromFile` | Generate test cases in bulk from an uploaded file using the Test Case Generator AI Agent. _(not available in Remote MCP)_ |
-| `uploadProductRequirementFile` | Upload a PRD/screenshot/PDF and get a file mapping ID (used with `createTestCasesFromFile`). _(not available in Remote MCP)_ |
 | `percyVisualTestIntegrationAgent` | Integrate Percy visual testing into a new project and demonstrate visual change detection with a step-by-step simulation. |
 | `fetchPercyChanges` | Retrieve and summarize visual changes detected by Percy AI between the latest and previous builds. |
 | `prepareSelfHealingPlan` | Build a self-healing edit plan that bundles locator pairs with test source for your LLM to apply. Does NOT modify files itself. |
@@ -50,8 +48,6 @@ searchCapability  →  describeCapability  →  invokeCapability
 | `createProjectOrFolder` | Create a Test Management project and/or folders to organize test cases. Returns with Folder ID, Project ID and Test Management Link to access the TM Project Dashboard. |
 | `createTestCase` | Add a manual test case under a specific project/folder (uses project identifier like PR-xxxxx and a folder ID). |
 | `listTestCases` | List test cases for a project, optionally scoped to a folder (supports filters like case_type, priority, and pagination). |
-| `uploadProductRequirementFile` | Upload a PRD/screenshot/PDF and get a file mapping ID (used with `createTestCasesFromFile`). _(not available in Remote MCP)_ |
-| `createTestCasesFromFile` | Generate test cases in bulk from an uploaded file using the Test Case Generator AI Agent. _(not available in Remote MCP)_ |
 | `createLCASteps` | Generate Low Code Automation (LCA) steps from a manual test case in Test Management. |
 | `createTestRun` | Create a test run (suite) for selected test cases in a project. |
 | `listTestRuns` | List test runs for a project (filter by dates, assignee, state). |

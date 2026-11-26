@@ -227,7 +227,7 @@ See [Core tools](https://www.browserstack.com/docs/browserstack-mcp-server/tools
 
 **All tools** — See [docs/TOOLS.md](docs/TOOLS.md) for every tool organised by product, or [BrowserStack MCP tools & workflows](https://www.browserstack.com/docs/browserstack-mcp-server/tools) for product workflows.
 
-> **File & app uploads:** tools that upload a local file/app (`uploadProductRequirementFile`, `takeAppScreenshot`, `runAppTestsOnBrowserStack`, `runAppLiveSession`) require the `MCP_UPLOAD_BASE_DIR` env var set to a directory containing those files; uploads are restricted to it.
+> **File & app uploads:** tools that upload a local file/app (`testManagementAIAgents` with `files`, `takeAppScreenshot`, `runAppTestsOnBrowserStack`, `runAppLiveSession`) require the `MCP_UPLOAD_BASE_DIR` env var set to a directory containing those files; uploads are restricted to it.
 
 ##  🚀 Remote MCP Server
 

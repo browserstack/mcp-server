@@ -65,7 +65,6 @@ vi.mock("../../src/lib/tm-base-url.js", () => ({
 
 import { getFailuresInLastRun } from "../../src/tools/observability.js";
 import { fetchPercyChanges } from "../../src/tools/review-agent.js";
-import { createTestCasesFromFile } from "../../src/tools/testmanagement-utils/testcase-from-file.js";
 
 const cfg: any = {
   "browserstack-username": "u",
@@ -90,13 +89,4 @@ describe("indirect prompt injection contained — observability / Percy / TCG", 
     expect(res.content[0].text).toContain("UNTRUSTED");
   });
 
-  it("301 createTestCasesFromFile", async () => {
-    const res = await createTestCasesFromFile(
-      { projectReferenceId: "123", folderId: "f1", documentId: "d1" } as any,
-      {},
-      cfg,
-    );
-    show("createTestCasesFromFile", res.content[0].text as string);
-    expect(res.content[0].text).toContain("UNTRUSTED");
-  });
 });

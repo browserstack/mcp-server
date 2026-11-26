@@ -9,6 +9,8 @@
       {
         "name": "tm-generate-test-cases",
         "title": "Test case generation",
+        "handle": "generate_test_cases",
+        "tagline": "from a PRD, spec, ticket, design or file",
         "description": "Drafts a full set of new test cases from a requirement (a PRD, BRD, spec, ticket, acceptance criteria, Figma design or pasted text), applying coverage and priority rules, and returns them for review before anything is saved.",
         "signals": [
           "generate",
@@ -37,6 +39,7 @@
       {
         "name": "tm-maintain-test-cases",
         "title": "Test case maintenance",
+        "handle": "update_test_cases_from_requirement",
         "description": "Checks a project's existing test cases against a new or changed requirement, drafts edits to the ones it affects and lists what no case covers, for review before saving. The uncovered gaps go on to test case generation.",
         "signals": [
           "requirement",
@@ -59,6 +62,7 @@
       {
         "name": "tm-generate-test-data",
         "title": "Test data generation",
+        "handle": "generate_test_data",
         "description": "Drafts datasets (named columns and rows) for data-driven testing from a requirement, random or derived from a stated rule, limit or boundary.",
         "signals": [
           "dataset",
@@ -79,6 +83,8 @@
       {
         "name": "tm-dedupe",
         "title": "Test deduplication",
+        "handle": "find_duplicate_test_cases",
+        "tagline": "duplicate or overlapping cases",
         "description": "Finds exact and near-exact duplicate test cases in a folder, a list of cases or a small project (up to 100 cases) and saves them as suggestions to merge on the Review duplicates screen. Merges nothing itself.",
         "signals": [
           "duplicate",
@@ -94,6 +100,32 @@
           "are there duplicate test cases in this folder",
           "check these test cases for duplicates",
           "remove duplicate test cases from this folder"
+        ]
+      },
+      {
+        "name": "test-selection",
+        "title": "Test selection",
+        "handle": "create_test_run_from_requirement",
+        "tagline": "for a requirement, release, smoke or regression",
+        "description": "Picks the existing test cases relevant to a requirement, a release or a goal (smoke, regression, a feature area) from the project's repository and proposes a test run of them for review before it is created. Writes no new test cases.",
+        "signals": [
+          "select",
+          "selection",
+          "smoke",
+          "regression",
+          "release",
+          "requirement",
+          "requirements"
+        ],
+        "intents": [
+          "build a test run from the requirement's relevant test cases",
+          "choose which existing test cases to run for a change",
+          "select test cases relevant to a feature",
+          "plan a smoke or regression run for an area",
+          "add more cases to the current selection",
+          "create a test run for this requirement",
+          "create a smoke test run for checkout",
+          "which test cases should I run to verify this release"
         ]
       }
     ],

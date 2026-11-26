@@ -5,8 +5,6 @@ import {
   addTestResultTool,
   listTestRunsTool,
   updateTestRunTool,
-  uploadProductRequirementFileTool,
-  createTestCasesFromFileTool,
   createLCAStepsTool,
   listTestCasesTool,
   listTestPlansTool,
@@ -26,14 +24,9 @@ import { listTestPlans } from '../../src/tools/testmanagement-utils/list-testpla
 import { getTestPlan } from '../../src/tools/testmanagement-utils/get-testplan';
 import { listSubTestPlans } from '../../src/tools/testmanagement-utils/list-sub-testplans';
 import { getSubTestPlan } from '../../src/tools/testmanagement-utils/get-sub-testplan';
-import { createTestCasesFromFile } from '../../src/tools/testmanagement-utils/testcase-from-file';
 import { createLCASteps } from '../../src/tools/testmanagement-utils/create-lca-steps';
-import axios from 'axios';
-import { beforeAll, beforeEach, it, expect, describe, Mocked} from 'vitest';
+import { beforeAll, beforeEach, it, expect, describe } from 'vitest';
 import { vi, Mock } from 'vitest';
-import { trackMCP } from '../../src/lib/instrumentation';
-import { signedUrlMap } from '../../src/lib/inmemory-store';
-import { uploadFile } from '../../src/tools/testmanagement-utils/upload-file';
 
 
 // Mock dependencies
@@ -52,9 +45,6 @@ vi.mock('../../src/tools/testmanagement-utils/create-testcase', () => ({
   },
 }));
 
-vi.mock('../../src/tools/testmanagement-utils/testcase-from-file', () => ({
-  createTestCasesFromFile: vi.fn(),
-}));
 
 vi.mock('../../src/tools/testmanagement-utils/TCG-utils/types', () => ({
   CreateTestCasesFromFileSchema: {
@@ -94,7 +84,6 @@ vi.mock('../../src/tools/testmanagement-utils/add-test-result', () => ({
 }));
 
 vi.mock('fs');
-vi.mock('../../src/lib/inmemory-store', () => ({ signedUrlMap: new Map() }));
 vi.mock('../../src/lib/get-auth', () => ({
   getBrowserStackAuth: vi.fn(() => 'fake-user:fake-key')
 }));
@@ -207,7 +196,6 @@ vi.mock('../../src/logger', () => ({
 }));
 
 
-const mockedAxios = axios as Mocked<typeof axios>;
 
 describe('createTestCaseTool', () => {
   beforeEach(() => {
@@ -544,102 +532,6 @@ describe('addTestResultTool', () => {
   });
 });
 
-const testFilePath = "/tmp/sample.pdf";
-const testProjectId = "PR-DEMO";
-const testDocumentId = "mock-doc-id";
-const testFolderId = "mock-folder-id";
-const mockFileId = 12345;
-const mockDownloadUrl = "https://cdn.browserstack.com/mock.pdf";
-const mockContext = { sendNotification: vi.fn(), _meta: { progressToken: "test-progress-token" } };
-
-describe("uploadProductRequirementFileTool", () => {
-  beforeEach(() => vi.resetAllMocks());
-  it("returns error when file does not exist", async () => {
-    (uploadFile as Mock).mockResolvedValue({
-      content: [
-        { type: 'text', text: 'File /tmp/sample.pdf does not exist.', isError: true },
-      ],
-      isError: true,
-    });
-    const res = await uploadProductRequirementFileTool({ project_identifier: testProjectId, file_path: testFilePath }, mockConfig, mockServer);
-    expect(res.isError).toBe(true);
-    expect(res.content?.[0]?.text).toContain("does not exist");
-  });
-  it("uploads file and returns metadata", async () => {
-    const mockSuccessResponse = {
-      content: [
-        { type: 'text', text: 'Successfully uploaded sample.pdf to BrowserStack Test Management.' },
-        { 
-          type: 'text', 
-          text: JSON.stringify([{
-            name: "sample.pdf",
-            documentID: "mock-doc-id",
-            contentType: "application/pdf",
-            size: 1024,
-            projectReferenceId: "999"
-          }], null, 2)
-        },
-      ],
-      isError: false,
-    };
-    (uploadFile as Mock).mockResolvedValue(mockSuccessResponse);
-    const res = await uploadProductRequirementFileTool({ project_identifier: testProjectId, file_path: testFilePath }, mockConfig, mockServer);
-    expect(uploadFile).toHaveBeenCalledWith({ project_identifier: testProjectId, file_path: testFilePath }, mockConfig);
-    expect(res.isError ?? false).toBe(false);
-    expect(res.content?.[1]?.text).toContain("documentID");
-  });
-});
-
-describe("createTestCasesFromFileTool", () => {
-  beforeEach(() => vi.resetAllMocks());
-  it("returns error when document is not in signedUrlMap", async () => {
-    signedUrlMap.clear();
-    (createTestCasesFromFile as Mock).mockRejectedValue(new Error("Re-Upload the file"));
-    const args = { documentId: testDocumentId, folderId: testFolderId, projectReferenceId: testProjectId };
-    const res = await createTestCasesFromFileTool(args as any, mockContext, mockConfig, mockServer);
-    expect(res.isError).toBe(true);
-    expect(res.content?.[0]?.text).toContain("Re-Upload the file");
-    // Both telemetry calls must carry config, otherwise the event is sent unauthenticated and dropped.
-    expect(trackMCP).toHaveBeenCalledTimes(2);
-    expect(trackMCP).toHaveBeenNthCalledWith(1, "createTestCasesFromFile", "test-version", undefined, mockConfig);
-    expect(trackMCP).toHaveBeenNthCalledWith(2, "createTestCasesFromFile", "test-version", expect.any(Error), mockConfig);
-  });
-  it("creates test cases from a file successfully", async () => {
-    signedUrlMap.set(testDocumentId, { fileId: mockFileId, downloadUrl: mockDownloadUrl });
-    mockedAxios.get.mockResolvedValueOnce({
-      data: {
-        default_fields: {
-          priority: { values: [{ name: "Medium", value: 2 }] },
-          status: { values: [{ internal_name: "active", value: 1 }] },
-          case_type: { values: [{ internal_name: "functional", value: 3 }] }
-        },
-        custom_fields: []
-      }
-    });
-    mockedAxios.post.mockImplementation((url: string) => {
-      if (url.includes("suggest-test-cases")) {
-        return Promise.resolve({ status: 200, data: { "x-bstack-traceRequestId": "trace" } });
-      }
-      if (url.includes("test-cases-polling")) {
-        return Promise.resolve({ status: 200, data: { data: { success: true, message: [{ type: "termination" }] } } });
-      }
-      if (url.includes("bulk-test-cases")) {
-        return Promise.resolve({ status: 200, data: {} });
-      }
-      return Promise.resolve({ status: 404, data: {} });
-    });
-    const args = { documentId: testDocumentId, folderId: testFolderId, projectReferenceId: testProjectId };
-    (createTestCasesFromFile as Mock).mockReturnValue({
-      content: [{ type: "text", text: "Total of 5 test cases created in 2 scenarios." }],
-      isError: false
-    });
-    const res = await createTestCasesFromFileTool(args as any, mockContext, mockConfig, mockServer);
-    expect(res.isError ?? false).toBe(false);
-    expect(res.content?.[0]?.text).toContain("test cases created");
-    expect(trackMCP).toHaveBeenCalledTimes(1);
-    expect(trackMCP).toHaveBeenCalledWith("createTestCasesFromFile", "test-version", undefined, mockConfig);
-  });
-});
 
 describe("createLCAStepsTool", () => {
   beforeEach(() => vi.resetAllMocks());
@@ -823,20 +715,6 @@ describe("createLCAStepsTool", () => {
   });
 });
 
-vi.mock('../../src/tools/testmanagement-utils/upload-file', () => {
-  const uploadFile = vi.fn();
-  return {
-    uploadFile,
-    UploadFileSchema: {
-      parse: (args: any) => args,
-      shape: {},
-    },
-    __esModule: true,
-    default: { uploadFile },
-  };
-});
-
-// Get the mocked uploadFile
 
 describe('listTestPlansTool', () => {
   beforeEach(() => {

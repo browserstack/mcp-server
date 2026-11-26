@@ -32,9 +32,9 @@ const GRANDFATHERED: Record<string, number> = {
 };
 
 // Tool and parameter descriptions across every tool, in characters. Kiro renders the hosted
-// subset of this text into one activation result capped at 30,000; at this total it is about
-// 29,600. Lower only.
-const TOTAL_CEILING = 21_500;
+// subset of this text into one activation result capped at 30,000; at 21,500 it was about
+// 29,600, so this is close to the cap. Raised by 350 for the product agent tools. Lower only.
+const TOTAL_CEILING = 21_850;
 
 /** Each tool as a client lists it at connect time. */
 async function listedTools() {

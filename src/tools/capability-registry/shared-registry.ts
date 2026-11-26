@@ -21,7 +21,9 @@ import { statSync } from "node:fs";
 import appConfig from "../../config.js";
 import { CapabilityRegistry, isReadOnly } from "./index-loader.js";
 
-let shared: { key: string; registry: CapabilityRegistry } | undefined;
+let shared:
+  | { key: string; registry: CapabilityRegistry; announced: boolean }
+  | undefined;
 
 /**
  * Everything the loaded registry depends on, so a change to any of it reloads.
@@ -59,20 +61,27 @@ function deepFreeze(value: unknown): void {
 /**
  * The registry for these files, loaded at most once while they are unchanged.
  *
- * `loaded` is true only on the call that actually read the files, so the caller can
- * announce a load once instead of once per server. A failed load is not remembered:
- * `fromFiles` throws before anything is stored, so the next call tries again.
+ * `loaded` is true for the first announcing caller after the files were read, so a load is
+ * announced once instead of once per server. A caller that only reads it passes
+ * `announce: false` and leaves that to the registry's own tools. A failed load is not
+ * remembered: `fromFiles` throws before anything is stored, so the next call tries again.
  */
-export function sharedRegistry(files: string[]): {
+export function sharedRegistry(
+  files: string[],
+  { announce = true }: { announce?: boolean } = {},
+): {
   registry: CapabilityRegistry;
   loaded: boolean;
 } {
   const key = cacheKey(files);
-  if (shared?.key === key) return { registry: shared.registry, loaded: false };
-  const registry = CapabilityRegistry.fromFiles(files);
-  deepFreeze(registry.index);
-  shared = { key, registry };
-  return { registry, loaded: true };
+  if (shared?.key !== key) {
+    const registry = CapabilityRegistry.fromFiles(files);
+    deepFreeze(registry.index);
+    shared = { key, registry, announced: false };
+  }
+  const loaded = announce && !shared.announced;
+  if (loaded) shared.announced = true;
+  return { registry: shared.registry, loaded };
 }
 
 /** Test hook: forget the loaded index. */

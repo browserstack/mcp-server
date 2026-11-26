@@ -21,3 +21,6 @@ __pycache__/
 
 # macOS folder metadata
 .DS_Store
+
+# Test and coverage reports (vitest --coverage, junit)
+reports/

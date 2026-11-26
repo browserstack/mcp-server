@@ -6,8 +6,8 @@
 
 - [ ] `npm run lint` and `npx tsc --noEmit` pass
 - [ ] `npm run test:coverage` passes (coverage floors in `vite.config.ts`)
-- [ ] Ran `/unit-test-quality` (Claude Code skill in `.claude/skills/`). Paste its summary line here:
+- [ ] Mutation-tested the changed files: `npx stryker run --mutate <file1>,<file2>`. Survived mutants have a stronger test, or are explained here:
 
-<!-- /unit-test-quality: ... -->
+<!-- Mutation score and any survived mutants left as they are, with the reason. -->
 
 Comment `RUN_MCP_CHECKS` to run the "MCP Server PR Checks" status. A new push needs a new comment.

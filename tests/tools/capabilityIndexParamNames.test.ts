@@ -1,5 +1,6 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { bind } from "../../src/tools/capability-registry/bind.js";
 
 /**
  * PARAMETER NAMES ARE UNIQUE WITHIN EACH GROUP OF EVERY CAPABILITY.
@@ -50,5 +51,51 @@ describe("capability parameter names in every shipped index", () => {
 
     expect(checked).toBeGreaterThan(0);
     expect(repeats).toEqual([]);
+  });
+});
+
+describe("callers on the contract before the renames", () => {
+  const tm = JSON.parse(
+    readFileSync("capability/tm.capability-index.json", "utf8"),
+  ).tm.capabilities;
+  const find = (name: string) =>
+    tm.find((c: { name: string }) => c.name === name);
+
+  it.each(["bulk_move_test_cases", "bulk_replace_test_case_fields"])(
+    "%s: an old top-level folder_id is pointed at source_folder_id, not called a wrapper",
+    (name) => {
+      let message = "";
+      try {
+        bind(find(name), {
+          path_params: { project_id: 1 },
+          body: { folder_id: 11, select_all: true },
+        });
+      } catch (error) {
+        message = (error as Error).message;
+      }
+      expect(message).toMatch(/^unknown body: folder_id\. /);
+      expect(message).toContain("Send folder_id as source_folder_id");
+      expect(message).not.toContain("wrapper");
+    },
+  );
+
+  it("search: an old custom_fields column list is pointed at required_custom_fields", () => {
+    expect(() =>
+      bind(find("search_project_entities_by_filter"), {
+        path_params: { project_id: 1 },
+        body: { custom_fields: "121,119" },
+      }),
+    ).toThrow(
+      /'custom_fields' must be an object.*If you meant the other field the API calls custom_fields, send it as required_custom_fields/,
+    );
+  });
+
+  it("a hand-built wrapper is still called a wrapper", () => {
+    expect(() =>
+      bind(find("bulk_move_test_cases"), {
+        path_params: { project_id: 1 },
+        body: { test_case: { select_all: true } },
+      }),
+    ).toThrow(/test_case is a wrapper this surface builds for you/);
   });
 });

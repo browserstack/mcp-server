@@ -18,8 +18,9 @@ import {
   retrieveCrashLogs,
 } from "./failurelogs-utils/app-automate.js";
 
-import { resolveAppAutomateBuildId } from "./failurelogs-utils/resolve-app-build-id.js";
+import { readAppAutomateSession } from "./failurelogs-utils/resolve-app-build-id.js";
 import {
+  AppUnderTest,
   detectSession,
   isTraBuildId,
 } from "./automate-utils/resolve-hashed-build-id.js";
@@ -55,6 +56,12 @@ const EQUIVALENT_LOG_TYPE: Partial<Record<LogType, LogType>> = {
   [AutomateLogType.SessionLogs]: AppAutomateLogType.AppiumLogs,
   [AppAutomateLogType.AppiumLogs]: AutomateLogType.SessionLogs,
 };
+
+function describeApp(app: AppUnderTest): string {
+  const version = app.version ? `, version ${app.version}` : "";
+  const file = app.filename ? `, uploaded as ${app.filename}` : "";
+  return `App under test: ${app.id} (bundle id on iOS, package name on Android)${version}${file}.`;
+}
 
 // Main log fetcher function
 export async function getFailureLogs(
@@ -117,8 +124,13 @@ export async function getFailureLogs(
   const needsBuildId = requested.some(
     (logType) => logType !== SessionVideoLogType,
   );
+  let app: AppUnderTest | undefined;
+  let sessionRead = false;
   if (sessionType === SessionType.AppAutomate && needsBuildId && !buildId) {
-    buildId = await resolveAppAutomateBuildId(args.sessionId, config);
+    const details = await readAppAutomateSession(args.sessionId, config);
+    sessionRead = details !== undefined;
+    app = details?.app;
+    buildId = details?.buildId;
     if (!buildId) {
       const detected = await detectSession(
         args.sessionId,
@@ -159,6 +171,23 @@ export async function getFailureLogs(
       ],
       isError: true,
     };
+  }
+
+  // The app's bundle id is not in the logs. Read it from the session details when the
+  // build id lookup above did not already; the logs are returned without it if this fails.
+  if (
+    sessionType === SessionType.AppAutomate &&
+    !sessionRead &&
+    validLogTypes.some((logType) => logType !== SessionVideoLogType)
+  ) {
+    try {
+      app = (await readAppAutomateSession(args.sessionId, config))?.app;
+    } catch {
+      app = undefined;
+    }
+  }
+  if (sessionType === SessionType.AppAutomate && app) {
+    notes.push(describeApp(app));
   }
 
   // Framework builds (Maestro, Espresso, XCUITest, Flutter) 404 on the generic App

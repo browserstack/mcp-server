@@ -7,6 +7,7 @@ import {
   isHashedBuildId,
   isTraBuildId,
   isObservabilityBuildUuid,
+  readSessionDetails,
   resolveBuildIdFromSession,
   resolveHashedBuildId,
   sessionDetailsUrl,
@@ -129,6 +130,49 @@ describe("resolveBuildIdFromSession", () => {
     await expect(
       resolveBuildIdFromSession(SESSION_ID, SessionType.Automate, config),
     ).rejects.toThrow(/502 Bad Gateway/);
+  });
+});
+
+describe("readSessionDetails", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("returns the app an App Automate session ran", async () => {
+    (apiClient.get as Mock).mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: {
+        automation_session: {
+          build_hashed_id: HASHED_BUILD,
+          app_details: {
+            app_url: "bs://7b99a31a6d6473ff66071a1c6e6f1a0debc0c0f0",
+            app_name: "com.browserstack.Sample-iOS",
+            app_version: "1.0",
+            app_custom_id: null,
+            uploaded_at: "2026-11-26T06:04:26.000Z",
+            app_filename: "BStackSampleApp.ipa",
+          },
+        },
+      },
+    });
+
+    await expect(
+      readSessionDetails(SESSION_ID, SessionType.AppAutomate, config),
+    ).resolves.toEqual({
+      buildId: HASHED_BUILD,
+      app: {
+        id: "com.browserstack.Sample-iOS",
+        version: "1.0",
+        filename: "BStackSampleApp.ipa",
+      },
+    });
+  });
+
+  it("leaves the app out when the session has none", async () => {
+    (apiClient.get as Mock).mockResolvedValue(sessionDetails(HASHED_BUILD));
+
+    await expect(
+      readSessionDetails(SESSION_ID, SessionType.Automate, config),
+    ).resolves.toEqual({ buildId: HASHED_BUILD, app: undefined });
   });
 });
 

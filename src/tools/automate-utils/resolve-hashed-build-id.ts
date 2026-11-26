@@ -83,16 +83,44 @@ export async function detectSession(
   return undefined;
 }
 
+/** The app an App Automate session ran, from its session details. */
+export interface AppUnderTest {
+  /** Bundle id on iOS, package name on Android (`app_details.app_name`). */
+  id: string;
+  version?: string;
+  filename?: string;
+}
+
+export interface SessionDetails {
+  buildId?: string;
+  app?: AppUnderTest;
+}
+
+function text(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function appUnderTest(session: any): AppUnderTest | undefined {
+  const details = session?.app_details;
+  const id = text(details?.app_name);
+  if (!id) return undefined;
+  return {
+    id,
+    version: text(details?.app_version),
+    filename: text(details?.app_filename),
+  };
+}
+
 /**
- * Resolve the hashed build id that a session belongs to via the Automate /
- * App Automate session detail endpoint. Returns undefined when the product does
- * not know the session (404) or it reports no build; other failures throw.
+ * Read a session's details from the Automate / App Automate session detail
+ * endpoint. Returns undefined when the product does not know the session (404);
+ * other failures throw.
  */
-export async function resolveBuildIdFromSession(
+export async function readSessionDetails(
   sessionId: string,
   sessionType: SessionType,
   config: BrowserStackConfig,
-): Promise<string | undefined> {
+): Promise<SessionDetails | undefined> {
   const authString = getBrowserStackAuth(config);
   const auth = Buffer.from(authString).toString("base64");
 
@@ -114,10 +142,23 @@ export async function resolveBuildIdFromSession(
   }
 
   const session = (response.data as any)?.automation_session;
-  const buildId = session?.build_hashed_id;
-  return typeof buildId === "string" && buildId.trim()
-    ? buildId.trim()
-    : undefined;
+  return {
+    buildId: text(session?.build_hashed_id),
+    app: appUnderTest(session),
+  };
+}
+
+/**
+ * Resolve the hashed build id that a session belongs to. Returns undefined when
+ * the product does not know the session (404) or it reports no build; other
+ * failures throw.
+ */
+export async function resolveBuildIdFromSession(
+  sessionId: string,
+  sessionType: SessionType,
+  config: BrowserStackConfig,
+): Promise<string | undefined> {
+  return (await readSessionDetails(sessionId, sessionType, config))?.buildId;
 }
 
 /**

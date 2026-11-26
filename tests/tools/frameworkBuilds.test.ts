@@ -32,6 +32,7 @@ vi.mock("../../src/lib/image", () => ({
 }));
 vi.mock("../../src/tools/failurelogs-utils/resolve-app-build-id", () => ({
   resolveAppAutomateBuildId: vi.fn(async () => BUILD),
+  readAppAutomateSession: vi.fn(async () => ({ buildId: BUILD })),
 }));
 
 const config = {

@@ -18,8 +18,9 @@ import {
   retrieveCrashLogs,
 } from "./failurelogs-utils/app-automate.js";
 
-import { resolveAppAutomateBuildId } from "./failurelogs-utils/resolve-app-build-id.js";
+import { readAppAutomateSession } from "./failurelogs-utils/resolve-app-build-id.js";
 import {
+  AppUnderTest,
   detectSession,
   isTraBuildId,
 } from "./automate-utils/resolve-hashed-build-id.js";
@@ -55,6 +56,12 @@ const EQUIVALENT_LOG_TYPE: Partial<Record<LogType, LogType>> = {
   [AutomateLogType.SessionLogs]: AppAutomateLogType.AppiumLogs,
   [AppAutomateLogType.AppiumLogs]: AutomateLogType.SessionLogs,
 };
+
+function describeApp(app: AppUnderTest): string {
+  const version = app.version ? `, version ${app.version}` : "";
+  const file = app.filename ? `, uploaded as ${app.filename}` : "";
+  return `App under test: ${app.id} (bundle id on iOS, package name on Android)${version}${file}.`;
+}
 
 // Main log fetcher function
 export async function getFailureLogs(
@@ -105,12 +112,16 @@ export async function getFailureLogs(
         "Use a session id from listSessions or listTestIds.",
     );
 
+  let app: AppUnderTest | undefined;
+  let sessionRead = false;
   if (requested.some((logType) => !fitsSessionType(logType, sessionType))) {
     const detected = await detectSession(args.sessionId, sessionType, config);
     if (!detected) throw notFound();
     switchTo(detected.sessionType);
     if (sessionType === SessionType.AppAutomate) {
       buildId = buildId ?? detected.hashedBuildId;
+      app = detected.app;
+      sessionRead = true;
     }
   }
 
@@ -118,7 +129,10 @@ export async function getFailureLogs(
     (logType) => logType !== SessionVideoLogType,
   );
   if (sessionType === SessionType.AppAutomate && needsBuildId && !buildId) {
-    buildId = await resolveAppAutomateBuildId(args.sessionId, config);
+    const details = await readAppAutomateSession(args.sessionId, config);
+    sessionRead = details !== undefined;
+    app = details?.app;
+    buildId = details?.buildId;
     if (!buildId) {
       const detected = await detectSession(
         args.sessionId,
@@ -129,6 +143,8 @@ export async function getFailureLogs(
       switchTo(detected.sessionType);
       if (sessionType === SessionType.AppAutomate) {
         buildId = detected.hashedBuildId;
+        app = detected.app;
+        sessionRead = true;
       }
     }
   }
@@ -160,6 +176,19 @@ export async function getFailureLogs(
       isError: true,
     };
   }
+
+  const appRead: Promise<AppUnderTest | undefined> =
+    sessionType === SessionType.AppAutomate &&
+    !sessionRead &&
+    validLogTypes.some((logType) => logType !== SessionVideoLogType)
+      ? (async () => {
+          try {
+            return (await readAppAutomateSession(args.sessionId, config))?.app;
+          } catch {
+            return undefined;
+          }
+        })()
+      : Promise.resolve(app);
 
   // Framework builds (Maestro, Espresso, XCUITest, Flutter) 404 on the generic App
   // Automate log endpoints. Checked once, and only after a generic 404, so Appium
@@ -252,6 +281,10 @@ export async function getFailureLogs(
     throw error;
   }
 
+  app = await appRead;
+  if (sessionType === SessionType.AppAutomate && app) {
+    notes.push(describeApp(app));
+  }
   if (framework) {
     notes.push(
       `This session ran through the ${framework.framework.name} framework API, so its logs come from each test's results.`,

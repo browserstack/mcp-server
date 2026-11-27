@@ -16,6 +16,29 @@ vi.mock("browserstack-local", () => ({
   })),
 }));
 
+// Never start, find or kill a real BrowserStackLocal process.
+vi.mock("../../src/lib/local.js", async (importOriginal) => ({
+  ...(await importOriginal<object>()),
+  killExistingBrowserStackLocalProcesses: vi.fn(async () => {}),
+  ensureLocalBinarySetup: vi.fn(async () => {}),
+}));
+vi.mock("child_process", async (importOriginal) => ({
+  ...(await importOriginal<object>()),
+  execSync: vi.fn(() => {
+    throw new Error("L3: child_process.execSync is not allowed");
+  }),
+}));
+
+// webdriverio sends WebDriver calls through undici's own fetch, which MSW does not see.
+// So no case may open a real WebDriver session.
+vi.mock("webdriverio", () => ({
+  remote: vi.fn(async () => {
+    throw new Error(
+      "L3: webdriverio.remote is not allowed (no real WebDriver session)",
+    );
+  }),
+}));
+
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import { ALL_SPECS } from "./cases/index.js";
 import { expandSpec, type Row } from "./harness/cases.js";

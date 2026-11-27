@@ -5,6 +5,9 @@
  * src/config.ts reads env when it loads. So each start does vi.resetModules(), sets the
  * env of the profile, and imports the server again.
  */
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { vi } from "vitest";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
@@ -23,6 +26,20 @@ const PROFILE_ENV: Record<Profile, Record<string, string>> = {
   "remote-US": { REMOTE_MCP: "true" },
 };
 
+/**
+ * HOME for the server under test. The device cache writes to ~/.browserstack, so a run
+ * must never touch the developer's real cache.
+ */
+export const L3_HOME = mkdtempSync(join(tmpdir(), "l3-home-"));
+/** MCP_UPLOAD_BASE_DIR for the server. A spec puts the files it uploads here. */
+export const L3_UPLOAD_DIR = mkdtempSync(join(tmpdir(), "l3-uploads-"));
+
+const FIXED_ENV: Record<string, string> = {
+  HOME: L3_HOME,
+  USERPROFILE: L3_HOME,
+  MCP_UPLOAD_BASE_DIR: L3_UPLOAD_DIR,
+};
+
 const CLEARED_ENV = [
   "HTTPS_PROXY",
   "https_proxy",
@@ -31,7 +48,6 @@ const CLEARED_ENV = [
   "NO_PROXY",
   "no_proxy",
   "DEV_MODE",
-  "MCP_UPLOAD_BASE_DIR",
   "BROWSERSTACK_AUTOMATION_BASE_URL",
   "O11Y_TFA_RCA_BASE_URL",
   "BROWSERSTACK_O11Y_UI_BASE_URL",
@@ -59,7 +75,10 @@ export async function startServer({
   vi.resetModules();
   vi.unstubAllEnvs();
   for (const name of CLEARED_ENV) vi.stubEnv(name, undefined);
-  for (const [name, value] of Object.entries(PROFILE_ENV[profile])) {
+  for (const [name, value] of Object.entries({
+    ...FIXED_ENV,
+    ...PROFILE_ENV[profile],
+  })) {
     vi.stubEnv(name, value);
   }
   // tests/setup.ts mocks the lookup to undefined (= US). Here the region is explicit.

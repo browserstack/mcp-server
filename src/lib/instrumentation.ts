@@ -12,7 +12,11 @@ import { isKnownProduct } from "../tools/capability-registry/config.js";
 import { accountRegion } from "./account-region.js";
 import { AxiosError } from "axios";
 import { HttpError } from "./error.js";
-import { UpstreamScope, withUpstreamScope } from "./upstream-status.js";
+import {
+  BLOCKED_STATUSES,
+  UpstreamScope,
+  withUpstreamScope,
+} from "./upstream-status.js";
 import {
   AccountRegion,
   currentRegionScope,
@@ -20,6 +24,9 @@ import {
 } from "./region-context.js";
 
 const INSTRUMENTATION_ENDPOINT = "https://api.browserstack.com/sdk/v1/event";
+
+/** This server's version: `mcp_version` here, `x-mcp-version` on registry calls. */
+export const MCP_VERSION: string = packageJson.version;
 
 export type ClientInfo = { name?: string; version?: string };
 
@@ -38,7 +45,8 @@ export type FailureClass = "caller" | "upstream" | "mcp" | "unknown";
  * report needs: `blocked` (a caller fault that is entitlement, auth or a rate limit,
  * reported as its own rate), `contract_drift` (the product rejected a request our own
  * validation had accepted: the index or tool disagrees with the API), `region_probe`
- * (the Test Management host probe failed before any product call), `central_auth` and
+ * (the Test Management host probe, or the account's region lookup, failed before any
+ * product call), `central_auth` and
  * `auth_scope` (a token could not be minted), `empty_error_result` (the tool reported
  * failure with no text).
  */
@@ -89,7 +97,7 @@ interface MCPEventPayload {
 
 function baseProperties(toolName: string, clientInfo: ClientInfo) {
   return {
-    mcp_version: packageJson.version as string,
+    mcp_version: MCP_VERSION,
     tool_name: toolName,
     mcp_client: clientInfo?.name || "unknown",
     node_version: process.versions.node,
@@ -292,7 +300,6 @@ const MCP_REFUSALS = new Set(["unexpected_error", "no_base_url"]);
 const PROGRAMMING_ERRORS = [TypeError, RangeError, ReferenceError, SyntaxError];
 
 /** 4xx that mean the account may not do this: entitlement, auth, rate limit. */
-const BLOCKED_STATUSES = new Set([401, 402, 403, 429]);
 
 /**
  * 4xx that can only mean the product no longer serves the request as the tool or index
@@ -323,13 +330,15 @@ function byStatus(status: number): Attribution | undefined {
 }
 
 /**
- * The Test Management region probe: attributed by what the US host answered, not by the
- * last host tried (the other regions always answer 401 to an account that is not theirs).
- * A 402 is an account without the product; everything else — a timeout, a 429, a 5xx —
- * is the probe itself, which runs before every call and is this server's design.
+ * The Test Management region probe. The other regions always answer 401 to an account
+ * that is not theirs, so the failure is the account's own (blocked: no product, bad
+ * credentials, rate-limited) only when every host refused it with a 401/402/403/429.
+ * If any host timed out or answered 5xx that host may have been the account's region,
+ * and the failure is the probe itself, which runs before every call and is this
+ * server's design. The US status is still logged as `probe_status`.
  */
-function byProbe(usStatus: number): Attribution {
-  return usStatus === 402
+function byProbe(everyHostBlocked: boolean): Attribution {
+  return everyHostBlocked
     ? { failure_class: "caller", failure_reason: "blocked" }
     : { failure_class: "mcp", failure_reason: "region_probe" };
 }
@@ -349,8 +358,9 @@ function byTokenMint(kind: unknown): Attribution {
 
 /**
  * Attributes a failed call. Evidence is read in order: the registry's refusal reason,
- * the region probe, an upstream outage, a programming error, a rejection of the caller's
- * input (`CallerError`, `markCallerFault`), the product's 4xx, then whether the handler
+ * the region probe, an upstream outage, a programming error, a product failure the
+ * handler read off a 2xx (`markUpstreamFault`), a rejection of the caller's input
+ * (`CallerError`, `markCallerFault`), the product's 4xx, then whether the handler
  * threw. A handler that knows better passes `failure_class` (and `failure_reason`) in
  * its trackMCP extras, which win because extras are spread last onto the row.
  *
@@ -375,20 +385,21 @@ function failureClassOf(
   if (typeof reason === "string") {
     if (MCP_REFUSALS.has(reason)) return { failure_class: "mcp" };
     if (reason === "region_probe_failed")
-      return byProbe(
-        typeof extras?.probe_status === "number" ? extras.probe_status : 0,
-      );
+      return byProbe(scope.probeBlocked === true);
     if (reason === "token_mint_failed")
       return byTokenMint(extras?.auth_failure_kind);
     return { failure_class: "caller" };
   }
-  if (scope.probeStatus !== undefined) return byProbe(scope.probeStatus);
+  if (scope.probeStatus !== undefined)
+    return byProbe(scope.probeBlocked === true);
   if (status !== undefined && (status === 0 || status === 408 || status >= 500))
     return { failure_class: "upstream" };
   if (PROGRAMMING_ERRORS.some((kind) => error instanceof kind))
     return { failure_class: "mcp" };
+  if (scope.upstreamFault === true) return { failure_class: "upstream" };
   if (scope.callerFault === true)
-    return status !== undefined && BLOCKED_STATUSES.has(status)
+    return (status !== undefined && BLOCKED_STATUSES.has(status)) ||
+      scope.blocked === true
       ? { failure_class: "caller", failure_reason: "blocked" }
       : { failure_class: "caller" };
   if (status !== undefined && status >= 400) return byStatus(status);

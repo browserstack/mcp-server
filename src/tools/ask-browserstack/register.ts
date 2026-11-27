@@ -39,7 +39,7 @@ import {
 import { z } from "zod";
 
 import appConfig from "../../config.js";
-import { trackMCP } from "../../lib/instrumentation.js";
+import { trackMCP, type MCPEventExtras } from "../../lib/instrumentation.js";
 import { BrowserStackConfig } from "../../lib/types.js";
 import logger from "../../logger.js";
 import {
@@ -604,9 +604,15 @@ export function addAskBrowserStackAITool(
   const tools: Record<string, RegisteredTool> = {};
 
   /** Instrumentation in the house style, and never fatal to the call it wraps. */
-  const track = (name: string) => {
+  const track = (name: string, extras?: MCPEventExtras) => {
     try {
-      trackMCP(name, server.server.getClientVersion()!, undefined, config);
+      trackMCP(
+        name,
+        server.server.getClientVersion()!,
+        undefined,
+        config,
+        extras,
+      );
     } catch {
       // Telemetry must not decide whether a tool call succeeds.
     }
@@ -701,7 +707,9 @@ export function addAskBrowserStackAITool(
       },
       extra,
     ): Promise<CallToolResult> => {
-      track("askBrowserStackAI");
+      // The product the question is for, so the row can be sliced by product like a
+      // capability call's; without it every askBrowserStackAI row read as no product.
+      track("askBrowserStackAI", { product });
       const approvals: ApprovalRecord[] = [];
       // Negotiated before anything else so the failure paths below report the mode they
       // would have run in.

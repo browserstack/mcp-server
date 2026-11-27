@@ -9,7 +9,7 @@ import {
   TraBuildNotFoundError,
 } from "../automate-utils/resolve-tra-build-id.js";
 import { fetchLatestBuildId } from "./tra-builds.js";
-import { HttpError } from "../../lib/error.js";
+import { CallerError, HttpError } from "../../lib/error.js";
 import {
   callCapability,
   CapabilityUnavailableError,
@@ -28,10 +28,29 @@ export interface BuildLookupResult {
   note?: string;
 }
 
-export class BuildLookupError extends Error {
+/**
+ * The caller did not name a build, or named one that is not there: a `CallerError`, so
+ * telemetry files the failure with the caller even though rca-agent catches it and
+ * returns the text. The three message shapes here were a third of TRA's "failures
+ * counted against MCP" while they were a plain Error.
+ */
+export class BuildLookupError extends CallerError {
   constructor(message: string) {
     super(message);
     this.name = "BuildLookupError";
+  }
+}
+
+/**
+ * The build-number lookup could not be made here at all: the registry is off, the TRA
+ * index is not installed, or the capability call was refused before reaching TRA. Not the
+ * caller's doing, so deliberately not a `CallerError`: telemetry keeps whatever the
+ * capability path recorded (a region probe, an auth failure) or files the row as ours.
+ */
+export class BuildLookupUnavailableError extends Error {
+  constructor(message: string, options?: { cause?: unknown }) {
+    super(message, options);
+    this.name = "BuildLookupUnavailableError";
   }
 }
 
@@ -128,10 +147,11 @@ async function buildByNumber(
       error instanceof CapabilityUnavailableError ||
       error instanceof InvocationError
     ) {
-      throw new BuildLookupError(
+      throw new BuildLookupUnavailableError(
         `Looking up a build by number is not available here (${error.message}). ` +
           "Pass the TRA build id, or project + the build name from browserstack.yml " +
           "for its latest run.",
+        { cause: error },
       );
     }
     throw error;

@@ -1,0 +1,4 @@
+{
+  "why": "Tools with no readOnlyHint and no destructiveHint. Shrink only: the audit fails when a listed tool gets a hint or is no longer served. Adding a name needs QA approval.",
+  "tools": ["submitFeedback"]
+}

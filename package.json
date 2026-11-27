@@ -72,6 +72,7 @@
     "@types/uuid": "^11.0.0",
     "@vitest/coverage-v8": "4.1.7",
     "eslint": "^9.39.2",
+    "msw": "2.15.0",
     "prettier": "^3.7.4",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3",

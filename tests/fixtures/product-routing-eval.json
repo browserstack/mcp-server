@@ -128,6 +128,12 @@
       }
     },
     {
+      "q": "open this toolkit.browserstack.com link and tell me what the bug is",
+      "expect": {
+        "settled": "bug_capture"
+      }
+    },
+    {
       "q": "show my test runs",
       "expect": {
         "clash": [
@@ -201,6 +207,16 @@
           "web_accessibility"
         ]
       }
+    },
+    {
+      "q": "which javascript errors were thrown in the recorded bug",
+      "expect": {
+        "clash": [
+          "bug_capture",
+          "tm"
+        ]
+      },
+      "why": "'bug' alone is a word of tm too (linked defects): the AI must ask"
     },
     {
       "q": "show me the summary",

@@ -103,12 +103,21 @@ const US_ONLY_PRODUCTS: Record<string, string> = {
   loadtesting: "Load Testing",
 };
 
+/**
+ * Products served from one host to every account, with no region check. Testing Toolkit
+ * (Bug Capture) is not offered to accounts routed to another region, so every account
+ * that can have a recording uses the default host, and a region lookup could only add a
+ * way to fail.
+ */
+const SINGLE_HOST_PRODUCTS: ReadonlySet<string> = new Set(["bug_capture"]);
+
 /** True for a product this package knows by name, as opposed to a name the agent typed. */
 export function isKnownProduct(name: unknown): boolean {
   return (
     typeof name === "string" &&
     (Object.hasOwn(REGIONAL_HOSTS, name) ||
-      Object.hasOwn(US_ONLY_PRODUCTS, name))
+      Object.hasOwn(US_ONLY_PRODUCTS, name) ||
+      SINGLE_HOST_PRODUCTS.has(name))
   );
 }
 

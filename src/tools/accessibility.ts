@@ -80,6 +80,7 @@ import {
   asSentence,
 } from "./accessiblity-utils/error-messages.js";
 import {
+  attributeScanFailure,
   buildIdNotFound,
   errorPagesNote,
   failedRunResponse,
@@ -118,6 +119,7 @@ import {
   type ScanArgs,
 } from "./accessiblity-utils/scan-rerun.js";
 import { CallerError } from "../lib/error.js";
+import { markCallerFault } from "../lib/upstream-status.js";
 
 interface FormAuthArgs {
   name: string;
@@ -238,7 +240,11 @@ async function executeFetchAccessibilityIssues(
       return createSuccessResponse([fixWorkflowForAgent()]);
     }
     const source = issueSourceFrom(args);
-    if (typeof source === "string") return createErrorResponse(source);
+    if (typeof source === "string") {
+      // The arguments name no source, or two: the caller's, and said so for telemetry.
+      markCallerFault();
+      return createErrorResponse(source);
+    }
     const result = await fetchAccessibilityIssues(
       source,
       config,
@@ -1910,6 +1916,7 @@ async function scanOutcome(
       scanner.dashboardLink(scanId),
       scanner.failureDetails(scanId, scanRunId),
     ]);
+    attributeScanFailure(details);
     return [
       createScanFailureResponse(
         scanName,
@@ -2285,7 +2292,8 @@ export default function addAccessibilityTools(
         );
 
         if (!creds.username || !creds.password) {
-          const error = new Error(
+          // Declined or empty credentials are the caller's, not a failure of ours.
+          const error = new CallerError(
             "Username and password are required to create an auth config. Provide them when prompted, or pass them as arguments.",
           );
           trackMCP(

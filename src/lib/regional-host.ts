@@ -1,6 +1,7 @@
 import appConfig from "../config.js";
 import { SessionType } from "./constants.js";
 import { currentRegionScope, GrrRegion, regionOf } from "./region-context.js";
+import { recordRegionProbeFailure } from "./upstream-status.js";
 
 type Hosts = Record<GrrRegion, string>;
 
@@ -94,11 +95,17 @@ export function currentRegion(): GrrRegion | undefined {
 export const REGION_UNKNOWN_MESSAGE =
   "Could not confirm your BrowserStack account's region. Please retry in a few seconds.";
 
-/** Thrown instead of guessing a host when the account's region could not be looked up. */
+/**
+ * Thrown instead of guessing a host when the account's region could not be looked up.
+ * Recorded as a region-probe failure with no host answer (0), so telemetry files it as
+ * this server's (`mcp` / `region_probe`) even when a tool catches it and returns the text,
+ * instead of leaving an unexplained `unknown` row.
+ */
 export class AccountRegionUnknownError extends Error {
   constructor() {
     super(REGION_UNKNOWN_MESSAGE);
     this.name = "AccountRegionUnknownError";
+    recordRegionProbeFailure(0);
   }
 }
 

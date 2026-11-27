@@ -550,9 +550,7 @@ export function addCapabilityRegistryTools(
     "describeEntity",
     "Describe an entity: identifiers, relations and product vocabulary. Read before filtering or writing; ids often need resolving first.",
     {
-      product: productArg().describe(
-        `Which product the entity belongs to: ${productList}.`,
-      ),
+      product: productArg().describe(`The entity's product: ${productList}.`),
       entity: z.string().describe("Entity name, as listProducts returns it."),
     },
     {
@@ -575,8 +573,14 @@ export function addCapabilityRegistryTools(
         );
       const doc = bundle.entities[entity];
       if (!doc) {
-        return failed(
+        // A refusal, like the unknown product above, not a bare failed(): the row then
+        // carries refusal_reason and is the caller's, rather than an unexplained failure.
+        return refuse(
+          "describeEntity",
+          "unknown_entity",
           `unknown entity '${entity}' in ${product}; known: ${Object.keys(bundle.entities).sort().join(", ")}`,
+          undefined,
+          { product },
         );
       }
       return ok({ product, entity, ...doc });
@@ -1368,6 +1372,9 @@ export function addCapabilityRegistryTools(
               transport,
               registry.index.products[product]?.auth,
               product,
+              // Optional chaining, not `!`: attribution must never decide whether the
+              // call is made, the same rule `track` follows.
+              server.server?.getClientVersion()?.name,
             ),
           (name) => registry.byNameLookup(name, product).capability,
         );

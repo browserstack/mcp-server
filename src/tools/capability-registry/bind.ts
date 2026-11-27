@@ -508,6 +508,30 @@ function place(
 
 const MAP_KEY = /^[A-Za-z0-9][\w.-]*$/;
 
+/** A param's `json_path` as segments, or none when it declares no path. */
+function pathSegments(param: WireParam): string[] {
+  return (param.json_path ?? "").split("/").filter((segment) => segment !== "");
+}
+
+/**
+ * The params whose wire key is `wireName` but which are published under another name —
+ * `source_folder_id` for `/folder_id`, `required_custom_fields` for
+ * `/required/custom_fields`. Used only to word a refusal.
+ */
+function renamedTo(params: WireParam[], wireName: string): string[] {
+  return params
+    .filter((param) => {
+      const segments = pathSegments(param);
+      return (
+        segments.length > 0 &&
+        segments[segments.length - 1] === wireName &&
+        param.name !== wireName
+      );
+    })
+    .map((param) => param.name)
+    .sort();
+}
+
 function keyedParam(
   group: keyof GroupedArguments,
   params: WireParam[],
@@ -680,17 +704,27 @@ export function bind(
       // 25 tm capabilities carried a line describing the WIRE format to a caller who never
       // writes the wire. Those lines are being corrected, but an agent working from an
       // older artifact, or reasoning from the Rails convention, lands here either way.
+      // Only a path with a field below it has a wrapper: `/folder_id` is a top-level
+      // field sent under another name, not an object this layer builds.
       const wrappers = new Set(
         params
-          .map((param) => (param as { json_path?: string }).json_path)
-          .filter((path): path is string => Boolean(path))
-          .map((path) => path.replace(/^\//, "").split("/")[0])
-          .filter((segment) => segment && !byName.has(segment)),
+          .map((param) => pathSegments(param))
+          .filter((segments) => segments.length >= 2)
+          .map((segments) => segments[0])
+          .filter((segment) => !byName.has(segment)),
       );
       const sentAWrapper = unknown.filter((name) => wrappers.has(name));
+      // A key that is a field's WIRE name: the caller is on an older contract, or read the
+      // API. Name the parameter to send instead.
+      const renamed = unknown
+        .map((name) => [name, renamedTo(params, name)] as const)
+        .filter(([, to]) => to.length > 0);
       throw new InvocationError(
         `unknown ${group}: ${unknown.sort().join(", ")}. accepted: ` +
           `${[...byName.keys()].sort().join(", ") || "none"}` +
+          renamed
+            .map(([name, to]) => `. Send ${name} as ${to.join(" or ")}`)
+            .join("") +
           (sentAWrapper.length > 0
             ? `. ${sentAWrapper.sort().join(" and ")} ` +
               `${sentAWrapper.length > 1 ? "are wrappers" : "is a wrapper"} this ` +
@@ -707,7 +741,23 @@ export function bind(
           `'${name}' is not a usable ${keyed.name} key: use the id exactly as a read returned it`,
         );
       }
-      const value = coerce(raw, param);
+      let value: unknown;
+      try {
+        value = coerce(raw, param);
+      } catch (error) {
+        // The value may belong to a different field that the API spells the same way:
+        // search's `custom_fields` filter is an object, while the column list, also
+        // `custom_fields` on the wire, is published as `required_custom_fields`.
+        const others = renamedTo(params, param.name).filter(
+          (other) => other !== param.name,
+        );
+        if (!(error instanceof InvocationError) || others.length === 0)
+          throw error;
+        throw new InvocationError(
+          `${error.message}. If you meant the other field the API calls ` +
+            `${param.name}, send it as ${others.join(" or ")}`,
+        );
+      }
       if (group === "path_params") {
         // Encode with nothing exempt: a `/` inside a path value would otherwise rewrite the
         // route. Schema checking already stops this for integer ids; this covers strings.

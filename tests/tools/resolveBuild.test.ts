@@ -1,9 +1,10 @@
 import { describe, it, expect, vi, beforeEach, Mock } from "vitest";
 import { apiClient } from "../../src/lib/apiClient";
 import { SessionType } from "../../src/lib/constants";
-import { HttpError } from "../../src/lib/error";
+import { CallerError, HttpError } from "../../src/lib/error";
 import {
   BuildLookupError,
+  BuildLookupUnavailableError,
   parseBuildUrl,
   resolveBuild,
 } from "../../src/tools/rca-agent-utils/resolve-build";
@@ -223,16 +224,31 @@ describe("resolveBuild", () => {
       ),
     );
 
-    await expect(
-      resolveBuild(
-        {
-          browserStackProjectName: PROJECT,
-          browserStackBuildName: "junit",
-          buildNumber: 2,
-        },
-        config,
-      ),
-    ).rejects.toThrow(/not available here[\s\S]*TRA build id/);
+    const thrown = await resolveBuild(
+      {
+        browserStackProjectName: PROJECT,
+        browserStackBuildName: "junit",
+        buildNumber: 2,
+      },
+      config,
+    ).catch((error) => error);
+    expect(thrown).toBeInstanceOf(BuildLookupUnavailableError);
+    expect(thrown.message).toMatch(/not available here[\s\S]*TRA build id/);
+    // The lookup being unavailable is this server's, not the caller's: telemetry must not
+    // file it with the caller the way a missing build is.
+    expect(thrown).not.toBeInstanceOf(CallerError);
+    expect(thrown.cause).toBeInstanceOf(CapabilityUnavailableError);
+  });
+
+  it("files a build the caller did not name, or that is not there, with the caller", async () => {
+    // Caught and returned as text by getBuildId / listBuildId, so the attribution has to
+    // travel on the error class rather than on a throw reaching the instrumentation.
+    expect(new BuildLookupError("x")).toBeInstanceOf(CallerError);
+    const missing = await resolveBuild(
+      { browserStackBuildName: "junit" },
+      config,
+    ).catch((error) => error);
+    expect(missing).toBeInstanceOf(CallerError);
   });
 
   it("surfaces a server error from the capability", async () => {

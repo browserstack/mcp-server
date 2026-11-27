@@ -20,7 +20,7 @@
     "test:mutation": "stryker run",
     "lint": "eslint . --ext .ts",
     "format": "prettier --write \"src/**/*.ts\"",
-    "check:contract": "python3 scripts/check-contract.py capability/tm.capability-index.json --baseline scripts/contract-baseline/tm.json --quiet && python3 scripts/check-contract.py capability/loadtesting.capability-index.json --baseline scripts/contract-baseline/loadtesting.json --quiet && python3 scripts/check-contract.py capability/web_accessibility.capability-index.json --baseline scripts/contract-baseline/web_accessibility.json --quiet",
+    "check:contract": "bash scripts/check-contract-all.sh",
     "eval:index": "tsx scripts/eval-index.mts",
     "seed:live": "tsx scripts/seed-live.mts",
     "seed:live:tra": "tsx scripts/seed-live-tra.mts",

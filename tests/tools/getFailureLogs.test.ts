@@ -217,6 +217,39 @@ describe('BrowserStack Failure Logs', () => {
         expect(result.content[0].text).toBe(appLine);
       });
 
+      it('fetches the logs without waiting for the app read', async () => {
+        const mockServer = { server: { getClientVersion: () => "test-version" } };
+        let finishRead: (value: unknown) => void = () => {};
+        (readAppAutomateSession as any).mockReturnValue(new Promise((resolve) => { finishRead = resolve; }));
+        vi.mocked(appAutomate.retrieveAppiumLogs).mockResolvedValue('appium logs');
+
+        const pending = getFailureLogs({
+          sessionId: 'test-session',
+          buildId: 'explicit-build-id',
+          logTypes: ['appiumLogs'],
+          sessionType: 'app-automate'
+        }, mockServer);
+        await vi.waitFor(() => expect(appAutomate.retrieveAppiumLogs).toHaveBeenCalled());
+        finishRead({ buildId: 'b1', app });
+
+        expect((await pending).content.map((c: any) => c.text)).toEqual([appLine, 'appium logs']);
+      });
+
+      it('takes the app from session detection without reading the session again', async () => {
+        const mockServer = { server: { getClientVersion: () => "test-version" } };
+        (detectSession as any).mockResolvedValue({ sessionType: 'app-automate', hashedBuildId: 'app-build', app });
+        vi.mocked(appAutomate.retrieveDeviceLogs).mockResolvedValue('device logs');
+
+        const result = await getFailureLogs({
+          sessionId: 'test-session',
+          logTypes: ['deviceLogs'],
+          sessionType: 'automate'
+        }, mockServer);
+
+        expect(readAppAutomateSession).not.toHaveBeenCalled();
+        expect(result.content[0].text).toContain(appLine);
+      });
+
       it('returns the logs without the app when the session read fails', async () => {
         const mockServer = { server: { getClientVersion: () => "test-version" } };
         (readAppAutomateSession as any).mockRejectedValue(new Error('503'));

@@ -271,6 +271,28 @@ describe("detectSession", () => {
     });
   });
 
+  it("returns the app from the same read", async () => {
+    (apiClient.get as Mock).mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      data: {
+        automation_session: {
+          build_hashed_id: HASHED_BUILD,
+          app_details: { app_name: "com.example.app" },
+        },
+      },
+    });
+
+    await expect(
+      detectSession(SESSION_ID, SessionType.AppAutomate, config),
+    ).resolves.toEqual({
+      sessionType: SessionType.AppAutomate,
+      hashedBuildId: HASHED_BUILD,
+      app: { id: "com.example.app" },
+    });
+    expect(apiClient.get).toHaveBeenCalledTimes(1);
+  });
+
   it("returns undefined when neither product knows the session", async () => {
     (apiClient.get as Mock).mockResolvedValue({ ok: false, status: 404 });
     await expect(

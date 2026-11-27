@@ -112,20 +112,22 @@ export async function getFailureLogs(
         "Use a session id from listSessions or listTestIds.",
     );
 
+  let app: AppUnderTest | undefined;
+  let sessionRead = false;
   if (requested.some((logType) => !fitsSessionType(logType, sessionType))) {
     const detected = await detectSession(args.sessionId, sessionType, config);
     if (!detected) throw notFound();
     switchTo(detected.sessionType);
     if (sessionType === SessionType.AppAutomate) {
       buildId = buildId ?? detected.hashedBuildId;
+      app = detected.app;
+      sessionRead = true;
     }
   }
 
   const needsBuildId = requested.some(
     (logType) => logType !== SessionVideoLogType,
   );
-  let app: AppUnderTest | undefined;
-  let sessionRead = false;
   if (sessionType === SessionType.AppAutomate && needsBuildId && !buildId) {
     const details = await readAppAutomateSession(args.sessionId, config);
     sessionRead = details !== undefined;
@@ -141,6 +143,8 @@ export async function getFailureLogs(
       switchTo(detected.sessionType);
       if (sessionType === SessionType.AppAutomate) {
         buildId = detected.hashedBuildId;
+        app = detected.app;
+        sessionRead = true;
       }
     }
   }
@@ -173,22 +177,18 @@ export async function getFailureLogs(
     };
   }
 
-  // The app's bundle id is not in the logs. Read it from the session details when the
-  // build id lookup above did not already; the logs are returned without it if this fails.
-  if (
+  const appRead: Promise<AppUnderTest | undefined> =
     sessionType === SessionType.AppAutomate &&
     !sessionRead &&
     validLogTypes.some((logType) => logType !== SessionVideoLogType)
-  ) {
-    try {
-      app = (await readAppAutomateSession(args.sessionId, config))?.app;
-    } catch {
-      app = undefined;
-    }
-  }
-  if (sessionType === SessionType.AppAutomate && app) {
-    notes.push(describeApp(app));
-  }
+      ? (async () => {
+          try {
+            return (await readAppAutomateSession(args.sessionId, config))?.app;
+          } catch {
+            return undefined;
+          }
+        })()
+      : Promise.resolve(app);
 
   // Framework builds (Maestro, Espresso, XCUITest, Flutter) 404 on the generic App
   // Automate log endpoints. Checked once, and only after a generic 404, so Appium
@@ -281,6 +281,10 @@ export async function getFailureLogs(
     throw error;
   }
 
+  app = await appRead;
+  if (sessionType === SessionType.AppAutomate && app) {
+    notes.push(describeApp(app));
+  }
   if (framework) {
     notes.push(
       `This session ran through the ${framework.framework.name} framework API, so its logs come from each test's results.`,

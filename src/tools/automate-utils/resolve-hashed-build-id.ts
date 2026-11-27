@@ -71,19 +71,23 @@ export async function detectSession(
   sessionId: string,
   preferred: SessionType,
   config: BrowserStackConfig,
-): Promise<{ sessionType: SessionType; hashedBuildId: string } | undefined> {
+): Promise<
+  | { sessionType: SessionType; hashedBuildId: string; app?: AppUnderTest }
+  | undefined
+> {
   for (const candidate of [preferred, otherSessionType(preferred)]) {
-    const hashedBuildId = await resolveBuildIdFromSession(
-      sessionId,
-      candidate,
-      config,
-    );
-    if (hashedBuildId) return { sessionType: candidate, hashedBuildId };
+    const details = await readSessionDetails(sessionId, candidate, config);
+    if (details?.buildId) {
+      return {
+        sessionType: candidate,
+        hashedBuildId: details.buildId,
+        app: details.app,
+      };
+    }
   }
   return undefined;
 }
 
-/** The app an App Automate session ran, from its session details. */
 export interface AppUnderTest {
   /** Bundle id on iOS, package name on Android (`app_details.app_name`). */
   id: string;

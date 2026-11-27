@@ -446,20 +446,18 @@ export const automateLiveSpecs: ToolSpec[] = [
         },
       ],
     },
-    // The plan is built from the caller's locator pairs; the test-code fetch only enriches
-    // it, and by design (selfheal.ts prepareSelfHealingPlanTool) a failed fetch is a banner
-    // on a good result, not an error.
+    // An upstream 401/500 must be an error (decision: same rule as every other tool).
+    // Today the tool returns isError false with a warning banner (selfheal.ts).
     auth: {
-      expect: {
-        isError: false,
-        textMatches: [/Unauthorized \(HTTP 401\)/, /## Plan/],
-      },
+      expect: { isError: true, textMatches: [/Unauthorized \(HTTP 401\)/] },
     },
     serverError: {
-      expect: {
-        isError: false,
-        textMatches: [/Transport error/, /## Plan/],
-      },
+      expect: { isError: true, textMatches: [/Transport error/] },
+    },
+    knownIssues: {
+      auth: "isError false on an upstream 401 (plan returned with a banner)",
+      "server-error":
+        "isError false on an upstream 500 (plan returned with a banner)",
     },
     region: { hosts: [EU_HOST] },
   },

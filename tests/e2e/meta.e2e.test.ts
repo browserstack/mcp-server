@@ -2,8 +2,8 @@
  * L3 meta test: every tool in tools/list needs a row (a case or "n/a: <reason>") for each
  * kind, in each profile. tools/list is built at run time from the server, never a copy.
  *
- * Rollout (spec section 4): report only until every tool has its cases, then it blocks.
- * To block, set META_BLOCKS = true.
+ * It blocks: a new tool with no row for a kind fails the PR. Add a ToolSpec in cases/.
+ * It went on as soon as every tool had its rows (before the registry flow PR).
  */
 import { mkdirSync, writeFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
@@ -17,7 +17,7 @@ import { ALL_SPECS } from "./cases/index.js";
 import { expandSpec, KINDS, type Kind } from "./harness/cases.js";
 import { PROFILES, startServer } from "./harness/server.js";
 
-const META_BLOCKS = false;
+const META_BLOCKS = true;
 const REPORT = "reports/l3-coverage.json";
 
 describe("L3 meta: a row for each tool and kind", () => {

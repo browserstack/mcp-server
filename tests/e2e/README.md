@@ -57,5 +57,5 @@ If a row fails because of a real bug in `src`, do not weaken the case. Add the k
 ## Rollout
 
 ```text
- PR 1 harness + meta (report only) → PR 2–3 tool cases → PR 4 registry flow × 7 → META_BLOCKS = true
+ PR 1 harness + meta → PR 2–3 tool cases, META_BLOCKS = true → PR 4 registry flow × 7 · fake timers
 ```

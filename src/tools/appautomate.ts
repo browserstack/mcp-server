@@ -508,6 +508,62 @@ export default function addAppAutomationTools(
     },
   );
 
+  tools.uploadAppToBrowserStack = server.tool(
+    "uploadAppToBrowserStack",
+    "Upload a local .apk or .ipa file to BrowserStack and return its bs:// app URL. Use the returned URL as browserstackAppUrl in subsequent tool calls to avoid re-uploading.",
+    {
+      appPath: z
+        .string()
+        .describe("Local .apk/.ipa path inside MCP_UPLOAD_BASE_DIR."),
+    },
+    {
+      title: "Upload App to BrowserStack",
+      readOnlyHint: false,
+      openWorldHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+    },
+    async (args) => {
+      try {
+        trackMCP(
+          "uploadAppToBrowserStack",
+          server.server.getClientVersion()!,
+          undefined,
+          config,
+        );
+        const authString = getBrowserStackAuth(config);
+        const [username, password] = authString.split(":");
+        const appUrl = await uploadApp(args.appPath, username, password);
+        return {
+          content: [
+            {
+              type: "text",
+              text: `App uploaded successfully.\nbs:// URL: ${appUrl}`,
+            },
+          ],
+        };
+      } catch (error) {
+        trackMCP(
+          "uploadAppToBrowserStack",
+          server.server.getClientVersion()!,
+          error,
+          config,
+        );
+        const errorMessage =
+          error instanceof Error ? error.message : "Unknown error";
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Error uploading app: ${errorMessage}`,
+            },
+          ],
+          isError: true,
+        };
+      }
+    },
+  );
+
   tools.setupBrowserStackAppAutomateTests = server.tool(
     "setupBrowserStackAppAutomateTests",
     SETUP_APP_AUTOMATE_DESCRIPTION,

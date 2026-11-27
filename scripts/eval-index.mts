@@ -34,7 +34,7 @@ import {
   ROOT,
   SEARCH_EVAL_DIR,
   coveredNames,
-  describeCase,
+  guardProblems,
   loadRegistry,
   loadSearchFixtures,
   rankIn,
@@ -333,54 +333,21 @@ function coverage(): number {
  *   - a removed case is listed in `retired`, with a `why`
  */
 function guard(ref: string): number {
-  const problems: string[] = [];
   const rel = (f: string) => relative(ROOT, f);
-
   const oldAllow = gitShow(ref, rel(ALLOWLIST_FILE));
-  if (oldAllow) {
-    const before = new Set((JSON.parse(oldAllow) as Allowlist).names);
-    for (const n of readJson<Allowlist>(ALLOWLIST_FILE).names) {
-      if (!before.has(n))
-        problems.push(
-          `allowlist: ${n} was added. The allowlist only shrinks: write a case for it.`,
-        );
-    }
-  }
-
-  const key = (e: EvalCase) => e.q;
-  for (const [product, fixture] of Object.entries(loadSearchFixtures())) {
+  const now = loadSearchFixtures();
+  const beforeFixtures: Record<string, EvalFixture> = {};
+  for (const product of Object.keys(now)) {
     const raw = gitShow(ref, rel(`${SEARCH_EVAL_DIR}/${product}.json`));
-    if (!raw) continue;
-    const before = new Map(
-      (JSON.parse(raw) as EvalFixture).cases.map((e) => [key(e), e] as const),
-    );
-    const now = new Map(fixture.cases.map((e) => [key(e), e] as const));
-    const retired = new Map(
-      (fixture.retired ?? []).map((r) => [r.q, r.why] as const),
-    );
-
-    for (const [q, old] of before) {
-      const cur = now.get(q);
-      if (!cur) {
-        if (!retired.get(q)?.trim())
-          problems.push(
-            `${product}: case "${q}" was removed. Add it to "retired" with a "why".`,
-          );
-        continue;
-      }
-      const oldCeiling = old.maxRank ?? 0;
-      const loosened =
-        (cur.maxRank !== undefined &&
-          old.maxRank !== undefined &&
-          cur.maxRank > old.maxRank) ||
-        (cur.miss !== undefined && old.maxRank !== undefined);
-      if (loosened && (!cur.why?.trim() || cur.why === old.why)) {
-        problems.push(
-          `${product}: "${q}" ${describeCase(cur)} went from maxRank ${oldCeiling} to ${cur.maxRank ?? "miss"}. Say why in "why".`,
-        );
-      }
-    }
+    if (raw) beforeFixtures[product] = JSON.parse(raw) as EvalFixture;
   }
+  const problems = guardProblems(
+    {
+      allow: oldAllow ? (JSON.parse(oldAllow) as Allowlist).names : undefined,
+      fixtures: beforeFixtures,
+    },
+    { allow: readJson<Allowlist>(ALLOWLIST_FILE).names, fixtures: now },
+  );
 
   console.log(`\nL2 fixture guard against ${ref}`);
   if (problems.length) {

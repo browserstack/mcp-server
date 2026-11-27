@@ -1,0 +1,246 @@
+{
+  "note": "L2 check 3 (Right product). A user question, and the product the code step (ambiguousProducts, as listProducts runs it) must route it to. 'settled': exactly one product. 'clash': these products share the words, so the AI must ask the user. 'unknown': no word belongs to any product. 'known': the routing is wrong today; the case does not block, and it fails when the routing becomes right, so the field gets removed. Runs on the shipped indexes in the local and remote profiles (tests/tools/productRoutingEval.test.ts).",
+  "cases": [
+    {
+      "q": "which tests are flaky in my checkout project",
+      "expect": {
+        "settled": "tra"
+      }
+    },
+    {
+      "q": "Which tests are flaky in my build?",
+      "expect": {
+        "settled": "tra"
+      }
+    },
+    {
+      "q": "did my build pass the quality gate",
+      "expect": {
+        "settled": "tra"
+      }
+    },
+    {
+      "q": "list the quality gates",
+      "expect": {
+        "settled": "tra"
+      }
+    },
+    {
+      "q": "create a test case in a folder",
+      "expect": {
+        "settled": "tm"
+      }
+    },
+    {
+      "q": "add a test case to my regression suite",
+      "expect": {
+        "settled": "tm"
+      }
+    },
+    {
+      "q": "create a test plan for the release",
+      "expect": {
+        "settled": "tm"
+      }
+    },
+    {
+      "q": "Show me all datasets in the project",
+      "expect": {
+        "settled": "tm"
+      }
+    },
+    {
+      "q": "list my load tests",
+      "expect": {
+        "settled": "loadtesting"
+      }
+    },
+    {
+      "q": "start a load test with 100 users",
+      "expect": {
+        "settled": "loadtesting"
+      }
+    },
+    {
+      "q": "show the results of my last load test",
+      "expect": {
+        "settled": "loadtesting"
+      }
+    },
+    {
+      "q": "take a screenshot of my website on an iPhone",
+      "expect": {
+        "settled": "devicecontrol"
+      }
+    },
+    {
+      "q": "test my website on a tablet",
+      "expect": {
+        "settled": "devicecontrol"
+      }
+    },
+    {
+      "q": "take a screenshot of my app on an iPhone",
+      "expect": {
+        "settled": "mobiledevicecontrol"
+      }
+    },
+    {
+      "q": "launch com.mycompany.app on my iPhone",
+      "expect": {
+        "settled": "mobiledevicecontrol"
+      }
+    },
+    {
+      "q": "upload my apk",
+      "expect": {
+        "settled": "mobiledevicecontrol"
+      }
+    },
+    {
+      "q": "test my app manually on a real phone",
+      "expect": {
+        "settled": "mobiledevicecontrol"
+      }
+    },
+    {
+      "q": "find my uploaded app by its custom id",
+      "expect": {
+        "settled": "applive"
+      }
+    },
+    {
+      "q": "List my App Accessibility reports",
+      "expect": {
+        "settled": "app_accessibility"
+      }
+    },
+    {
+      "q": "scan my website for accessibility issues",
+      "expect": {
+        "settled": "web_accessibility"
+      }
+    },
+    {
+      "q": "issues from the browser extension",
+      "expect": {
+        "settled": "web_accessibility"
+      }
+    },
+    {
+      "q": "show my test runs",
+      "expect": {
+        "clash": [
+          "app_accessibility",
+          "loadtesting",
+          "tm",
+          "tra",
+          "web_accessibility"
+        ]
+      },
+      "why": "'test run' is a word of 5 products: the AI must ask the user"
+    },
+    {
+      "q": "list all projects",
+      "expect": {
+        "clash": [
+          "app_accessibility",
+          "loadtesting",
+          "tm",
+          "tra",
+          "web_accessibility"
+        ]
+      }
+    },
+    {
+      "q": "Delete the failed results from this run.",
+      "expect": {
+        "clash": [
+          "app_accessibility",
+          "loadtesting",
+          "tm",
+          "tra",
+          "web_accessibility"
+        ]
+      }
+    },
+    {
+      "q": "screenshot on an iphone",
+      "expect": {
+        "clash": [
+          "devicecontrol",
+          "mobiledevicecontrol"
+        ]
+      },
+      "why": "a website or an app: the AI must ask"
+    },
+    {
+      "q": "test on ios",
+      "expect": {
+        "clash": [
+          "devicecontrol",
+          "mobiledevicecontrol"
+        ]
+      }
+    },
+    {
+      "q": "what browsers can I use",
+      "expect": {
+        "clash": [
+          "devicecontrol",
+          "tm",
+          "tra"
+        ]
+      }
+    },
+    {
+      "q": "website",
+      "expect": {
+        "clash": [
+          "devicecontrol",
+          "web_accessibility"
+        ]
+      }
+    },
+    {
+      "q": "show me the summary",
+      "expect": {
+        "unknown": true
+      }
+    },
+    {
+      "q": "hello",
+      "expect": {
+        "unknown": true
+      }
+    },
+    {
+      "q": "run an accessibility scan on my android app",
+      "expect": {
+        "settled": "app_accessibility"
+      },
+      "known": "routes to tra today"
+    },
+    {
+      "q": "show accessibility issues on my login page",
+      "expect": {
+        "settled": "web_accessibility"
+      },
+      "known": "routes to devicecontrol today"
+    },
+    {
+      "q": "list the apps my team uploaded",
+      "expect": {
+        "settled": "applive"
+      },
+      "known": "routes to tm today"
+    },
+    {
+      "q": "open my app in app live",
+      "expect": {
+        "settled": "applive"
+      },
+      "known": "clash [app_accessibility, applive] today, although the user named App Live"
+    }
+  ]
+}

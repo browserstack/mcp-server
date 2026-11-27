@@ -22,6 +22,8 @@
     "format": "prettier --write \"src/**/*.ts\"",
     "check:contract": "bash scripts/check-contract-all.sh",
     "eval:index": "tsx scripts/eval-index.mts",
+    "eval:index:coverage": "tsx scripts/eval-index.mts --coverage",
+    "eval:index:guard": "tsx scripts/eval-index.mts --guard --against",
     "seed:live": "tsx scripts/seed-live.mts",
     "seed:live:tra": "tsx scripts/seed-live-tra.mts",
     "plan:tests": "tsx scripts/plan-capability-tests.mts",

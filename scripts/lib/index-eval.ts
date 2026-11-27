@@ -92,6 +92,8 @@ export interface RoutingCase {
   /** `settled`: the one product the words point at. `clash`: the products that share them. */
   expect: { settled: string } | { clash: string[] } | { unknown: true };
   why?: string;
+  /** The routing is wrong today, and this says how. The case fails when it becomes right. */
+  known?: string;
 }
 
 export interface RoutingFixture {
@@ -263,4 +265,61 @@ export interface Allowlist {
   note?: string;
   /** `product/name` of each capability that has no search-eval case yet. Shrink-only. */
   names: string[];
+}
+
+export interface GuardSide {
+  /** The allowlist names. Undefined when the side has no allowlist yet. */
+  allow?: string[];
+  /** product -> fixture. A product missing here is new on that side. */
+  fixtures: Record<string, EvalFixture>;
+}
+
+/**
+ * The fixture rules that only a diff can see (CI runs them with `eval-index.mts --guard`):
+ *   - the allowlist only shrinks
+ *   - a case whose maxRank goes up, or that becomes a miss, has a new `why`
+ *   - a removed case is listed in `retired`, with a `why`
+ */
+export function guardProblems(before: GuardSide, now: GuardSide): string[] {
+  const problems: string[] = [];
+
+  if (before.allow) {
+    const old = new Set(before.allow);
+    for (const n of now.allow ?? []) {
+      if (!old.has(n))
+        problems.push(
+          `allowlist: ${n} was added. The allowlist only shrinks: write a case for it.`,
+        );
+    }
+  }
+
+  for (const [product, fixture] of Object.entries(now.fixtures)) {
+    const previous = before.fixtures[product];
+    if (!previous) continue;
+    const current = new Map(fixture.cases.map((e) => [e.q, e] as const));
+    const retired = new Map(
+      (fixture.retired ?? []).map((r) => [r.q, r.why] as const),
+    );
+
+    for (const old of previous.cases) {
+      const cur = current.get(old.q);
+      if (!cur) {
+        if (!retired.get(old.q)?.trim())
+          problems.push(
+            `${product}: case "${old.q}" was removed. Add it to "retired" with a "why".`,
+          );
+        continue;
+      }
+      if (old.maxRank === undefined) continue;
+      const loosened =
+        cur.miss !== undefined ||
+        (cur.maxRank !== undefined && cur.maxRank > old.maxRank);
+      if (loosened && (!cur.why?.trim() || cur.why === old.why)) {
+        problems.push(
+          `${product}: "${old.q}" (${describeCase(cur)}) went from maxRank ${old.maxRank} to ${cur.maxRank ?? "miss"}. Say why in "why".`,
+        );
+      }
+    }
+  }
+  return problems;
 }

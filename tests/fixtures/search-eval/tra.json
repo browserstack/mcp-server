@@ -1,0 +1,19 @@
+{
+  "product": "tra",
+  "note": "Search-eval cases for tra: a typical user question, and the capability that should answer it. Write the question in the words a user would type, not the capability name. See tests/tools/indexEval.test.ts for the fields. Capabilities with no case are on allowlist.json until the backfill adds one.",
+  "cases": [
+    {
+      "group": "quality-gate",
+      "q": "did my build pass the quality gate",
+      "name": "get_build_quality_gate_result",
+      "maxRank": 1
+    },
+    {
+      "group": "flakiness",
+      "q": "which tests are flaky in this project",
+      "name": "get_flakiness_trend",
+      "miss": "the word 'flaky' is not in the capability's name, path or aliases; the fix is an alias in the index",
+      "defect": "vocabulary-gap"
+    }
+  ]
+}

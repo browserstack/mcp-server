@@ -1,0 +1,5 @@
+{
+  "product": "loadtesting",
+  "note": "Search-eval cases for loadtesting: a typical user question, and the capability that should answer it. Write the question in the words a user would type, not the capability name. See tests/tools/indexEval.test.ts for the fields. Capabilities with no case are on allowlist.json until the backfill adds one.",
+  "cases": []
+}

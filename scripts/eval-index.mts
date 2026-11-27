@@ -1,61 +1,69 @@
 /**
- * What does this index change cost the ranker?
+ * What does this index change cost the ranker? (L2 diagnosis tool)
  *
- * Run before merging a capability-index update. The eval suite tells you THAT ranking
- * regressed; this tells you BY HOW MUCH and WHICH new entries did it, which is the
+ * The Vitest gate (tests/tools/indexEval.test.ts) tells you THAT a case went past its
+ * maxRank. This tells you BY HOW MUCH and WHICH new capabilities did it, which is the
  * difference between a number to argue about and a list to act on.
  *
- * It exists because of a real miss. Three commits took tm from 173 to 218 capabilities
- * while `tests/fixtures/capability/` stayed pinned at the 173-entry artifact — and the
- * eval reads the fixture. The suite was green against an index nobody ships, and the
- * regression it would have caught (top-1 141 -> 116, 48 cases past their ceiling) sat
- * undetected until the fixture was synced. A standing harness that reads the SHIPPED
- * index removes that whole class of blind spot.
+ * It reads the SHIPPED index. It exists because of a real miss: three commits took tm from
+ * 173 to 218 capabilities while the ranking test read a frozen 173-entry copy. The suite was
+ * green against an index nobody ships.
  *
- *   npx tsx scripts/eval-index.mts
- *   npx tsx scripts/eval-index.mts --against d49d681      # a git ref
- *   npx tsx scripts/eval-index.mts --against /tmp/old.json
+ *   npx tsx scripts/eval-index.mts                                  # every product, local
+ *   npx tsx scripts/eval-index.mts --product tm --profile remote
+ *   npx tsx scripts/eval-index.mts --product tm --against main      # a git ref, or a file
+ *   npx tsx scripts/eval-index.mts --product tra --fixture /tmp/draft.json
+ *   npx tsx scripts/eval-index.mts --coverage                       # capabilities with no case
+ *   npx tsx scripts/eval-index.mts --guard --against origin/main    # CI: L2 fixture rules
  *
- * With `--against`, the reference is scored too and three extra rows are reported:
- * the reference, the CONTROL (current minus everything new since the reference), and the
- * current index. The control is the load-bearing one — if it does not reproduce the
- * reference exactly, something other than the additions changed, and the attribution
- * below is not trustworthy.
+ * With `--against`, the reference is scored too, with three rows: the reference, the
+ * CONTROL (current minus everything new since the reference), and the current index. If the
+ * control does not reproduce the reference, something other than the additions changed,
+ * and the blame list is not trustworthy.
  *
- * Exit code is 1 when any case exceeds its declared `maxRank`, so this can gate a merge.
+ * Exit code 1: a case is past its maxRank (eval), the coverage check fails (--coverage), or
+ * a fixture rule is broken (--guard).
  */
 
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
+import { relative } from "node:path";
 
-import { searchCapabilities } from "../src/tools/capability-registry/search.js";
+import {
+  ALLOWLIST_FILE,
+  ROOT,
+  SEARCH_EVAL_DIR,
+  coveredNames,
+  describeCase,
+  loadRegistry,
+  loadSearchFixtures,
+  rankIn,
+  readJson,
+  searchableNames,
+  shippedIndexFiles,
+  type Allowlist,
+  type EvalCase,
+  type EvalFixture,
+  type Profile,
+} from "./lib/index-eval.js";
 import type {
   Capability,
   ProductIndex,
 } from "../src/tools/capability-registry/types.js";
 
-const ROOT = fileURLToPath(new URL("..", import.meta.url));
-const SHIPPED = `${ROOT}capability/tm.capability-index.json`;
-const EVAL = `${ROOT}tests/fixtures/search-eval.json`;
+// ---- arguments ----
 
-interface EvalCase {
-  q: string;
-  method: string;
-  path: string;
-  maxRank?: number;
-  miss?: string;
+const args = process.argv.slice(2);
+const opt = (name: string) =>
+  args.includes(name) ? args[args.indexOf(name) + 1] : undefined;
+const against = opt("--against");
+const profile = (opt("--profile") ?? "local") as Profile;
+if (profile !== "local" && profile !== "remote") {
+  console.error(`--profile must be local or remote, not ${profile}`);
+  process.exit(2);
 }
-interface Score {
-  caps: number;
-  top1: number;
-  top3: number;
-  top8: number;
-  missed: number;
-  over: number;
-  /** Cases that exceeded their ceiling, with what they were displaced to. */
-  regressions: { q: string; want: number; got: number | "miss" }[];
-}
+
+// ---- helpers ----
 
 /** The product object, however the envelope is shaped (released vs pre-release). */
 function productOf(doc: any): ProductIndex {
@@ -67,27 +75,53 @@ function productOf(doc: any): ProductIndex {
   return doc[key] as ProductIndex;
 }
 
-/** A file path, or a git ref to read `capability/tm.capability-index.json` from. */
-function loadReference(ref: string): { doc: any; label: string } {
+/** A file at a git ref, or undefined when the ref has no such file. */
+function gitShow(ref: string, file: string): string | undefined {
+  try {
+    return execFileSync("git", ["show", `${ref}:${file}`], {
+      cwd: ROOT,
+      encoding: "utf8",
+      maxBuffer: 64 * 1024 * 1024,
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+  } catch {
+    return undefined;
+  }
+}
+
+/** A file path, or a git ref to read the product's shipped index from. */
+function loadReference(
+  product: string,
+  ref: string,
+): { doc: any; label: string } {
   if (existsSync(ref)) {
     return { doc: JSON.parse(readFileSync(ref, "utf8")), label: ref };
   }
-  const raw = execFileSync(
-    "git",
-    ["show", `${ref}:capability/tm.capability-index.json`],
-    { cwd: ROOT, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 },
-  );
+  const raw = gitShow(ref, `capability/${product}.capability-index.json`);
+  if (!raw)
+    throw new Error(
+      `${ref} has no capability/${product}.capability-index.json`,
+    );
   return { doc: JSON.parse(raw), label: `git:${ref}` };
 }
 
+interface Score {
+  caps: number;
+  top1: number;
+  top3: number;
+  top8: number;
+  missed: number;
+  over: number;
+  regressions: { q: string; want: number; got: number | "miss" }[];
+}
+
 function score(
-  capabilities: Capability[],
-  product: ProductIndex,
+  products: Record<string, ProductIndex>,
+  product: string,
   cases: EvalCase[],
 ): Score {
-  const products = { tm: { ...product, capabilities } };
   const s: Score = {
-    caps: capabilities.length,
+    caps: products[product]?.capabilities.length ?? 0,
     top1: 0,
     top3: 0,
     top8: 0,
@@ -96,13 +130,7 @@ function score(
     regressions: [],
   };
   for (const entry of cases) {
-    const hits = searchCapabilities(products, entry.q, { limit: 8 }).hits;
-    const at = hits.findIndex(
-      (h) =>
-        h.capability.method === entry.method &&
-        h.capability.path === entry.path,
-    );
-    const rank = at < 0 ? Infinity : at + 1;
+    const rank = rankIn(products, product, entry).rank || Infinity;
     if (rank === 1) s.top1++;
     if (rank <= 3) s.top3++;
     if (rank <= 8) s.top8++;
@@ -122,122 +150,300 @@ function score(
 const row = (label: string, s: Score) =>
   `${label.padEnd(38)} ${String(s.caps).padStart(4)}  ${String(s.top1).padStart(4)} ${String(s.top3).padStart(4)} ${String(s.top8).padStart(4)}  ${String(s.missed).padStart(4)}  ${String(s.over).padStart(4)}`;
 
-// ---- run ----
-
-const args = process.argv.slice(2);
-const against = args.includes("--against")
-  ? args[args.indexOf("--against") + 1]
-  : undefined;
-
-const evalDoc = JSON.parse(readFileSync(EVAL, "utf8"));
-const cases: EvalCase[] = evalDoc.cases;
-const shippedDoc = JSON.parse(readFileSync(SHIPPED, "utf8"));
-const shipped = productOf(shippedDoc);
-
-console.log(
-  `\neval: ${cases.length} cases   index: v${shippedDoc.version} build ${shippedDoc.build_id}\n`,
-);
-console.log(`${"config".padEnd(38)} caps  top1 top3 top8  miss  over`);
-
-if (evalDoc.baseline) {
-  const b = evalDoc.baseline;
-  console.log(
-    `${"declared baseline".padEnd(38)} ${String(b.cases ?? "-").padStart(4)}  ${String(b.top1).padStart(4)} ${String(b.top3).padStart(4)} ${String(b.top8).padStart(4)}  ${String(b.missed).padStart(4)}     -`,
-  );
-  console.log(`${"".padEnd(38)}   measured on ${b.measured_on ?? "?"}`);
+/** The same products, with one product's capabilities replaced. */
+function withCapabilities(
+  products: Record<string, ProductIndex>,
+  product: string,
+  capabilities: Capability[],
+  bundle: ProductIndex = products[product],
+): Record<string, ProductIndex> {
+  return { ...products, [product]: { ...bundle, capabilities } };
 }
 
-const current = score(shipped.capabilities, shipped, cases);
+// ---- eval ----
 
-if (against) {
-  const { doc, label } = loadReference(against);
-  const ref = productOf(doc);
-  const refNames = new Set(ref.capabilities.map((c) => c.name));
-  const added = shipped.capabilities.filter((c) => !refNames.has(c.name));
+function evalProduct(
+  products: Record<string, ProductIndex>,
+  product: string,
+  fixture: EvalFixture,
+): number {
+  const shippedDoc = readJson<any>(shippedIndexFiles()[product]);
+  const shipped = products[product];
+  const cases = fixture.cases;
 
-  console.log(row(`reference (${label})`, score(ref.capabilities, ref, cases)));
   console.log(
-    row(
-      `CONTROL: current minus ${added.length} new`,
-      score(
-        shipped.capabilities.filter((c) => refNames.has(c.name)),
-        shipped,
-        cases,
-      ),
-    ),
+    `\n== ${product} (${profile})   eval: ${cases.length} cases   index: v${shippedDoc.version} build ${shippedDoc.build_id}\n`,
   );
-  console.log(row("current, as shipped", current));
+  if (cases.length === 0) {
+    console.log("no cases yet: every capability is on the allowlist.");
+    return 0;
+  }
+  console.log(`${"config".padEnd(38)} caps  top1 top3 top8  miss  over`);
 
-  // WHICH new entries displaced an expected answer, and how often. This is the list to
-  // act on: a capability appearing here is competing for words the eval says belong to
-  // something else, which is either a ranking fix or a publishing decision.
-  const blame = new Map<string, number>();
-  for (const entry of cases) {
-    if (!entry.maxRank) continue;
-    const hits = searchCapabilities({ tm: shipped }, entry.q, {
-      limit: 8,
-    }).hits;
-    const at = hits.findIndex(
-      (h) =>
-        h.capability.method === entry.method &&
-        h.capability.path === entry.path,
+  if (fixture.baseline) {
+    const b = fixture.baseline;
+    console.log(
+      `${"declared baseline".padEnd(38)} ${String(b.cases ?? "-").padStart(4)}  ${String(b.top1).padStart(4)} ${String(b.top3).padStart(4)} ${String(b.top8).padStart(4)}     -     -`,
     );
-    const rank = at < 0 ? Infinity : at + 1;
-    if (rank <= entry.maxRank) continue;
-    for (const h of hits.slice(0, at < 0 ? 8 : at)) {
-      const n = h.capability.name;
-      if (n && !refNames.has(n)) blame.set(n, (blame.get(n) ?? 0) + 1);
+  }
+
+  const current = score(products, product, cases);
+
+  if (against) {
+    const { doc, label } = loadReference(product, against);
+    const refDoc = productOf(doc);
+    // Disabled entries are not searchable, so they are dropped here as the registry drops them.
+    const ref = {
+      ...refDoc,
+      capabilities: refDoc.capabilities.filter((c) => !c.disabled),
+    };
+    const refNames = new Set(ref.capabilities.map((c) => c.name));
+    const added = shipped.capabilities.filter((c) => !refNames.has(c.name));
+
+    console.log(
+      row(
+        `reference (${label})`,
+        score(
+          withCapabilities(products, product, ref.capabilities, ref),
+          product,
+          cases,
+        ),
+      ),
+    );
+    console.log(
+      row(
+        `CONTROL: current minus ${added.length} new`,
+        score(
+          withCapabilities(
+            products,
+            product,
+            shipped.capabilities.filter((c) => refNames.has(c.name)),
+          ),
+          product,
+          cases,
+        ),
+      ),
+    );
+    console.log(row("current, as shipped", current));
+
+    // WHICH new entries displaced an expected answer, and how often. A capability here is
+    // competing for words the eval says belong to something else.
+    const blame = new Map<string, number>();
+    for (const entry of cases) {
+      if (!entry.maxRank) continue;
+      const { rank, top } = rankIn(products, product, entry);
+      if (rank && rank <= entry.maxRank) continue;
+      for (const c of top.slice(0, rank ? rank - 1 : 8)) {
+        if (c.name && !refNames.has(c.name))
+          blame.set(c.name, (blame.get(c.name) ?? 0) + 1);
+      }
+    }
+    if (blame.size) {
+      console.log(`\nnew capabilities displacing an expected answer:`);
+      [...blame.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 15)
+        .forEach(([n, c]) => console.log(`   ${String(c).padStart(3)}x  ${n}`));
+    }
+  } else {
+    console.log(row("current, as shipped", current));
+  }
+
+  if (current.regressions.length) {
+    console.log(
+      `\n${current.regressions.length} case(s) past their declared ceiling:`,
+    );
+    for (const r of current.regressions.slice(0, 20)) {
+      console.log(
+        `   ceiling ${String(r.want).padStart(2)} → ${String(r.got).padStart(4)}   "${r.q}"`,
+      );
+    }
+    if (current.regressions.length > 20) {
+      console.log(`   … and ${current.regressions.length - 20} more`);
     }
   }
-  if (blame.size) {
-    console.log(`\nnew capabilities displacing an expected answer:`);
-    [...blame.entries()]
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 15)
-      .forEach(([n, c]) => console.log(`   ${String(c).padStart(3)}x  ${n}`));
+
+  // EXACT TWINS. Same method and path shape across API versions: two indistinguishable
+  // ways to do one thing. The fix is a publishing decision, not a ranking one.
+  const shape = (c: Capability) =>
+    `${c.method} ${c.path.replace(/\/api\/v\d+\//, "").replace(/\{[^}]+\}/g, "{}")}`;
+  const groups = new Map<string, Capability[]>();
+  for (const c of shipped.capabilities) {
+    const k = shape(c);
+    groups.set(k, [...(groups.get(k) ?? []), c]);
   }
-} else {
-  console.log(row("current, as shipped", current));
+  const twins = [...groups.entries()].filter(([, cs]) => cs.length > 1);
+  if (twins.length) {
+    console.log(
+      `\n${twins.length} operation(s) published at more than one API version:`,
+    );
+    for (const [k, cs] of twins) {
+      console.log(`   ${k}\n      ${cs.map((c) => c.name).join("  |  ")}`);
+    }
+  }
+  return current.over;
 }
 
-if (current.regressions.length) {
+// ---- coverage ----
+
+function coverage(): number {
+  const products = loadRegistry("local").index.products;
+  const all = searchableNames(products);
+  const covered = coveredNames(products, loadSearchFixtures());
+  const allow = new Set(readJson<Allowlist>(ALLOWLIST_FILE).names);
+  const uncovered = [...all.keys()].filter((n) => !covered.has(n));
+  const missing = uncovered.filter((n) => !allow.has(n));
+  const stale = [...allow].filter((n) => covered.has(n) || !all.has(n));
+
   console.log(
-    `\n${current.regressions.length} case(s) past their declared ceiling:`,
+    `\ncoverage: ${covered.size} / ${all.size} capabilities have a search-eval case`,
   );
-  for (const r of current.regressions.slice(0, 20)) {
+  const byProduct = new Map<string, [number, number]>();
+  for (const [name, product] of all) {
+    const [c, t] = byProduct.get(product) ?? [0, 0];
+    byProduct.set(product, [c + (covered.has(name) ? 1 : 0), t + 1]);
+  }
+  for (const [p, [c, t]] of [...byProduct].sort()) {
     console.log(
-      `   ceiling ${String(r.want).padStart(2)} → ${String(r.got).padStart(4)}   "${r.q}"`,
+      `   ${p.padEnd(22)} ${String(c).padStart(4)} / ${String(t).padStart(4)}`,
     );
   }
-  if (current.regressions.length > 20) {
-    console.log(`   … and ${current.regressions.length - 20} more`);
+  console.log(`allowlist: ${allow.size} names`);
+  if (missing.length) {
+    console.log(
+      `\n${missing.length} capability(ies) with no case and not on the allowlist. Add a case:`,
+    );
+    missing.forEach((n) => console.log(`   ${n}`));
   }
+  if (stale.length) {
+    console.log(
+      `\n${stale.length} allowlist name(s) to remove (now covered, or no longer searchable):`,
+    );
+    stale.forEach((n) => console.log(`   ${n}`));
+  }
+  return missing.length + stale.length;
 }
 
-// EXACT TWINS. Same method and same path shape across API versions: the index publishes
-// two indistinguishable ways to do one thing, and no scoring change reliably picks
-// between them. Reported separately because the fix is a publishing decision, not a
-// ranking one.
-const shape = (c: Capability) =>
-  `${c.method} ${c.path.replace(/\/api\/v\d+\//, "").replace(/\{[^}]+\}/g, "{}")}`;
-const groups = new Map<string, Capability[]>();
-for (const c of shipped.capabilities) {
-  const k = shape(c);
-  groups.set(k, [...(groups.get(k) ?? []), c]);
+// ---- guard (CI, needs git) ----
+
+/**
+ * The fixture rules that only a diff can see:
+ *   - the allowlist only shrinks
+ *   - a case whose maxRank goes up has a `why` that changed in the same diff
+ *   - a removed case is listed in `retired`, with a `why`
+ */
+function guard(ref: string): number {
+  const problems: string[] = [];
+  const rel = (f: string) => relative(ROOT, f);
+
+  const oldAllow = gitShow(ref, rel(ALLOWLIST_FILE));
+  if (oldAllow) {
+    const before = new Set((JSON.parse(oldAllow) as Allowlist).names);
+    for (const n of readJson<Allowlist>(ALLOWLIST_FILE).names) {
+      if (!before.has(n))
+        problems.push(
+          `allowlist: ${n} was added. The allowlist only shrinks: write a case for it.`,
+        );
+    }
+  }
+
+  const key = (e: EvalCase) => e.q;
+  for (const [product, fixture] of Object.entries(loadSearchFixtures())) {
+    const raw = gitShow(ref, rel(`${SEARCH_EVAL_DIR}/${product}.json`));
+    if (!raw) continue;
+    const before = new Map(
+      (JSON.parse(raw) as EvalFixture).cases.map((e) => [key(e), e] as const),
+    );
+    const now = new Map(fixture.cases.map((e) => [key(e), e] as const));
+    const retired = new Map(
+      (fixture.retired ?? []).map((r) => [r.q, r.why] as const),
+    );
+
+    for (const [q, old] of before) {
+      const cur = now.get(q);
+      if (!cur) {
+        if (!retired.get(q)?.trim())
+          problems.push(
+            `${product}: case "${q}" was removed. Add it to "retired" with a "why".`,
+          );
+        continue;
+      }
+      const oldCeiling = old.maxRank ?? 0;
+      const loosened =
+        (cur.maxRank !== undefined &&
+          old.maxRank !== undefined &&
+          cur.maxRank > old.maxRank) ||
+        (cur.miss !== undefined && old.maxRank !== undefined);
+      if (loosened && (!cur.why?.trim() || cur.why === old.why)) {
+        problems.push(
+          `${product}: "${q}" ${describeCase(cur)} went from maxRank ${oldCeiling} to ${cur.maxRank ?? "miss"}. Say why in "why".`,
+        );
+      }
+    }
+  }
+
+  console.log(`\nL2 fixture guard against ${ref}`);
+  if (problems.length) {
+    problems.forEach((p) => console.log(`   ${p}`));
+    return problems.length;
+  }
+  console.log("   OK");
+  return 0;
 }
-const twins = [...groups.entries()].filter(([, cs]) => cs.length > 1);
-if (twins.length) {
-  console.log(
-    `\n${twins.length} operation(s) published at more than one API version:`,
-  );
-  for (const [k, cs] of twins) {
-    console.log(`   ${k}\n      ${cs.map((c) => c.name).join("  |  ")}`);
+
+// ---- run ----
+
+let failures = 0;
+if (args.includes("--guard")) {
+  if (!against) {
+    console.error("--guard needs --against <git ref>");
+    process.exit(2);
+  }
+  failures = guard(against);
+} else if (args.includes("--coverage")) {
+  failures = coverage();
+} else {
+  const products = loadRegistry(profile).index.products;
+  const fixtures = loadSearchFixtures();
+  const only = opt("--product");
+  const fixtureFile = opt("--fixture");
+  if (fixtureFile && !only) {
+    console.error("--fixture needs --product");
+    process.exit(2);
+  }
+  const selected = only ? [only] : Object.keys(fixtures);
+  for (const product of selected) {
+    if (!products[product]) {
+      console.error(`no shipped index for product ${product}`);
+      process.exit(2);
+    }
+    const fixture = fixtureFile
+      ? readJson<EvalFixture>(fixtureFile)
+      : fixtures[product];
+    if (!fixture) {
+      console.error(`no fixture tests/fixtures/search-eval/${product}.json`);
+      process.exit(2);
+    }
+    // Disabled capabilities are not searchable on purpose. Their cases are not scored.
+    const live = {
+      ...fixture,
+      cases: fixture.cases.filter((e) =>
+        products[product].capabilities.some((c) =>
+          e.name
+            ? c.name === e.name
+            : c.method === e.method && c.path === e.path,
+        ),
+      ),
+    };
+    if (profile === "remote")
+      live.cases = live.cases.filter((e) => e.remote !== "withheld");
+    failures += evalProduct(products, product, live);
   }
 }
 
 console.log();
-if (current.over > 0) {
-  console.log(`FAIL: ${current.over} case(s) exceed their declared maxRank.`);
+if (failures > 0) {
+  console.log(`FAIL: ${failures} problem(s).`);
   process.exit(1);
 }
-console.log("OK: every case is within its declared ceiling.");
+console.log("OK");

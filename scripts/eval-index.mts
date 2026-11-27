@@ -333,6 +333,24 @@ function coverage(): number {
  *   - a removed case is listed in `retired`, with a `why`
  */
 function guard(ref: string): number {
+  // A ref that does not resolve reads as "no files there", and every rule would pass with
+  // nothing to compare. A missing file at a good ref still means "new" (a new product).
+  try {
+    execFileSync(
+      "git",
+      ["rev-parse", "--verify", "--quiet", `${ref}^{commit}`],
+      {
+        cwd: ROOT,
+        stdio: "ignore",
+      },
+    );
+  } catch {
+    console.error(
+      `--guard: "${ref}" is not a commit here. Fetch the target branch first, for example:\n` +
+        `   git fetch https://github.com/browserstack/mcp-server.git main && npm run eval:index:guard -- FETCH_HEAD`,
+    );
+    process.exit(2);
+  }
   const rel = (f: string) => relative(ROOT, f);
   const oldAllow = gitShow(ref, rel(ALLOWLIST_FILE));
   const now = loadSearchFixtures();

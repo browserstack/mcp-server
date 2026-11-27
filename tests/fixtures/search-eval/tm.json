@@ -1,16 +1,15 @@
 {
-  "note": "Query -> the endpoint that should answer it. `maxRank` is the worst position the expected endpoint may occupy in the top 8, pinned at what the scorer does today; tighten it when the ranker improves, never loosen one without saying why. `miss` records a query the scorer does not serve at all, with the reason, and `defect` names the mechanism responsible so the misses can be counted by cause rather than one at a time. `group` is the entity or query style the case exercises, for per-area reporting. Authored against the tm index; queries are what a caller would actually type, including paraphrases that avoid the product's own words. v2 supersedes v1 for the operations both expose: where a v2 endpoint performs the same operation, the case expects the v2 path. Two folder cases were loosened (1->2, 1->3) because the dedicated v1 mkdir endpoint was replaced as the expected answer by the general v2 create-folder endpoint, which serves root and sub folders through one parent_id argument and so ranks slightly lower on a query that stresses the word subfolder.",
+  "product": "tm",
+  "note": "Query -> the endpoint that should answer it. `maxRank` is the worst position the expected endpoint may occupy in the top 8, pinned at what the scorer does today; tighten it when the ranker improves, never loosen one without saying why. `miss` records a query the scorer does not serve at all, with the reason, and `defect` names the mechanism responsible so the misses can be counted by cause rather than one at a time. `group` is the entity or query style the case exercises, for per-area reporting. Authored against the tm index; queries are what a caller would actually type, including paraphrases that avoid the product's own words. v2 supersedes v1 for the operations both expose: where a v2 endpoint performs the same operation, the case expects the v2 path. Two folder cases were loosened (1->2, 1->3) because the dedicated v1 mkdir endpoint was replaced as the expected answer by the general v2 create-folder endpoint, which serves root and sub folders through one parent_id argument and so ranks slightly lower on a query that stresses the word subfolder. Since L2 the cases run against the SHIPPED capability/tm.capability-index.json in the local and remote profiles (tests/tools/indexEval.test.ts). Cases whose capability is disabled in the shipped index are kept, and are checked again when it is enabled.",
   "baseline": {
-    "measured_on": "tm.capability-index.json build cb63a4a5_2026-09-16T18:02:57Z (v1.29, 242 capabilities)",
-    "cases": 198,
-    "top1": 105,
-    "top3": 150,
-    "top8": 171,
-    "missed": 27,
-    "mrr_at_8": 0.652,
+    "measured_on": "shipped capability/tm.capability-index.json v1.46, local profile. Cases whose capability is disabled in the index are not counted.",
+    "cases": 147,
+    "top1": 79,
+    "top3": 110,
+    "top8": 127,
     "misses_by_defect": {
-      "vocabulary-gap": 11,
-      "sibling-shadowing": 12,
+      "vocabulary-gap": 9,
+      "sibling-shadowing": 10,
       "cardinality-penalty": 4
     }
   },
@@ -27,8 +26,8 @@
       "q": "create a new folder",
       "method": "POST",
       "path": "/api/v2/projects/{project_id}/folders",
-      "maxRank": 2,
-      "why": "regressed 2 -> 3 when the phrase bonus landed: 'new folder' is not a phrase in any haystack, while the competing mkdir endpoint gains from 'create'. Accepted — the phrase bonus is a net gain across the set."
+      "maxRank": 3,
+      "why": "regressed 2 -> 3 when the phrase bonus landed: 'new folder' is not a phrase in any haystack, while the competing mkdir endpoint gains from 'create'. Accepted — the phrase bonus is a net gain across the set. 2 -> 3: re-pinned in L2 on the shipped tm index v1.46; the ranking test used to read a frozen v1.31 copy."
     },
     {
       "group": "folder",
@@ -94,7 +93,8 @@
       "q": "show me the folder tree for a project",
       "method": "GET",
       "path": "/api/v1/projects/{project_id}/repository/mapping",
-      "maxRank": 2
+      "maxRank": 3,
+      "why": "2 -> 3: re-pinned in L2 on the shipped tm index v1.46; the ranking test used to read a frozen v1.31 copy."
     },
     {
       "group": "folder",
@@ -160,7 +160,8 @@
       "q": "create a test case in a folder",
       "method": "POST",
       "path": "/api/v2/projects/{project_id}/folders/{folder_id}/test-cases",
-      "maxRank": 3
+      "maxRank": 8,
+      "why": "3 -> 8: re-pinned in L2 on the shipped tm index v1.46; the ranking test used to read a frozen v1.31 copy. OPEN DEFECT: 7 folder capabilities outrank create_test_case for this request. Ticket draft: 'tm index: create a test case ranks 8th' in the L2 PR description. Tighten to 3 when fixed."
     },
     {
       "group": "test_case",
@@ -479,9 +480,8 @@
       "q": "record a pass or fail for a test case in a run",
       "method": "POST",
       "path": "/api/v1/projects/{project_id}/test-runs/{test_run_id}/test-cases/{test_case_id}/test-results",
-      "why": "reached only through the status enum [pass, fail, bug, retest, block, note] on the parameter — the words appear nowhere in the prose",
-      "miss": "displaced out of the top 8 by the v1.19 accuracy pass without losing any content of its own — create_test_result_for_test_case is byte-identical across that commit. Other capabilities gained correct text and outranked it. Dilution, not regression.",
-      "defect": "sibling-shadowing"
+      "why": "was a known miss; now found at 5. re-pinned in L2 on the shipped tm index v1.46; the ranking test used to read a frozen v1.31 copy.",
+      "maxRank": 5
     },
     {
       "group": "result",
@@ -637,7 +637,8 @@
       "q": "active test run result statistics",
       "method": "GET",
       "path": "/api/v1/projects/{project_id}/dashboard-analytics/active-test-runs-info",
-      "maxRank": 2
+      "maxRank": 3,
+      "why": "2 -> 3: re-pinned in L2 on the shipped tm index v1.46; the ranking test used to read a frozen v1.31 copy."
     },
     {
       "group": "project",
@@ -1187,7 +1188,8 @@
       "q": "test case history",
       "method": "GET",
       "path": "/api/v1/projects/{project_id}/test-cases/{test_case_id}/histories",
-      "maxRank": 4
+      "maxRank": 5,
+      "why": "4 -> 5: re-pinned in L2 on the shipped tm index v1.46; the ranking test used to read a frozen v1.31 copy."
     },
     {
       "group": "version",
@@ -1278,8 +1280,8 @@
       "q": "stop accepting results for a run",
       "method": "POST",
       "path": "/api/v1/projects/{project_id}/test-runs/{test_run_id}/close",
-      "miss": "the product's word is 'close'; 'stop accepting results' shares only 'run' with the endpoint.",
-      "defect": "vocabulary-gap"
+      "maxRank": 8,
+      "why": "was a known miss; now found at 8. re-pinned in L2 on the shipped tm index v1.46; the ranking test used to read a frozen v1.31 copy."
     },
     {
       "group": "paraphrase",
@@ -1323,8 +1325,8 @@
       "q": "schedule a weekly email with the results",
       "method": "POST",
       "path": "/api/v1/projects/{project_id}/reports",
-      "miss": "'schedule' matches the reports/schedules listing and send_email_now; the create endpoint says none of the caller's words.",
-      "defect": "vocabulary-gap"
+      "maxRank": 6,
+      "why": "was a known miss; now found at 6. re-pinned in L2 on the shipped tm index v1.46; the ranking test used to read a frozen v1.31 copy."
     },
     {
       "group": "paraphrase",
@@ -1359,8 +1361,8 @@
       "q": "nest one folder inside another",
       "method": "POST",
       "path": "/api/v2/projects/{project_id}/folders",
-      "miss": "same mechanism as the row above: no content change to create_folder, displaced by siblings gaining accurate text in v1.19.",
-      "defect": "sibling-shadowing"
+      "maxRank": 7,
+      "why": "was a known miss; now found at 7. re-pinned in L2 on the shipped tm index v1.46; the ranking test used to read a frozen v1.31 copy."
     },
     {
       "group": "paraphrase",

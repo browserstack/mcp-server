@@ -31,7 +31,9 @@
       "scan trends",
       "accessibility score",
       "issue summary",
-      "issues by severity"
+      "issues by severity",
+      "accessibility scan",
+      "page"
     ],
     "auth": {
       "type": "http",

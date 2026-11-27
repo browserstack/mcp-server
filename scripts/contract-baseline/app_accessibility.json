@@ -1,0 +1,22 @@
+{
+  "empty_2xx": [],
+  "index": "capability/app_accessibility.capability-index.json",
+  "no_2xx": [],
+  "unbacked": {
+    "get_app_accessibility_screen_reader_build": [
+      "meta_data.app_details",
+      "meta_data.created_at",
+      "meta_data.devices",
+      "meta_data.issue_summary",
+      "meta_data.name",
+      "meta_data.project_name"
+    ],
+    "get_app_accessibility_screen_reader_build_overview": [
+      "data.issue_category",
+      "data.issue_summary",
+      "data.report_status",
+      "data.test_health",
+      "data.trend_data"
+    ]
+  }
+}

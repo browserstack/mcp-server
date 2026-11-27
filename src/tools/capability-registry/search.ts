@@ -387,7 +387,7 @@ function parameterText(capability: Capability): string {
  * Path words are the identity haystack. The published `name` is deliberately NOT scored.
  *
  * That is a measured result, not an oversight. tm now names every capability, and adding
- * the name to the ranking was tried three ways against tests/fixtures/search-eval.json,
+ * the name to the ranking was tried three ways against tests/fixtures/search-eval/tm.json,
  * which the pre-names index serves 18/18:
  *
  *   folded into this field, weight 6          17/18

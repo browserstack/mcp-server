@@ -1,0 +1,10 @@
+# L2 regression files: QA reviews a change to what the checks accept.
+# (Raising a maxRank, removing a case, or changing a baseline makes a check easier to pass.)
+#
+# TODO: replace <qa-team> with the QA team handle, then remove the leading "# ".
+# A line with a team that does not exist is ignored by GitHub, so the lines stay
+# commented until the handle is known.
+#
+# scripts/contract-baseline/**                @browserstack/<qa-team>
+# tests/fixtures/search-eval/**               @browserstack/<qa-team>
+# tests/fixtures/product-routing-eval.json    @browserstack/<qa-team>

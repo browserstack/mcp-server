@@ -1,0 +1,42 @@
+{
+  "product": "bug_capture",
+  "note": "Search-eval cases for bug_capture: a typical user question, and the capability that should answer it. Write the question in the words a user would type, not the capability name. See tests/tools/indexEval.test.ts for the fields.",
+  "cases": [
+    {
+      "group": "recording",
+      "q": "what is in the bug recording my teammate sent me",
+      "name": "get_bug_capture_recording",
+      "maxRank": 1
+    },
+    {
+      "group": "recording",
+      "q": "open this toolkit.browserstack.com link and tell me what the bug is",
+      "name": "get_bug_capture_recording",
+      "maxRank": 1
+    },
+    {
+      "group": "console",
+      "q": "show the console output from that bug recording",
+      "name": "list_bug_capture_console_logs",
+      "maxRank": 1
+    },
+    {
+      "group": "errors",
+      "q": "which javascript errors were thrown in the recorded bug",
+      "name": "list_bug_capture_errors",
+      "maxRank": 1
+    },
+    {
+      "group": "network",
+      "q": "which API calls failed while the bug was recorded",
+      "name": "list_bug_capture_network_requests",
+      "maxRank": 1
+    },
+    {
+      "group": "network",
+      "q": "show the network requests in the bug capture",
+      "name": "list_bug_capture_network_requests",
+      "maxRank": 1
+    }
+  ]
+}

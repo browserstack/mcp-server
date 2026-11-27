@@ -1,0 +1,80 @@
+{
+  "empty_2xx": [],
+  "index": "capability/tra.capability-index.json",
+  "no_2xx": [],
+  "unbacked": {
+    "get_build_attempt_run_stats": [
+      "attempts",
+      "commentCount",
+      "count",
+      "summary"
+    ],
+    "get_build_name_status_aggregation": [
+      "count",
+      "failed",
+      "passed",
+      "skipped",
+      "unknown"
+    ],
+    "get_build_non_sdk_test_counts": [
+      "missing_failure_reason_count",
+      "unmarked_test_count",
+      "untitled_test_count"
+    ],
+    "get_dashboard_view_widget_data": [
+      "(widget-type-specific)"
+    ],
+    "get_org_dashboard_widget_data": [
+      "(widget-type-specific)"
+    ],
+    "get_project_non_sdk_build_count": [
+      "non_sdk_build_count",
+      "project_id"
+    ],
+    "get_suite_health_test_platform_breakdown": [
+      "[]"
+    ],
+    "get_test_run_app_logs_raw": [
+      "data",
+      "status"
+    ],
+    "get_test_run_baseline": [
+      "<test_run_id> (map key)",
+      "testCode",
+      "testMetadata"
+    ],
+    "get_test_run_hooks": [
+      "hooksCode",
+      "testCode",
+      "testMetadata"
+    ],
+    "get_test_runs_history_details": [
+      "buildId",
+      "creationType",
+      "duration",
+      "flakyReason",
+      "flakySetting",
+      "isAlwaysFailing",
+      "isFlaky",
+      "isNewlyFailed",
+      "isPerformanceAnomaly",
+      "issueType",
+      "logs",
+      "serialId",
+      "status",
+      "tags",
+      "workflowStatus",
+      "workflowStatusEditedAt",
+      "workflowStatusEditedBy"
+    ],
+    "list_test_runs_sharing_error": [
+      "<test_run_id> (map key)",
+      "testCode",
+      "testMetadata"
+    ],
+    "list_widget_custom_field_filters": [
+      "data",
+      "info"
+    ]
+  }
+}

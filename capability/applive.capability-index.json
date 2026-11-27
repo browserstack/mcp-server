@@ -16,7 +16,8 @@
       "already uploaded",
       "app store",
       "team apps",
-      "custom id"
+      "custom id",
+      "team"
     ],
     "base_url": "https://api-cloud.browserstack.com",
     "auth": {

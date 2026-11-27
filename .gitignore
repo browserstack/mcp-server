@@ -21,3 +21,9 @@ __pycache__/
 
 # macOS folder metadata
 .DS_Store
+
+# Test and coverage reports (vitest --coverage, junit)
+reports/
+
+# Stryker mutation testing sandbox (npm run test:mutation)
+.stryker-tmp/

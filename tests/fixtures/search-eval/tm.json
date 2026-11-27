@@ -161,7 +161,7 @@
       "method": "POST",
       "path": "/api/v2/projects/{project_id}/folders/{folder_id}/test-cases",
       "maxRank": 8,
-      "why": "3 -> 8: re-pinned in L2 on the shipped tm index v1.46; the ranking test used to read a frozen v1.31 copy."
+      "why": "3 -> 8: re-pinned in L2 on the shipped tm index v1.46; the ranking test used to read a frozen v1.31 copy. OPEN DEFECT: 7 folder capabilities outrank create_test_case for this request. Ticket draft: 'tm index: create a test case ranks 8th' in the L2 PR description. Tighten to 3 when fixed."
     },
     {
       "group": "test_case",

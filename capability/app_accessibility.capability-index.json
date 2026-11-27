@@ -17,7 +17,9 @@
       "compare builds",
       "screen reader automation",
       "talkback",
-      "voiceover"
+      "voiceover",
+      "accessibility scan",
+      "screen"
     ],
     "auth": { "type": "http", "scheme": "basic" },
     "base_url": "https://api-app-accessibility.browserstack.com",

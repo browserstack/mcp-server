@@ -49,7 +49,8 @@
    "upload app for device",
    "upload ipa",
    "volume",
-   "webdriver"
+   "webdriver",
+   "screen"
   ],
   "base_url": "https://hub-cloud.browserstack.com",
   "auth": {

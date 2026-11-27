@@ -134,6 +134,19 @@
       }
     },
     {
+      "q": "list projects in test management",
+      "expect": {
+        "settled": "tm"
+      },
+      "why": "the product name settles it"
+    },
+    {
+      "q": "run an accessibility scan on my website",
+      "expect": {
+        "settled": "web_accessibility"
+      }
+    },
+    {
       "q": "show my test runs",
       "expect": {
         "clash": [
@@ -219,6 +232,16 @@
       "why": "'bug' alone is a word of tm too (linked defects): the AI must ask"
     },
     {
+      "q": "record my screen",
+      "expect": {
+        "clash": [
+          "app_accessibility",
+          "mobiledevicecontrol"
+        ]
+      },
+      "why": "'screen' alone does not say if it is an accessibility check"
+    },
+    {
       "q": "show me the summary",
       "expect": {
         "unknown": true
@@ -234,29 +257,50 @@
       "q": "run an accessibility scan on my android app",
       "expect": {
         "settled": "app_accessibility"
-      },
-      "known": "routes to tra today"
+      }
     },
     {
       "q": "show accessibility issues on my login page",
       "expect": {
         "settled": "web_accessibility"
       },
-      "known": "routes to devicecontrol today"
+      "why": "'page' is shared by devicecontrol and web_accessibility; 'accessibility' picks web_accessibility"
+    },
+    {
+      "q": "accessibility issues on the checkout page",
+      "expect": {
+        "settled": "web_accessibility"
+      }
+    },
+    {
+      "q": "accessibility issues on my login screen",
+      "expect": {
+        "settled": "app_accessibility"
+      },
+      "why": "'screen' is shared by mobiledevicecontrol and app_accessibility; 'accessibility' picks app_accessibility"
+    },
+    {
+      "q": "take a screenshot of the login page",
+      "expect": {
+        "settled": "devicecontrol"
+      },
+      "why": "'page' without 'accessibility' stays a browser task"
     },
     {
       "q": "list the apps my team uploaded",
       "expect": {
-        "settled": "applive"
+        "clash": [
+          "applive",
+          "tm"
+        ]
       },
-      "known": "routes to tm today"
+      "why": "'team' and 'app' are words of both applive and tm (a test run records the app version), so the AI must ask. Before L2 it settled on tm without asking."
     },
     {
-      "q": "open my app in app live",
+      "q": "show the apps I uploaded to app live",
       "expect": {
         "settled": "applive"
-      },
-      "known": "clash [app_accessibility, applive] today, although the user named App Live"
+      }
     }
   ]
 }

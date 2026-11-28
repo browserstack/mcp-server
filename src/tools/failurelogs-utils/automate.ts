@@ -9,13 +9,15 @@ import {
 } from "./utils.js";
 import { BrowserStackConfig } from "../../lib/types.js";
 import { apiClient } from "../../lib/apiClient.js";
+import { getRegionalHost } from "../../lib/regional-host.js";
+import { encodePathSegment } from "../../lib/path-segment.js";
 
 // NETWORK LOGS
 export async function retrieveNetworkFailures(
   sessionId: string,
   config: BrowserStackConfig,
 ): Promise<string> {
-  const url = `https://api.browserstack.com/automate/sessions/${sessionId}/networklogs`;
+  const url = `${getRegionalHost("automateApi")}/automate/sessions/${encodePathSegment(sessionId, "sessionId")}/networklogs`;
   const authString = getBrowserStackAuth(config);
   const auth = Buffer.from(authString).toString("base64");
 
@@ -78,7 +80,7 @@ export async function retrieveSessionFailures(
   sessionId: string,
   config: BrowserStackConfig,
 ): Promise<string> {
-  const url = `https://api.browserstack.com/automate/sessions/${sessionId}/logs`;
+  const url = `${getRegionalHost("automateApi")}/automate/sessions/${encodePathSegment(sessionId, "sessionId")}/logs`;
   const authString = getBrowserStackAuth(config);
   const auth = Buffer.from(authString).toString("base64");
 
@@ -110,7 +112,7 @@ export async function retrieveConsoleFailures(
   sessionId: string,
   config: BrowserStackConfig,
 ): Promise<string> {
-  const url = `https://api.browserstack.com/automate/sessions/${sessionId}/consolelogs`;
+  const url = `${getRegionalHost("automateApi")}/automate/sessions/${encodePathSegment(sessionId, "sessionId")}/consolelogs`;
   const authString = getBrowserStackAuth(config);
   const auth = Buffer.from(authString).toString("base64");
 

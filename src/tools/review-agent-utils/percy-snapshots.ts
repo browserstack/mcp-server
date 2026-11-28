@@ -1,6 +1,8 @@
 import { getBrowserStackAuth } from "../../lib/get-auth.js";
 import { BrowserStackConfig } from "../../lib/types.js";
 import { sanitizeUrlParam } from "../../lib/utils.js";
+import { CallerError } from "../../lib/error.js";
+import { trackedFetch } from "../../lib/upstream-status.js";
 
 // Utility for fetching only the IDs of changed Percy snapshots for a given build.
 export async function getChangedPercySnapshotIds(
@@ -10,7 +12,7 @@ export async function getChangedPercySnapshotIds(
   browserIds: string[],
 ): Promise<string[]> {
   if (!buildId || !orgId) {
-    throw new Error(
+    throw new CallerError(
       "Failed to fetch AI Summary: Missing build ID or organization ID",
     );
   }
@@ -27,7 +29,7 @@ export async function getChangedPercySnapshotIds(
 
   const authString = getBrowserStackAuth(config);
   const auth = Buffer.from(authString).toString("base64");
-  const response = await fetch(urlStr, {
+  const response = await trackedFetch(urlStr, {
     headers: {
       Authorization: `Basic ${auth}`,
       "Content-Type": "application/json",

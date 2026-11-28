@@ -44,6 +44,8 @@ import {
   RUN_APP_AUTOMATE_DESCRIPTION,
   RUN_APP_AUTOMATE_SCHEMA,
 } from "./appautomate-utils/native-execution/constants.js";
+import { getRegionalHost } from "../lib/regional-host.js";
+import { CallerError } from "../lib/error.js";
 
 /**
  * Launches an app on a selected BrowserStack device and takes a screenshot.
@@ -77,7 +79,9 @@ async function takeAppScreenshot(args: {
     );
 
     if (!platformData) {
-      throw new Error(`Platform ${desiredPlatform} not found in device cache.`);
+      throw new CallerError(
+        `Platform ${desiredPlatform} not found in device cache.`,
+      );
     }
 
     const matchingDevices = findMatchingDevice(
@@ -96,7 +100,7 @@ async function takeAppScreenshot(args: {
     );
 
     if (!selectedDevice) {
-      throw new Error(
+      throw new CallerError(
         `Device "${desiredPhone}" with version ${desiredPlatformVersion} not found.`,
       );
     }
@@ -109,7 +113,7 @@ async function takeAppScreenshot(args: {
       logger.info(`Using provided BrowserStack app URL: ${app_url}`);
     } else {
       if (!appPath) {
-        throw new Error(
+        throw new CallerError(
           "appPath is required when browserstackAppUrl is not provided",
         );
       }
@@ -134,7 +138,7 @@ async function takeAppScreenshot(args: {
     try {
       driver = await remote({
         protocol: "https",
-        hostname: "hub.browserstack.com",
+        hostname: getRegionalHost("appAutomateHub"),
         port: 443,
         path: "/wd/hub",
         capabilities,
@@ -190,12 +194,16 @@ function runStartedMessage(
   buildId: string,
   accessibility: boolean,
   devices: string,
+  screenReader = false,
 ): string {
   const link = `https://app-automate.browserstack.com/builds/${buildId}`;
   const a11y = accessibility
     ? `\n\n♿ App Accessibility checks are on. ${NATIVE_ACCESSIBILITY_SETUP[framework] ?? ""}\nWhen the build finishes (typically 10–20 minutes), read the issues with fetchAccessibilityIssues, reportUrl: ${link} — it maps the build to its accessibility report and waits while the report is still processing.`
     : "";
-  return `✅ ${framework} run started successfully!\n\n🔧 Build ID: ${buildId}\n🔗 View your build: ${link}${devices}${a11y}`;
+  const sr = screenReader
+    ? `\n\n🔊 Screen Reader Automation is on. Its report is listed apart from ordinary builds: read it with list_app_accessibility_screen_reader_builds (product app_accessibility) under the build's project. It needs Screen Reader Automation on the account's plan; without it the build runs with the accessibility checks only.`
+    : "";
+  return `✅ ${framework} run started successfully!\n\n🔧 Build ID: ${buildId}\n🔗 View your build: ${link}${devices}${a11y}${sr}`;
 }
 
 /**
@@ -235,18 +243,34 @@ async function runAppTestsOnBrowserStack(
     project: string;
     detectedAutomationFramework: string;
     accessibility?: boolean;
+    screenReader?: boolean;
+    screenReaderLinearNavigation?: boolean;
   },
   config: BrowserStackConfig,
 ): Promise<CallToolResult> {
-  const accessibility = args.accessibility === true;
+  // Linear navigation is a screen reader option, so asking for it turns the screen reader on.
+  const screenReader =
+    args.screenReader === true || args.screenReaderLinearNavigation === true;
+  // Screen Reader Automation runs inside the accessibility run, so it turns the checks on.
+  const accessibility = args.accessibility === true || screenReader;
+  const nativeOptions = {
+    accessibility,
+    ...(screenReader
+      ? {
+          screenReader: {
+            linearNavigation: args.screenReaderLinearNavigation === true,
+          },
+        }
+      : {}),
+  };
   // Validate that either paths or URLs are provided for both app and test suite
   if (!args.browserstackAppUrl && !args.appPath) {
-    throw new Error(
+    throw new CallerError(
       "appPath is required when browserstackAppUrl is not provided",
     );
   }
   if (!args.browserstackTestSuiteUrl && !args.testSuitePath) {
-    throw new Error(
+    throw new CallerError(
       "testSuitePath is required when browserstackTestSuiteUrl is not provided",
     );
   }
@@ -294,7 +318,7 @@ async function runAppTestsOnBrowserStack(
           deviceStrings,
           args.project,
           config,
-          { accessibility },
+          nativeOptions,
         );
 
         return {
@@ -306,6 +330,7 @@ async function runAppTestsOnBrowserStack(
                 build_id,
                 accessibility,
                 devices,
+                screenReader,
               ),
             },
           ],
@@ -346,7 +371,7 @@ async function runAppTestsOnBrowserStack(
           deviceStrings,
           args.project,
           config,
-          { accessibility },
+          nativeOptions,
         );
         return {
           content: [
@@ -357,6 +382,7 @@ async function runAppTestsOnBrowserStack(
                 build_id,
                 accessibility,
                 devices,
+                screenReader,
               ),
             },
           ],
@@ -367,7 +393,7 @@ async function runAppTestsOnBrowserStack(
       }
     }
     default:
-      throw new Error(
+      throw new CallerError(
         `Unsupported automation framework: ${args.detectedAutomationFramework}. If you need support for this framework, please open an issue at Github`,
       );
   }

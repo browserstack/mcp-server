@@ -237,6 +237,10 @@ function pathSegment(value: unknown, name: string): string {
  * string ids that carry no type constraint worth the name.
  */
 export function coerce(value: unknown, param: WireParam): unknown {
+  // Only where the capability opts in with `accepts_null`. OpenAPI's `nullable` is NOT read here:
+  // other indexes (tm's folder_id) already carry it as documentation, and honouring it would
+  // change what those products send. Elsewhere null stays refused by its type.
+  if (value === null && param.accepts_null) return null;
   const coerced = coerceType(value, param);
   checkConstraints(coerced, param);
   checkFields(coerced, param);
@@ -245,7 +249,7 @@ export function coerce(value: unknown, param: WireParam): unknown {
 
 function coerceType(
   value: unknown,
-  param: { name: string; type: string; values?: unknown[] },
+  param: Pick<WireParam, "name" | "type" | "values" | "accept" | "max_bytes">,
   label = param.name,
 ): unknown {
   const expected = param.type;
@@ -277,8 +281,8 @@ function coerceType(
       throw new InvocationError(`'${label}' must be a path to a file`);
     try {
       return validateUploadPath(given, {
-        allowedExtensions: APP_BINARY_EXTENSIONS,
-        maxSizeBytes: MAX_APP_UPLOAD_BYTES,
+        allowedExtensions: param.accept ?? APP_BINARY_EXTENSIONS,
+        maxSizeBytes: param.max_bytes ?? MAX_APP_UPLOAD_BYTES,
         allowedBaseDir: appConfig.UPLOAD_BASE_DIR,
       });
     } catch (error) {
@@ -297,7 +301,14 @@ function coerceType(
       throw new InvocationError(`'${label}' must be an object`);
     }
     if (expected === "array" && !Array.isArray(value)) {
-      throw new InvocationError(`'${label}' must be a list`);
+      // A SINGLE ITEM IS A LIST OF ONE. `args: "bottom"` and `args: {appId: …}` were
+      // refused as "must be a list" five times a week by agents who had the value right
+      // and the brackets wrong, and the brackets carry no information the server lacks.
+      // `null` and `undefined` stay refused: wrapping them would send `[null]`, which is a
+      // list with the wrong content rather than a list of one.
+      if (value === null || value === undefined)
+        throw new InvocationError(`'${label}' must be a list`);
+      return [value];
     }
     return value;
   }
@@ -396,6 +407,87 @@ function coerceType(
   return text;
 }
 
+/**
+ * The one value a required parameter may take, when the contract allows exactly one.
+ *
+ * THE SERVER SUPPLIES IT. Fourteen device-control capabilities are `execute/sync` with
+ * `script` pinned to a single command — `mobile: activateApp`, a 300-character scroll
+ * snippet — and the caller's only decision is `args`. Asking the caller to transcribe the
+ * script anyway only produces refusals: left out, paraphrased, or copied with one
+ * semicolon wrong. None of those calls carry information the server does not have.
+ *
+ * So a fixed parameter is filled when absent and OVERWRITTEN when present: the published
+ * value is the only one that can run, and a refusal that quotes the whole snippet back is
+ * just a slower way of sending it. `describeCapability` withholds these parameters
+ * entirely, which is why a caller never knows to send them (see `withoutFixed`).
+ *
+ * Optional single-value parameters are not fixed. `real_mobile: true` is a toggle whose
+ * presence is the request; filling it would turn every desktop session into a device one.
+ */
+export function fixedValue(param: WireParam): unknown {
+  return param.required && param.values?.length === 1
+    ? param.values[0]
+    : undefined;
+}
+
+function isFixed(param: WireParam): boolean {
+  return fixedValue(param) !== undefined;
+}
+
+/**
+ * The fixed parameters the caller sent a DIFFERENT value for, which `bind` overwrote.
+ *
+ * Overwriting is right — the published value is the only one that can run — but doing it
+ * silently is not: an agent that wrote its own `script` and got a 200 believes its script
+ * ran. The invoke answer names what was replaced so the agent knows which version did.
+ */
+export function replacedFixed(
+  capability: Capability,
+  given: GroupedArguments,
+): string[] {
+  const args = normalise(capability, given);
+  const replaced: string[] = [];
+  for (const { group, declared } of GROUPS) {
+    const sent = args[group];
+    if (typeof sent !== "object" || sent === null || Array.isArray(sent))
+      continue;
+    for (const param of (capability[declared] as WireParam[] | undefined) ||
+      []) {
+      const fixed = fixedValue(param);
+      if (fixed === undefined || !(param.name in sent)) continue;
+      if (JSON.stringify(sent[param.name]) !== JSON.stringify(fixed))
+        replaced.push(param.name);
+    }
+  }
+  return replaced;
+}
+
+/**
+ * The capability's parameter groups with every fixed parameter removed, for the contract a
+ * caller reads. Every group is set, so spreading the result over the capability replaces
+ * each one; a group left empty is set undefined rather than published as `[]`.
+ */
+export function withoutFixed(
+  capability: Capability,
+): Pick<Capability, "path_params" | "query" | "body"> {
+  const view: Pick<Capability, "path_params" | "query" | "body"> = {};
+  for (const { group, declared } of GROUPS) {
+    const params = capability[declared] as WireParam[] | undefined;
+    const shown = (params ?? [])
+      .filter((param) => !isFixed(param))
+      // Aliases are forgiveness, not vocabulary: the contract publishes one name.
+      // `form_name` is the multipart field a file travels under; the caller still
+      // supplies the parameter by `name`.
+      .map(({ aliases, form_name, ...param }) => {
+        void aliases;
+        void form_name;
+        return param;
+      });
+    view[group] = shown.length > 0 ? shown : undefined;
+  }
+  return view;
+}
+
 /** Place a value at a JSON-pointer-ish path, creating the objects on the way. */
 function place(
   root: Record<string, unknown>,
@@ -416,6 +508,30 @@ function place(
 
 const MAP_KEY = /^[A-Za-z0-9][\w.-]*$/;
 
+/** A param's `json_path` as segments, or none when it declares no path. */
+function pathSegments(param: WireParam): string[] {
+  return (param.json_path ?? "").split("/").filter((segment) => segment !== "");
+}
+
+/**
+ * The params whose wire key is `wireName` but which are published under another name —
+ * `source_folder_id` for `/folder_id`, `required_custom_fields` for
+ * `/required/custom_fields`. Used only to word a refusal.
+ */
+function renamedTo(params: WireParam[], wireName: string): string[] {
+  return params
+    .filter((param) => {
+      const segments = pathSegments(param);
+      return (
+        segments.length > 0 &&
+        segments[segments.length - 1] === wireName &&
+        param.name !== wireName
+      );
+    })
+    .map((param) => param.name)
+    .sort();
+}
+
 function keyedParam(
   group: keyof GroupedArguments,
   params: WireParam[],
@@ -431,26 +547,143 @@ const GROUPS: { group: keyof GroupedArguments; declared: keyof Capability }[] =
     { group: "body", declared: "body" },
   ];
 
-export function bind(
+/** `sessionId`, `session-id` and `Session_ID` all become `session_id`. */
+function snake(name: string): string {
+  return name
+    .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
+    .replace(/([A-Z]+)([A-Z][a-z])/g, "$1_$2")
+    .replace(/[-\s]+/g, "_")
+    .toLowerCase();
+}
+
+/**
+ * The caller's arguments with every name resolved to the one the contract declares, in
+ * the group that declares it.
+ *
+ * Calls are refused over the name alone more often than anything else: `sessionId`
+ * for `session_id`, `elementId` for `element_id`, a path parameter such as `name` or
+ * `session_id` sent in the body, `selector` and `strategy` for `value` and `using`. None
+ * of those was ambiguous — each resolved to exactly one declared parameter — and the
+ * refusal quoted that parameter back, so the retry was the same call with the name fixed.
+ * This does the fix.
+ *
+ * Three rules, applied to each name the caller sent that its group does not declare:
+ *
+ *  1. Its snake_case form is declared in the same group: it is renamed.
+ *  2. It is a declared alias in the same group: it is renamed.
+ *  3. Either of those holds in ANOTHER group: it is moved there.
+ *
+ * A name that resolves to a parameter the caller ALSO sent under its proper name is left
+ * alone, so the unknown-argument refusal below reports the duplicate rather than one
+ * value silently winning. A body that declares a map-keyed parameter is left alone
+ * entirely: its unknown names are keys, not misspellings.
+ */
+export function normalise(
   capability: Capability,
   args: GroupedArguments,
+): GroupedArguments {
+  const declared = new Map<
+    keyof GroupedArguments,
+    { byName: Map<string, WireParam>; bySpelling: Map<string, string> }
+  >();
+  for (const { group, declared: key } of GROUPS) {
+    const params = (capability[key] as WireParam[] | undefined) || [];
+    const byName = new Map(params.map((param) => [param.name, param]));
+    const bySpelling = new Map<string, string>();
+    for (const param of params) {
+      bySpelling.set(snake(param.name), param.name);
+      for (const alias of param.aliases ?? [])
+        bySpelling.set(alias, param.name);
+    }
+    declared.set(group, { byName, bySpelling });
+  }
+  const resolve = (
+    name: string,
+  ): { group: keyof GroupedArguments; name: string } | undefined => {
+    for (const { group } of GROUPS) {
+      const here = declared.get(group)!;
+      if (here.byName.has(name)) return { group, name };
+    }
+    for (const { group } of GROUPS) {
+      const here = declared.get(group)!;
+      const proper =
+        here.bySpelling.get(snake(name)) ?? here.bySpelling.get(name);
+      if (proper) return { group, name: proper };
+    }
+    return undefined;
+  };
+
+  const out: Record<keyof GroupedArguments, Record<string, unknown>> = {
+    path_params: { ...(args.path_params ?? {}) },
+    query: { ...(args.query ?? {}) },
+    body: { ...(args.body ?? {}) },
+  };
+  for (const { group, declared: key } of GROUPS) {
+    const sent = args[group];
+    if (typeof sent !== "object" || sent === null || Array.isArray(sent))
+      continue;
+    if (keyedParam(group, (capability[key] as WireParam[] | undefined) || []))
+      continue;
+    for (const [name, value] of Object.entries(sent)) {
+      if (declared.get(group)!.byName.has(name)) continue;
+      const target = resolve(name);
+      if (!target) continue;
+      if (target.group === group && target.name === name) continue;
+      // Checked against what is being built, not what was sent: a second spelling of a
+      // parameter that an earlier one already moved into place must not overwrite it.
+      if (name in out[target.group] && target.group !== group) {
+        // Sent under its own name in the right place as well: the move would collide.
+        continue;
+      }
+      if (target.name in out[target.group]) continue;
+      delete out[group][name];
+      out[target.group][target.name] = value;
+    }
+  }
+  return {
+    ...(args.path_params !== undefined || Object.keys(out.path_params).length
+      ? { path_params: out.path_params }
+      : {}),
+    ...(args.query !== undefined || Object.keys(out.query).length
+      ? { query: out.query }
+      : {}),
+    ...(args.body !== undefined || Object.keys(out.body).length
+      ? { body: out.body }
+      : {}),
+  };
+}
+
+export function bind(
+  capability: Capability,
+  given_: GroupedArguments,
 ): BoundRequest {
+  const args = normalise(capability, given_);
   let path = capability.path;
   const query: Record<string, unknown> = {};
   const body: Record<string, unknown> = {};
+  // What each group holds once the server has added its own fixed values: the loop binds
+  // from this, and the required check below reads it, so a fixed parameter is never
+  // reported missing and never has to be sent.
+  const given: Record<keyof GroupedArguments, Record<string, unknown>> = {
+    path_params: {},
+    query: {},
+    body: {},
+  };
 
   for (const { group, declared } of GROUPS) {
-    const supplied = args[group] || {};
-    if (
-      typeof supplied !== "object" ||
-      supplied === null ||
-      Array.isArray(supplied)
-    ) {
+    const sent = args[group] || {};
+    if (typeof sent !== "object" || sent === null || Array.isArray(sent)) {
       throw new InvocationError(`${group} must be an object of name -> value`);
     }
     const params = (capability[declared] as WireParam[] | undefined) || [];
     const byName = new Map(params.map((param) => [param.name, param]));
     const keyed = keyedParam(group, params);
+    const supplied: Record<string, unknown> = { ...sent };
+    for (const param of params) {
+      const fixed = fixedValue(param);
+      if (fixed !== undefined) supplied[param.name] = fixed;
+    }
+    given[group] = supplied;
 
     // Unknown arguments are an error rather than being dropped: silently ignoring a
     // misspelled filter would return a larger result set that looks like a correct answer.
@@ -471,17 +704,27 @@ export function bind(
       // 25 tm capabilities carried a line describing the WIRE format to a caller who never
       // writes the wire. Those lines are being corrected, but an agent working from an
       // older artifact, or reasoning from the Rails convention, lands here either way.
+      // Only a path with a field below it has a wrapper: `/folder_id` is a top-level
+      // field sent under another name, not an object this layer builds.
       const wrappers = new Set(
         params
-          .map((param) => (param as { json_path?: string }).json_path)
-          .filter((path): path is string => Boolean(path))
-          .map((path) => path.replace(/^\//, "").split("/")[0])
-          .filter((segment) => segment && !byName.has(segment)),
+          .map((param) => pathSegments(param))
+          .filter((segments) => segments.length >= 2)
+          .map((segments) => segments[0])
+          .filter((segment) => !byName.has(segment)),
       );
       const sentAWrapper = unknown.filter((name) => wrappers.has(name));
+      // A key that is a field's WIRE name: the caller is on an older contract, or read the
+      // API. Name the parameter to send instead.
+      const renamed = unknown
+        .map((name) => [name, renamedTo(params, name)] as const)
+        .filter(([, to]) => to.length > 0);
       throw new InvocationError(
         `unknown ${group}: ${unknown.sort().join(", ")}. accepted: ` +
           `${[...byName.keys()].sort().join(", ") || "none"}` +
+          renamed
+            .map(([name, to]) => `. Send ${name} as ${to.join(" or ")}`)
+            .join("") +
           (sentAWrapper.length > 0
             ? `. ${sentAWrapper.sort().join(" and ")} ` +
               `${sentAWrapper.length > 1 ? "are wrappers" : "is a wrapper"} this ` +
@@ -498,7 +741,23 @@ export function bind(
           `'${name}' is not a usable ${keyed.name} key: use the id exactly as a read returned it`,
         );
       }
-      const value = coerce(raw, param);
+      let value: unknown;
+      try {
+        value = coerce(raw, param);
+      } catch (error) {
+        // The value may belong to a different field that the API spells the same way:
+        // search's `custom_fields` filter is an object, while the column list, also
+        // `custom_fields` on the wire, is published as `required_custom_fields`.
+        const others = renamedTo(params, param.name).filter(
+          (other) => other !== param.name,
+        );
+        if (!(error instanceof InvocationError) || others.length === 0)
+          throw error;
+        throw new InvocationError(
+          `${error.message}. If you meant the other field the API calls ` +
+            `${param.name}, send it as ${others.join(" or ")}`,
+        );
+      }
       if (group === "path_params") {
         // Encode with nothing exempt: a `/` inside a path value would otherwise rewrite the
         // route. Schema checking already stops this for integer ids; this covers strings.
@@ -527,7 +786,7 @@ export function bind(
   const missing: string[] = [];
   for (const { group, declared } of GROUPS) {
     if (group === "query") continue;
-    const supplied = args[group] || {};
+    const supplied = given[group];
     const params = (capability[declared] as WireParam[] | undefined) || [];
     const keyed = keyedParam(group, params);
     const declaredNames = new Set(params.map((param) => param.name));

@@ -86,6 +86,17 @@ export interface WireParam extends WireConstraints {
   values?: unknown[];
   example?: unknown;
   description?: string;
+  /**
+   * Other names a caller may send for this parameter, taken as this one.
+   *
+   * FORGIVENESS, NOT VOCABULARY: the contract still publishes one name, and these are
+   * withheld from it. They exist for the names an agent reaches for from the wider
+   * ecosystem — `selector` and `strategy` for WebDriver's `value` and `using`, `attribute`
+   * for the attribute's `name` — where a refusal teaches nothing the caller could not
+   * have been forgiven. Spelling variants (camelCase, kebab-case) need no alias; bind
+   * folds those itself.
+   */
+  aliases?: string[];
   /** Field names/types one level inside an array item or nested object. */
   fields?: WireField[];
   /**
@@ -95,6 +106,24 @@ export interface WireParam extends WireConstraints {
    * would assume.
    */
   json_path?: string;
+  /** `file` parameters only. Absent means app builds and the app-build size limit. */
+  accept?: string[];
+  max_bytes?: number;
+  /** `file` parameters only: the multipart field name, when it differs from `name`. */
+  form_name?: string;
+  /**
+   * The parameter takes an explicit JSON `null`, and null MEANS something to the API.
+   *
+   * A typed parameter otherwise refuses null: a boolean coerces through its text, and
+   * "null" is neither true nor false. web_accessibility's needs-review `confirmed` is the
+   * case that forced this — `confirmed: null` with `hidden: false` is how the server puts a
+   * confirmed issue back to pending, so refusing null left that undo with no route at all.
+   *
+   * Deliberately a separate key from OpenAPI's `nullable`, which bind ignores: tm already
+   * marks some fields `nullable` as documentation, and an opt-in key keeps their wire
+   * behaviour unchanged until a product chooses it.
+   */
+  accepts_null?: true;
 }
 
 /**
@@ -198,6 +227,19 @@ export interface Capability {
    * return a 404 that reads like the caller's mistake.
    */
   host?: string;
+  /**
+   * How THIS capability signs in, when it differs from the product's `auth`.
+   *
+   * The same reason as `host`: one product can be served by surfaces that accept different
+   * credentials. Web Accessibility's public API takes Basic; its dashboard routes never read
+   * Basic and admit only an `ai_agent`-scoped Bearer. Publishing the dashboard as a second
+   * product made the router ask users to choose between "web_accessibility" and
+   * "web_accessibility_dashboard", a split no user recognises, and a search in one could
+   * not find the other's capabilities ("there is no re-run tool").
+   *
+   * Unset means the product's own `auth`, so every existing index is unaffected.
+   */
+  auth?: AuthScheme;
   mode: Mode;
   entity: string;
   path_params?: WireParam[];
@@ -300,6 +342,14 @@ export interface Capability {
      * Siblings of the array are preserved, so an envelope survives the narrowing.
      */
     path?: string;
+    /**
+     * The thing at `path` is ONE RECORD, not rows. Only `fields` applies — a session
+     * record has no rows to filter, deduplicate or cap — and `where`, `distinct` and
+     * `limit` are refused before anything is sent. Declared because an agent that wants
+     * `browser_url` out of a 30-field session record was reaching for `select` and being
+     * told the capability does not support it.
+     */
+    record?: true;
     /** One line for the contract: why this is here rather than on the wire. */
     note?: string;
   };
@@ -451,6 +501,38 @@ export interface AuthScheme {
   scopes?: string[];
 }
 
+/**
+ * One of the product's BrowserStack AI agents: a multi-step workflow that runs inside
+ * BrowserStack, reached through `askBrowserStackAI` and never through `invokeCapability`.
+ *
+ * WHY THE INDEX CARRIES THEM. Without this, a client asked to "generate test cases from
+ * this PRD" finds `create_test_case` here, writes the cases itself and saves them one by
+ * one — skipping the agent's coverage and priority rules, its review step and its
+ * AI-generated attribution. Listing the agent beside the capabilities is what lets the
+ * client see that the task already has an owner.
+ *
+ * NO REQUEST FIELD NAMES THE AGENT. BrowserStack AI takes a task and a product and routes on
+ * the task's wording against each agent's own trigger, the same as the in-product chat. So
+ * nothing here is sent anywhere: `name` is for telemetry and humans, and the client's job is
+ * to pass the user's request through verbatim.
+ */
+export interface AgentDoc {
+  /** The agent's id, e.g. `tm-generate-test-cases`. */
+  name: string;
+  /** Human title, e.g. "Test case generation". */
+  title?: string;
+  /** What it does, in product language. Public: this file ships to npm. */
+  description: string;
+  /**
+   * Words of which at least one must appear for a request to match. They are what tells
+   * "generate test cases from this PRD" (the agent) from "create a test case named Login"
+   * (one CRUD call) — the intents alone share too many words to separate the two.
+   */
+  signals: string[];
+  /** Example requests, scored against the caller's words. */
+  intents: string[];
+}
+
 export interface ProductIndex {
   /**
    * The product's name as a person would say it — "Mobile Device Control", not the key.
@@ -461,6 +543,11 @@ export interface ProductIndex {
    */
   title?: string;
   summary: string;
+  /**
+   * BrowserStack AI agents for this product. Absent means none, and they are only shown
+   * when `askBrowserStackAI` can reach the product — see `agents.ts`.
+   */
+  agents?: AgentDoc[];
   /**
    * Words that route to this product but are not the name of anything in it.
    *

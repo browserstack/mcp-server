@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { CapabilityRegistry } from "../../src/tools/capability-registry/index-loader.js";
 import { addCapabilityRegistryTools } from "../../src/tools/capability-registry/register.js";
+import { readAnswer } from "../../src/tools/capability-registry/answer.js";
 
 // `select` reaching the response, through the registered tool rather than the module it
 // calls. The unit tests next door pin the narrowing itself; these pin the wiring — that a
@@ -94,8 +95,8 @@ function tools(body: unknown, status = 200) {
 }
 
 const call = async (handlers: Record<string, any>, input: unknown) =>
-  JSON.parse(
-    (await handlers.invokeCapability(input, {} as never)).content[0].text,
+  readAnswer(
+    (await handlers.invokeCapability(input, {} as never)),
   );
 
 describe("invokeCapability applies a selection", () => {
@@ -217,13 +218,13 @@ describe("invokeCapability applies a selection", () => {
 describe("the contract advertises it", () => {
   it("describeCapability publishes `narrowable`, which is the caller's business", async () => {
     const handlers = tools(ROWS);
-    const doc = JSON.parse(
+    const doc = readAnswer(
       (
         await handlers.describeCapability(
           { name: "list_browsers", product: "p" },
           {} as never,
         )
-      ).content[0].text,
+      ),
     );
     expect(doc.narrowable.fields).toContain("browser");
     expect(doc.host).toBeUndefined();
@@ -231,13 +232,13 @@ describe("the contract advertises it", () => {
 
   it("says nothing about it on a capability that has none", async () => {
     const handlers = tools(ROWS);
-    const doc = JSON.parse(
+    const doc = readAnswer(
       (
         await handlers.describeCapability(
           { name: "list_plain", product: "p" },
           {} as never,
         )
-      ).content[0].text,
+      ),
     );
     expect(doc.narrowable).toBeUndefined();
   });

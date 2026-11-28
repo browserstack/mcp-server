@@ -3,6 +3,7 @@ import { BrowserStackConfig } from "../../lib/types.js";
 import { apiClient } from "../../lib/apiClient.js";
 import { SessionType } from "../../lib/constants.js";
 import { validateLogResponse } from "./utils.js";
+import { sessionApiHost } from "../../lib/regional-host.js";
 
 export async function retrieveSessionVideo(
   sessionId: string,
@@ -11,7 +12,8 @@ export async function retrieveSessionVideo(
 ): Promise<string> {
   const product =
     sessionType === SessionType.AppAutomate ? "app-automate" : "automate";
-  const url = `https://api.browserstack.com/${product}/sessions/${encodeURIComponent(sessionId)}.json`;
+  const host = sessionApiHost(sessionType);
+  const url = `${host}/${product}/sessions/${encodeURIComponent(sessionId)}.json`;
   const authString = getBrowserStackAuth(config);
   const auth = Buffer.from(authString).toString("base64");
 

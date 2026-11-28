@@ -103,6 +103,8 @@ const WRITE_VERBS = new Set([
   "upload",
   "import",
   "clone",
+  "hide",
+  "unhide",
 ]);
 
 // Words that mean "give me many", which is what makes a single-record getter the wrong answer.
@@ -156,6 +158,95 @@ export function isBrowseQuery(query?: string): boolean {
  * and "browser stack". `bstack` is the same name in the shorthand the logs and repos use.
  */
 const BRAND = /\bbrowser\s*stack\b|\bbstack\b/g;
+
+/**
+ * A pasted address names `url` without saying it.
+ *
+ * "open https://example.com on a phone" carries the one word that would settle it, and
+ * the tokenizer throws it away: the scheme is punctuation and `example com` is nobody's
+ * vocabulary. So an address in the request counts as the term `url`, which a product
+ * that drives pages claims and a product that drives installed apps does not.
+ *
+ * AN APP'S NAME IS NOT AN ADDRESS. `Calculator.app`, `com.acme.dev` and every other
+ * reverse-DNS bundle id look like domains and are exactly what a mobile request carries,
+ * so a bare name ending in `.app`, `.dev` or `.ai` does not count, and neither does one
+ * that starts with a top-level domain. A scheme or `www.` always counts.
+ */
+const ADDRESS =
+  /https?:\/\/\S+|\bwww\.\S+|\b(?!(?:com|org|net|io|co|dev|app|ai)\.)[a-z0-9-]+(?:\.[a-z0-9-]+)*\.(?:com|org|net|io|co|in|uk|de|jp|edu|gov|me|xyz)\b/gi;
+
+/**
+ * AN ADDRESS ON A PRODUCT'S OWN HOST NAMES THAT PRODUCT, NOT `url`.
+ *
+ * A product whose records are shared as links claims its host as a routing term, and that
+ * term already decides the request. Reading the same link as `url` as well made the product
+ * that drives pages a second decider, and with two deciders the shared words chose instead
+ * — so "review this bug <link to the bug>" settled on neither product the link pointed at.
+ * Any other address in the text still counts.
+ */
+export function impliedTerms(
+  text: string | undefined,
+  ownHosts: ReadonlySet<string> = new Set(),
+): string[] {
+  for (const [address] of (text ?? "").matchAll(ADDRESS))
+    if (!ownHosts.has(hostOf(address))) return ["url"];
+  return [];
+}
+
+function hostOf(address: string): string {
+  try {
+    return new URL(
+      /^https?:\/\//i.test(address) ? address : `http://${address}`,
+    ).hostname.toLowerCase();
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * The text with every address on a product's own host cut down to that host.
+ *
+ * THE PATH OF SUCH A LINK IS THE PRODUCT'S ROUTE, NOT THE USER'S WORDS. A Bug Capture link
+ * reads `/workspaces/<id>/collections/<id>/sessions/<id>`, and folded whole those segments
+ * claimed `workspace`, `collection` and `session` for whichever products model them — which
+ * outvoted the host that names the product. The host stays, so it still decides; an
+ * address on any other host is left exactly as written.
+ */
+export function withOwnHosts(
+  text: string | undefined,
+  ownHosts: ReadonlySet<string>,
+): string {
+  return (text ?? "").replace(ADDRESS, (address) => {
+    const host = hostOf(address);
+    return ownHosts.has(host) ? host : address;
+  });
+}
+
+/** The hosts products claim as routing terms: the ones whose links name the product. */
+export function productHosts(
+  products: Record<string, ProductIndex>,
+): Set<string> {
+  const hosts = new Set<string>();
+  for (const index of Object.values(products))
+    for (const word of index.routing_terms ?? [])
+      if (/^[a-z0-9-]+(?:\.[a-z0-9-]+)+$/i.test(String(word)))
+        hosts.add(String(word).toLowerCase());
+  return hosts;
+}
+
+/**
+ * Whether the text carries letters the tokenizer cannot read.
+ *
+ * `terms` keeps ASCII letters and digits and nothing else, which is the index's own
+ * alphabet. A sentence in Japanese, or a German word with an umlaut in it, has words the
+ * index could never have matched — so an empty anchor from such a text is not evidence
+ * that nothing was named, only that it was named in a language this file does not speak.
+ */
+export function unreadable(text: string | undefined): boolean {
+  return [...(text ?? "")].some(
+    (ch) => ch.charCodeAt(0) > 127 && /\p{L}/u.test(ch),
+  );
+}
 
 export function terms(text: string | undefined): string[] {
   return [
@@ -609,7 +700,23 @@ const IDENTITY_WEIGHT = 6;
 
 /** Which products a query could plausibly be about, when more than one could. */
 /** Words too common in this domain to settle a product on their own. */
-const GENERIC_ANCHORS = new Set(["test", "tests", "testing"]);
+// `check`, `filter` and `os` joined `test` for the same reason: each
+// is an entity alias somewhere (TRA's check_config, TM's filter, TM's configuration) and
+// each is also an everyday word — or, for `os`, the Portuguese article — so on its own it
+// put a product question to users whose request was about something else entirely. A
+// product that wants them to route can still claim the longer phrase (`quality gate`,
+// `saved filter`, `os version`).
+const GENERIC_ANCHORS = new Set([
+  "test",
+  "tests",
+  "testing",
+  "check",
+  "checks",
+  "filter",
+  "filters",
+  "os",
+  "summary",
+]);
 
 export interface ProductAmbiguity {
   /** The products that claim the query's words. Empty when the query settles itself. */
@@ -651,7 +758,7 @@ export interface ProductAmbiguity {
  * discarding prose that claims.
  */
 const DISCLAIMS =
-  /\b(?:not|never|neither|nor|unlike|rather than|instead of|except)\b/i;
+  /\b(?:not|never|neither|nor|unlike|rather than|instead of|except|separate product|another product|different product)\b/i;
 
 /** A summary with its disclaiming sentences removed, for the claimant pass only. */
 function claimingSentences(summary: string | undefined): string {
@@ -679,7 +786,8 @@ export function ambiguousProducts(
    */
   const fold = (text: string): string => terms(text).map(singular).join(" ");
 
-  const asked_ = ` ${fold(query || "")} `;
+  const hosts = productHosts(products);
+  const asked_ = ` ${[fold(withOwnHosts(query, hosts)), ...impliedTerms(query, hosts)].join(" ")} `;
 
   const owners = new Map<string, Set<string>>();
   for (const [product, entries] of Object.entries(vocabularyOf(products))) {
@@ -795,9 +903,30 @@ export function ambiguousProducts(
       because: (decidedBy.get([...decided][0]) ?? []).sort(),
     };
 
-  const claimed = new Set<string>();
+  // EVERY SHARED WORD, CLAIMED BY ONE PRODUCT, IS THAT PRODUCT'S REQUEST. "test my
+  // website on a tablet" has `website` shared with the accessibility products and
+  // `tablet` shared with mobile device control; no single word settles it, and reporting
+  // the union put four products to the user for a request exactly one of them answers.
+  // The product that claims ALL the shared words is the one the sentence is about — and
+  // when several do, the question is between those, not between everyone who claimed any
+  // one word: a product that answers `screenshot` but not `iphone` is not a candidate.
+  // With one shared word this is what it always was: the word's claimants.
+  let common: Set<string> | undefined;
   for (const claimants of shared.values())
-    for (const product of claimants) claimed.add(product);
+    common = common
+      ? new Set([...common].filter((product) => claimants.has(product)))
+      : new Set(claimants);
+  if (common?.size === 1)
+    return {
+      ...none,
+      settled: [...common][0],
+      because: [...shared.keys()].sort(),
+    };
+  const claimed = new Set<string>();
+  if (common?.size) for (const product of common) claimed.add(product);
+  else
+    for (const claimants of shared.values())
+      for (const product of claimants) claimed.add(product);
   return { products: [...claimed].sort(), terms: [...shared.keys()].sort() };
 }
 
@@ -1034,7 +1163,8 @@ export function productAnchors(
   if (terms(text).length === 0) return none;
 
   const fold = (s: string): string => terms(s).map(singular).join(" ");
-  const said = ` ${fold(text || "")} `;
+  const hosts = productHosts(products);
+  const said = ` ${[fold(withOwnHosts(text, hosts)), ...impliedTerms(text, hosts)].join(" ")} `;
   const found = new Map<string, Set<string>>();
 
   const claim = (product: string, term: string) => {

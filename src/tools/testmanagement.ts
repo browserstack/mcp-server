@@ -96,6 +96,7 @@ import {
   PLAN_WRITES_VIA_CAPABILITIES,
   PROJECT_ID_ONLY_FOR_FOLDER,
 } from "./tool-handoff.js";
+import { markCallerFault } from "../lib/upstream-status.js";
 
 //TODO: Moving the traceMCP and catch block to the parent(server) function
 
@@ -563,6 +564,7 @@ export async function createLCAStepsTool(
         // requires_authentication was requested but no credentials could be
         // obtained (client can't elicit, or the user declined). Fail clearly
         // rather than creating a login test case with no credentials.
+        markCallerFault();
         return {
           content: [
             {
@@ -784,7 +786,7 @@ export default function addTestManagementTools(
 
   tools.listTestCases = server.tool(
     "listTestCases",
-    "List test cases in a project, optionally one folder (see listFolders). Filters: case_type, priority, paging." +
+    "List test cases in a project or one folder (see listFolders). Filters: id, case_type, priority, paging." +
       NEEDS_PROJECT_ID,
     ListTestCasesSchema.shape,
     {
@@ -884,7 +886,7 @@ export default function addTestManagementTools(
 
   tools.uploadProductRequirementFile = server.tool(
     "uploadProductRequirementFile",
-    "Upload files (e.g., PDRs, PDFs) to BrowserStack Test Management and retrieve a file mapping ID. This is utilized for generating test cases from files and is part of the Test Case Generator AI Agent in BrowserStack." +
+    "Upload a requirements file (PDF, DOCX, XLSX, CSV, RTF, TXT, PNG or JPG) for test case generation. Returns a document ID." +
       NEEDS_PROJECT_ID,
     UploadFileSchema.shape,
     {

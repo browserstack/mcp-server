@@ -1,5 +1,11 @@
 import { AxiosError } from "axios";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import {
+  BLOCKED_STATUSES,
+  markCallerFault,
+  recordRegionProbeFailure,
+} from "./upstream-status.js";
+import { wrapUntrusted } from "./untrusted-content.js";
 
 const MAX_ERROR_TEXT = 500;
 const BODY_FIELDS = ["message", "error", "errors"] as const;
@@ -52,13 +58,18 @@ function bodyText(data: unknown): string | undefined {
  * it prefers the body's `message`, `error` or `errors` field, serialising
  * objects, and uses the whole body when none of those fields exist. An empty,
  * whitespace-only or HTML-document body falls back to the error's own message.
+ *
+ * The backend response body is untrusted content, so it is returned wrapped
+ * with {@link wrapUntrusted}, the same as other backend-supplied output. It is
+ * capped first so the wrapper's closing marker is never truncated. The
+ * server-authored fallbacks (`err.message`, `defaultText`) are returned plain.
  * @param err - The error object to describe
  * @param defaultText - The fallback error message
  */
 export function errorText(err: unknown, defaultText: string): string {
   if (err instanceof AxiosError) {
     const text = bodyText(err.response?.data);
-    if (text) return text;
+    if (text) return wrapUntrusted("API response", text);
     return clip(err.message || defaultText);
   }
   if (err instanceof Error) return clip(err.message || defaultText);
@@ -78,4 +89,67 @@ export function formatAxiosError(
     content: [{ type: "text", text: errorText(err, defaultText) }],
     isError: true,
   };
+}
+
+/**
+ * The caller's input or account set-up was rejected: a missing or unsupported argument,
+ * an id that names nothing, a file that is not there. Telemetry attributes the call to
+ * the caller, and keeps doing so when a catch block rewraps the error. `name` stays
+ * "Error" so the text shown to the user is unchanged.
+ */
+export class CallerError extends Error {
+  constructor(message: string) {
+    super(message);
+    markCallerFault();
+  }
+}
+
+/**
+ * The Test Management region probe found no host that accepted the account. The
+ * message is what the user sees (unchanged); `results` keeps each host's answer so
+ * telemetry can tell a refused account (every host answered 401/402/403/429) from a
+ * probe that failed (some host timed out or answered 5xx — possibly the account's own).
+ */
+export class RegionProbeError extends Error {
+  constructor(
+    message: string,
+    readonly results: ReadonlyArray<{ host: string; status: number }>,
+  ) {
+    super(message);
+    this.name = "RegionProbeError";
+    recordRegionProbeFailure(this.usStatus, this.everyHostBlocked);
+  }
+
+  /** What the first (US) host answered; 0 when the connection was never answered. */
+  get usStatus(): number {
+    return this.results[0]?.status ?? 0;
+  }
+
+  /**
+   * Whether every host tried refused the account outright. The other regions always
+   * answer 401 to an account that is not theirs, so only when the account's own host
+   * did too is the failure the account's: a timeout or 5xx from any host is the probe.
+   */
+  get everyHostBlocked(): boolean {
+    return (
+      this.results.length > 0 &&
+      this.results.every((r) => BLOCKED_STATUSES.has(r.status))
+    );
+  }
+}
+
+/** A failed HTTP request, keeping the status for callers to branch on. */
+export class HttpError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+    this.name = "HttpError";
+  }
+}
+
+export function isNotFoundError(error: unknown): boolean {
+  if (error instanceof HttpError) return error.status === 404;
+  return error instanceof AxiosError && error.response?.status === 404;
 }

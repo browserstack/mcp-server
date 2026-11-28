@@ -5,31 +5,47 @@ import { formatAxiosError } from "../../lib/error.js";
 import { getBrowserStackAuth } from "../../lib/get-auth.js";
 import { BrowserStackConfig } from "../../lib/types.js";
 import { getTMBaseURL } from "../../lib/tm-base-url.js";
+import { wrapUntrusted } from "../../lib/untrusted-content.js";
+import { markCallerFault } from "../../lib/upstream-status.js";
 
 /**
  * Schema for listing test cases with optional filters.
  */
 export const ListTestCasesSchema = z.object({
-  project_identifier: z
-    .string()
-    .describe(
-      "Identifier of the project to fetch test cases from. This id starts with a PR- and is followed by a number.",
-    ),
+  project_identifier: z.string().describe("Project identifier (PR-<number>)."),
   folder_id: z
     .string()
     .optional()
-    .describe("Only this folder's cases (ids from listFolders). Omit for all."),
+    .describe("Only this folder's cases (ids from listFolders)."),
+  id: z
+    .string()
+    .optional()
+    .describe("Comma-separated test case ids, e.g. TC-12,TC-34."),
   case_type: z
     .string()
     .optional()
-    .describe(
-      "Comma-separated list of case types (e.g. functional,regression).",
-    ),
+    .describe("Comma-separated case types, e.g. functional,regression."),
   priority: z
     .string()
     .optional()
-    .describe("Comma-separated list of priorities (e.g. critical,medium,low)."),
-
+    .describe("Comma-separated priorities, e.g. critical,low."),
+  review_status: z
+    .array(
+      z.enum([
+        "approved",
+        "rejected",
+        "in_review",
+        "pending",
+        "changes_requested",
+        "l1_approved",
+      ]),
+    )
+    .optional()
+    .describe("Review statuses."),
+  custom_fields: z
+    .record(z.string(), z.string())
+    .optional()
+    .describe('Custom field name to value, e.g. {"Theme": "Checkout"}.'),
   p: z.number().optional().describe("Page number."),
 });
 
@@ -46,8 +62,13 @@ export async function listTestCases(
     // Build query string
     const params = new URLSearchParams();
     if (args.folder_id) params.append("folder_id", args.folder_id);
+    if (args.id) params.append("id", args.id);
     if (args.case_type) params.append("case_type", args.case_type);
     if (args.priority) params.append("priority", args.priority);
+    if (args.review_status?.length)
+      params.append("review_status", args.review_status.join(","));
+    for (const [field, value] of Object.entries(args.custom_fields ?? {}))
+      params.append(`custom_fields[${field}]`, value);
     if (args.p !== undefined) params.append("p", args.p.toString());
 
     const tmBaseUrl = await getTMBaseURL(config);
@@ -67,11 +88,12 @@ export async function listTestCases(
 
     const resp_data = resp.data;
     if (!resp_data.success) {
+      markCallerFault();
       return {
         content: [
           {
             type: "text",
-            text: `Failed to list test cases: ${JSON.stringify(resp_data)}`,
+            text: `Failed to list test cases: ${wrapUntrusted("API response", JSON.stringify(resp_data))}`,
           },
         ],
         isError: true,
@@ -98,11 +120,14 @@ export async function listTestCases(
       content: [
         {
           type: "text",
-          text: `Found ${count} test case(s):\n\n${summary}`,
+          text: `Found ${count} test case(s):\n\n${wrapUntrusted("test case list", summary)}`,
         },
         {
           type: "text",
-          text: JSON.stringify(test_cases, null, 2),
+          text: wrapUntrusted(
+            "test cases (structured data)",
+            JSON.stringify(test_cases, null, 2),
+          ),
         },
       ],
     };

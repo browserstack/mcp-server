@@ -1,0 +1,64 @@
+name: "Publish to NPM"
+run-name: "Publish @browserstack/mcp-server@${{ inputs.version }} (${{ inputs.tag }})"
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Git tag or commit"
+        required: true
+        type: string
+      version:
+        description: "Version to publish"
+        required: true
+        type: string
+      tag:
+        description: "npm dist-tag (latest | beta | tp-canary)"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      PACKAGE_NAME: "@browserstack/mcp-server"
+      VERSION: ${{ inputs.version }}
+      TAG: ${{ inputs.tag }}
+    steps:
+      - name: "Checkout source code"
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: "Set up Node.js"
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24.22.3
+
+      - name: "Install npm with trusted publishing support"
+        run: npm install -g npm@11.21.0
+
+      - name: "Install dependencies"
+        run: npm ci
+
+      - name: "Create build"
+        run: npm run build
+
+      - name: "Verify name and set version"
+        run: |
+          [ "$(node -p 'require("./package.json").name')" = "$PACKAGE_NAME" ] || { echo "::error::wrong package"; exit 1; }
+          BASE="$(node -p 'require("./package.json").version')"
+          case "$VERSION" in
+            "$BASE") ;;
+            "$BASE"-*) npm version "$VERSION" --no-git-tag-version ;;
+            *) echo "::error::version $VERSION does not match package.json $BASE"; exit 1 ;;
+          esac
+
+      - name: "Publish"
+        run: npm publish --tag "$TAG" --access public

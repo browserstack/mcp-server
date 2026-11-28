@@ -5,6 +5,98 @@
   "tm": {
     "routing_terms": ["team", "setting", "workspace", "suite"],
     "summary": "BrowserStack Test Management: author and organise test cases, plan and track their execution, and report on the results. Everything is scoped to a project, which owns the folders, cases, runs, plans and reports beneath it. Search and filter cases; create and update cases, runs and plans; record results; bulk edit, move, copy, archive and delete; restructure folders; manage tags and custom-field definitions; assign, clone and close runs; review AI duplicate recommendations; read the activity feed and a case's version history; and create, schedule and download reports. Cases are authored and their outcomes recorded here, but tests are not RUN here: execution happens in your own runner or another BrowserStack product. Renaming and deleting a project are not exposed. A run is executed against a named configuration and environment, and records the app version and build its results came from. Destructive capabilities exist and always need explicit human approval.",
+    "agents": [
+      {
+        "name": "tm-generate-test-cases",
+        "title": "Test case generation",
+        "description": "Drafts a full set of new test cases from a requirement (a PRD, BRD, spec, ticket, acceptance criteria, Figma design or pasted text), applying coverage and priority rules, and returns them for review before anything is saved.",
+        "signals": [
+          "generate",
+          "draft",
+          "prd",
+          "brd",
+          "spec",
+          "specification",
+          "requirement",
+          "figma",
+          "document",
+          "acceptance criteria"
+        ],
+        "intents": [
+          "generate new test cases for this requirement",
+          "write test cases from this document",
+          "create test cases in this empty folder from the PRD",
+          "review the attached BRD and create a complete set of QA test cases",
+          "create test cases for this feature from the attached requirement document",
+          "create test cases from the attached spec",
+          "draft QA test cases for the documented requirements",
+          "generate test cases from this Figma design",
+          "add more test cases to the ones you just generated"
+        ]
+      },
+      {
+        "name": "tm-maintain-test-cases",
+        "title": "Test case maintenance",
+        "description": "Checks a project's existing test cases against a new or changed requirement, drafts edits to the ones it affects and lists what no case covers, for review before saving. The uncovered gaps go on to test case generation.",
+        "signals": [
+          "requirement",
+          "prd",
+          "spec",
+          "specification",
+          "reconcile",
+          "outdated",
+          "coverage"
+        ],
+        "intents": [
+          "generate test cases for this requirement",
+          "generate and update test cases from this PRD",
+          "update these test cases for the new requirement",
+          "the spec changed, update the test cases in this folder",
+          "check these test cases against the updated PRD and fix what's wrong",
+          "reconcile this folder's test cases with the latest requirement"
+        ]
+      },
+      {
+        "name": "tm-generate-test-data",
+        "title": "Test data generation",
+        "description": "Drafts datasets (named columns and rows) for data-driven testing from a requirement, random or derived from a stated rule, limit or boundary.",
+        "signals": [
+          "dataset",
+          "test data",
+          "boundary",
+          "data driven"
+        ],
+        "intents": [
+          "generate test data for this requirement",
+          "generate test cases and test data for this requirement",
+          "create a dataset with valid and invalid values for this field",
+          "I need random test data for these columns",
+          "generate boundary values for this input",
+          "build a dataset for data-driven testing of this form",
+          "add more rows to that dataset"
+        ]
+      },
+      {
+        "name": "tm-dedupe",
+        "title": "Test deduplication",
+        "description": "Finds exact and near-exact duplicate test cases in a folder, a list of cases or a small project (up to 100 cases) and saves them as suggestions to merge on the Review duplicates screen. Merges nothing itself.",
+        "signals": [
+          "duplicate",
+          "duplicates",
+          "duplicated",
+          "dedupe",
+          "deduplicate",
+          "deduplication"
+        ],
+        "intents": [
+          "find duplicate test cases in this folder",
+          "dedupe the test cases in this project",
+          "are there duplicate test cases in this folder",
+          "check these test cases for duplicates",
+          "remove duplicate test cases from this folder"
+        ]
+      }
+    ],
     "capabilities": [
       {
         "name": "assign_test_run_owner",
@@ -244,7 +336,8 @@
           "500": {
             "$response": "InternalServerError"
           }
-        }
+        },
+        "disabled": true
       },
       {
         "name": "bulk_archive_test_plans",
@@ -333,7 +426,8 @@
           "Failures use the plural key `errors`, not `error` — {success: false, errors: '...'}. Branch on `success`, not on the key name.",
           "Unlike the public/v2 archive route, this path is not JSON-schema validated, so the 1000-id cap that route enforces is not applied here. Batch large sets yourself.",
           "To undo, call the bulk-retrieve capability with the same ids."
-        ]
+        ],
+        "disabled": true
       },
       {
         "name": "bulk_set_test_case_assignee_in_run",
@@ -493,7 +587,8 @@
           "Needs the test-run write permission; on an automation run the automation variant of that permission is demanded instead and a role that only holds the manual one gets 403."
         ],
         "paginated": true,
-        "max_page_size": 100
+        "max_page_size": 100,
+        "disabled": true
       },
       {
         "name": "bulk_copy_test_cases",
@@ -653,7 +748,8 @@
           "Concurrent bulk ops on the same cases are refused: 400 `{success:false, message:\"TestCases in progress with another operation\"}`. Retry rather than reading it as bad input.",
           "The 200 body is the refreshed SOURCE view (or the search results) plus folder counts — it does NOT contain the new copies or their ids. To get them, list the destination folder afterwards; `cases_count[<destination_folder_id>]` only tells you the new total.",
           "Copies are new test cases with new integer ids and new TC-NNN identifiers; the originals are untouched. There is no undo — the way back is to delete the copies."
-        ]
+        ],
+        "disabled": true
       },
       {
         "name": "bulk_delete_test_cases",
@@ -874,12 +970,13 @@
           {
             "name": "q",
             "type": "object",
-            "description": "SCOPE for `select_all`, and a SIBLING of `test_case` at top level, not a field inside it. Same filter shape as the search-and-filter flow's `q`. With `select_all: true` the target set comes from this `q` merged with top-level `folder_id` and `ids` is ignored; with explicit ids it is unused. An unrecognised key here is dropped, not rejected, so a typo widens the selection to the whole scope."
+            "description": "SCOPE for `select_all`, and a SIBLING of `test_case` at top level, not a field inside it. Same filter shape as the search-and-filter flow's `q`. With `select_all: true` the target set comes from this `q` merged with `source_folder_id` and `ids` is ignored; with explicit ids it is unused. An unrecognised key here is dropped, not rejected, so a typo widens the selection to the whole scope."
           },
           {
-            "name": "folder_id",
+            "name": "source_folder_id",
             "type": "integer",
-            "description": "SOURCE folder that scopes the selection, at TOP level (outside `test_case`). Merged into the search scope and it overwrites `q.folder_id` when both are sent. Do not confuse it with the destination: for copy that is top-level `destination_folder_id`, for move it is `test_case.destination_folder_id`, and for bulk edit a `test_case.folder_id` MOVES the cases."
+            "description": "SOURCE folder that scopes the selection. Merged into the search scope, and it overwrites `q.folder_id` when both are sent. This is never the destination.",
+            "json_path": "/folder_id"
           },
           {
             "name": "p",
@@ -889,7 +986,7 @@
           {
             "name": "include_subfolders_tc",
             "type": "boolean",
-            "description": "Extend the selection into subfolders of the top-level `folder_id`. Compared as the string `true`. Merged into the search scope, so it also changes what `select_all` resolves to."
+            "description": "Extend the selection into subfolders of the `source_folder_id`. Compared as the string `true`. Merged into the search scope, so it also changes what `select_all` resolves to."
           },
           {
             "name": "ids",
@@ -906,7 +1003,7 @@
           {
             "name": "select_all",
             "type": "boolean",
-            "description": "Edit every case the scope resolves to, minus `de_selected_ids`. Compared as the string `true`; anything else means \"use `ids`\". The scope is top-level `q` + `folder_id` (+ `include_subfolders_tc`), NOT the whole project by default.",
+            "description": "Edit every case the scope resolves to, minus `de_selected_ids`. Compared as the string `true`; anything else means \"use `ids`\". The scope is top-level `q` + `source_folder_id` (+ `include_subfolders_tc`), NOT the whole project by default.",
             "json_path": "/test_case/select_all"
           },
           {
@@ -1006,12 +1103,6 @@
             "description": "Free-text note carried with the bulk edit."
           },
           {
-            "name": "folder_id",
-            "type": "integer",
-            "json_path": "/test_case/folder_id",
-            "description": "DANGER — inside `test_case` this MOVES every selected case into that folder. The top-level `folder_id` of the same name only scopes the selection. Omit this unless you mean to move them."
-          },
-          {
             "name": "folders",
             "type": "object",
             "description": "Cross-folder selection: a map keyed by folder id, each value `{select_all, ids, de_selected_ids}`. When present it REPLACES the flat `ids`/`select_all` selection and the union is resolved per folder. Unknown keys inside an entry are dropped.",
@@ -1084,13 +1175,14 @@
           "ALWAYS send `test_case.custom_fields`, `{}` when you are changing none. Omitting the key dereferences a nil hash and returns 500 — this is the single most common failure on this route.",
           "priority, status, case_type and automation_state must be NUMERIC option ids here. The single-case edit accepts a display name for some of them; this path does not, and a name is written through as a broken id rather than rejected.",
           "`tags` REPLACES the whole tag list on every selected case. Read the existing tags and send the union if you mean to add. The same is true of `issues`, which is sent as `[]` when you omit it.",
-          "`test_case.folder_id` moves the cases; the top-level `folder_id` only scopes the selection. Two different meanings for one name in one body.",
+          "This call does not move cases. Use the move capability for that.",
           "The editable set is narrow and everything outside it is dropped without error: owner, priority, status, case_type, automation_state/status, preconditions, template, review_status, reviewers, comment, custom_fields, tags, issues. `name`, `description`, `expected_result` and `test_case_steps` are NOT bulk-editable on this route.",
           "An empty selection is a bare 400 `{success:false}` with no message — that is what you get when `ids` is empty, or when `select_all` is true but `q` matched nothing.",
           "Above 100 selected cases the work is handed to a background job and you get 200 `{success:true, async:true, unique_id:\"<uuid>\"}` with NO `test_cases` — treat that body as an acknowledgement, not a result, and re-read afterwards.",
           "Concurrent bulk ops on the same cases are refused: 400 `{success:false, message:\"TestCases in progress with another operation\"}`. Retry rather than reading it as bad input.",
           "Every successful edit writes a new version of each case, so an unwanted bulk edit can be undone case by case by restoring the previous version — subject to the workspace's plan, which may only keep 30 days of history."
-        ]
+        ],
+        "disabled": true
       },
       {
         "name": "bulk_edit_test_cases_in_test_run",
@@ -1283,7 +1375,8 @@
           "Above the async threshold you get 200 `{success:true, async:true, unique_id}` and no listing; below it the 200 is the refreshed run listing (`test_cases` + `info`, plus `folder` and `ancestors` when `folder_id` was sent).",
           "This writes execution results, not the test cases themselves — the cases' own fields are untouched. A result can be overwritten by marking again, but the previous result is not restorable.",
           "The run id accepts both `TR-14` and the bare integer on this route, unlike the v2 run endpoints which take TR-NNN only."
-        ]
+        ],
+        "disabled": true
       },
       {
         "name": "bulk_edit_test_cases",
@@ -1651,7 +1744,8 @@
           "500": {
             "$response": "InternalServerError"
           }
-        }
+        },
+        "disabled": true
       },
       {
         "name": "bulk_move_test_cases",
@@ -1670,12 +1764,13 @@
           {
             "name": "q",
             "type": "object",
-            "description": "SCOPE for `select_all`, and a SIBLING of `test_case` at top level, not a field inside it. Same filter shape as the search-and-filter flow's `q`. With `select_all: true` the target set comes from this `q` merged with top-level `folder_id` and `ids` is ignored; with explicit ids it is unused. An unrecognised key here is dropped, not rejected, so a typo widens the selection to the whole scope."
+            "description": "SCOPE for `select_all`, and a SIBLING of `test_case` at top level, not a field inside it. Same filter shape as the search-and-filter flow's `q`. With `select_all: true` the target set comes from this `q` merged with `source_folder_id` and `ids` is ignored; with explicit ids it is unused. An unrecognised key here is dropped, not rejected, so a typo widens the selection to the whole scope."
           },
           {
-            "name": "folder_id",
+            "name": "source_folder_id",
             "type": "integer",
-            "description": "SOURCE folder that scopes the selection, at TOP level (outside `test_case`). Merged into the search scope and it overwrites `q.folder_id` when both are sent. Do not confuse it with the destination: for copy that is top-level `destination_folder_id`, for move it is `test_case.destination_folder_id`, and for bulk edit a `test_case.folder_id` MOVES the cases."
+            "description": "SOURCE folder that scopes the selection. Merged into the search scope, and it overwrites `q.folder_id` when both are sent. This is never the destination.",
+            "json_path": "/folder_id"
           },
           {
             "name": "p",
@@ -1685,7 +1780,7 @@
           {
             "name": "include_subfolders_tc",
             "type": "boolean",
-            "description": "Extend the selection into subfolders of the top-level `folder_id`. Compared as the string `true`. Merged into the search scope, so it also changes what `select_all` resolves to."
+            "description": "Extend the selection into subfolders of the `source_folder_id`. Compared as the string `true`. Merged into the search scope, so it also changes what `select_all` resolves to."
           },
           {
             "name": "ids",
@@ -1702,20 +1797,14 @@
           {
             "name": "select_all",
             "type": "boolean",
-            "description": "Move every case the scope resolves to, minus `de_selected_ids`. Compared as the string `true`; anything else means \"use `ids`\". The scope is top-level `q` + `folder_id` (+ `include_subfolders_tc`), NOT the whole project by default.",
+            "description": "Move every case the scope resolves to, minus `de_selected_ids`. Compared as the string `true`; anything else means \"use `ids`\". The scope is top-level `q` + `source_folder_id` (+ `include_subfolders_tc`), NOT the whole project by default.",
             "json_path": "/test_case/select_all"
           },
           {
             "name": "destination_folder_id",
             "type": "integer",
-            "description": "Target folder's integer id, INSIDE `test_case` (bulk-copy puts its destination at top level instead). Falls back to `test_case.folder_id` when omitted; if neither is sent the move is issued with no destination.",
+            "description": "Target folder's integer id, INSIDE `test_case` (bulk-copy puts its destination at top level instead). Always send it: without it the move is issued with no destination.",
             "json_path": "/test_case/destination_folder_id"
-          },
-          {
-            "name": "folder_id",
-            "type": "integer",
-            "description": "Legacy alias for `test_case.destination_folder_id`, used only when that is absent. Note this is the folder the cases move TO — the identically named TOP-LEVEL `folder_id` is the source scope.",
-            "json_path": "/test_case/folder_id"
           },
           {
             "name": "destination_project_id",
@@ -1759,7 +1848,7 @@
         },
         "guidance": [
           "The destination lives INSIDE `test_case` on this route (`test_case.destination_folder_id`) — bulk-copy puts it at top level. Swapping the two bodies is the usual cause of a move that reports success and changes nothing.",
-          "The top-level `folder_id` scopes the SOURCE selection; `test_case.folder_id` is a legacy alias for the DESTINATION. Same name, opposite meaning, decided by nesting.",
+          "`source_folder_id` scopes the SOURCE selection; `destination_folder_id` is the folder the cases move TO.",
           "`destination_project_id` must be a real JSON integer. A string like \"42\" is rejected before anything runs, as a missing-parameter 400.",
           "A cross-project move of shared cases is blocked by the backend: the response is 422 with `type: \"shared_tc_error\"` and a `shared_count`, and nothing moved.",
           "An empty selection is a bare 400 `{success:false}` with no message — that is what you get when `ids` is empty, or when `select_all` is true but `q` matched nothing.",
@@ -1775,7 +1864,8 @@
           "destination_path_folders",
           "source_path_folders",
           "moved_cases_count"
-        ]
+        ],
+        "disabled": true
       },
       {
         "name": "bulk_restore_archived_test_cases",
@@ -1959,7 +2049,8 @@
           "Ids are coerced with to_i and zeroes dropped; if every id drops you get 400 {success: false, errors: 'Please provide test plan ids'}.",
           "Failures use the plural key `errors`.",
           "Restoring does not undo a delete. Deleted plans are gone; only archived ones can come back this way."
-        ]
+        ],
+        "disabled": true
       },
       {
         "name": "bulk_set_test_result_status",
@@ -2042,7 +2133,8 @@
               }
             }
           }
-        }
+        },
+        "disabled": true
       },
       {
         "name": "bulk_update_test_run_test_cases",
@@ -2197,7 +2289,8 @@
           "500": {
             "$response": "InternalServerError"
           }
-        }
+        },
+        "disabled": true
       },
       {
         "name": "clone_exploratory_session",
@@ -2995,7 +3088,8 @@
           "Missing source or destination is 404 with a bare {error:'...'} and no `success` key — this endpoint does not use the usual {success:false} envelope for that case.",
           "If the worker fails partway it rolls the whole copy back, so a failed run should leave no half-copied tree — but you only learn that by re-reading, not from this response.",
           "Requires the folder-create permission on the project in the path."
-        ]
+        ],
+        "disabled": true
       },
       {
         "name": "count_run_selection",
@@ -3393,7 +3487,8 @@
           "The created cases are at `data.test_cases`, with `data.path_folders` and a `data.request_trace_id` for the AI enrichment that runs afterwards. Take each new case's integer `id` and TC-NNN `identifier` from there.",
           "With `unique_id` and the async flag enabled, you instead get 202 `{success, async, unique_id, count}` and NO cases — the work finishes on a WebSocket channel you cannot read through this API, so poll the folder listing instead.",
           "Any unexpected failure inside this route is flattened to 500 `{success:false, message:\"Failed to create test cases.\"}` — that message covers backend rejections too, so do not read it as an outage."
-        ]
+        ],
+        "disabled": true
       },
       {
         "name": "create_configuration",
@@ -3616,7 +3711,7 @@
         "guidance": [
           "A dataset is the pairing of an option list with a set of projects. A field with no dataset, or a dataset with no linked projects, is invisible in every project even though the definition exists.",
           "`linked_projects` takes INTEGER project ids, not PR-NNN identifiers. A non-array value is a 400 'Invalid Params'; a valid array of ids that are not real projects fails upstream and comes back masked.",
-          "`linked_to_all_projects` is NOT read by this endpoint — it is silently ignored. It works only inside the `datasets` entries of the create-a-field call. To cover every project from here, enumerate the ids, or use the dataset project-mapping call with select_all.",
+          "`linked_to_all_projects` is NOT read by this endpoint — it is silently ignored. It works only inside the `datasets` entries of the create-a-field call. To cover every project from here, enumerate the ids.",
           "A project can belong to only one dataset per field. Linking a project that is already on another dataset of the same field fails upstream, and this endpoint does NOT relay the reason — you get 400 {success:false, message:'The API request is invalid or improperly formed'}. Read the field's existing datasets first.",
           "Options are only meaningful for dropdown / multi_dropdown / nested_dropdown fields, but nothing rejects them on other types. Each option needs option_value and a non-null is_default; for a multi_dropdown every is_default must be false, and for a dropdown at most one may be true.",
           "The response is the created dataset under `data`; take `data.id` — it is the dataset_id every option and project-mapping call needs.",
@@ -5206,6 +5301,7 @@
           }
         },
         "guidance": [
+          "Get `step_id` from list_test_run_test_cases with fetch_steps=true: each row's `steps[].id` is the numeric step id, scoped to this run. Do not read it from get_test_case_detail, whose response embeds the full template field layout and can run to megabytes.",
           "Send the fields flat. The `test_run_step_result` wrapper is added for you from each field's json_path, and sending your own is rejected before the call as an unknown body key. That object is forwarded to the backing service essentially verbatim, so only the keys below are acted on locally and unrecognised keys are passed through rather than rejected.",
           "The step's status travels as a NAME inside the wrapper (`status`), not as the numeric status id the case-level result endpoints take. The supported names are untested, passed, failed, retest, blocked, skipped, in_progress.",
           "There is a decoy: a TOP-LEVEL `status` key is validated against that same list and 400s {error:'Validation error'} when it is not in it — but it is not the value that gets written. Sending only a top-level status passes validation and logs nothing.",
@@ -5870,7 +5966,7 @@
             "description": "Name of the subfolder to create or reuse when `create_subfolder` is true."
           }
         ],
-        "intent": "Create one test case in a folder — the normal single-case create. For more than one case, use the bulk create instead.",
+        "intent": "Create one test case in a folder — the normal single-case create. For more than one case, call it once per case.",
         "returns": [
           "success",
           "data",
@@ -5904,7 +6000,7 @@
           }
         },
         "guidance": [
-          "Despite the plural name this creates exactly ONE case: the body is a single `test_case` object, not a list. The bulk route is the one that takes an array.",
+          "Despite the plural name this creates exactly ONE case: the body is a single `test_case` object, not a list. Send one call per case.",
           "`test_case.test_case_folder_id` is required in the BODY as well as in the path — the path folder is not substituted in, and omitting it is the most common create failure (a 422 wrapping an upstream 404).",
           "Steps only come from `test_case_steps`, and only when the template is step-shaped. Neither `template` nor `template_step_type` sent means `test_case_text`, which stores no steps and still returns 200 — verify `test_case_steps` in the response.",
           "priority and case_type accept either the numeric option id or the project's display name; `status` does NOT — a status name is written through as an id. Resolve the ids from the project's system field values first.",
@@ -6429,7 +6525,7 @@
           "Two shapes on one endpoint: `results: [...]` for many cases, or `test_result` plus one target (`test_case_id`, `execution_id` or `shared_test_case_ids`) for one. Sending both, neither, or any unrecognised top-level key is rejected 400 as invalid params.",
           "The single form answers with `test-result` for an ordinary submission, but a submission carrying `step_results` answers with `test-run-step-results` and `overall-result-status` INSTEAD — there is no `test-result` key on that response at all. Branch on which key is present rather than assuming.",
           "Status is a NAME configured for the project, not an id. An unconfigured name fails that entry with INVALID_STATUS_VALUE.",
-          "Each submission ADDS a result to the case's history in this run; it never replaces the previous one. To move many cases to one status instead, use bulk_set_test_result_status.",
+          "Each submission ADDS a result to the case's history in this run; it never replaces the previous one.",
           "The bulk form is queued, not applied inline: 200 means accepted. Read `results[]` — every entry is ACCEPTED or FAILED. A mix of good and bad entries still returns HTTP 200 but with `success: false` and `status: \"PARTIAL\"`; only an all-bad request returns 400. Treating 200 as 'all logged' will misreport.",
           "`test-result.issues` comes back as an array of plain issue KEY STRINGS, matching the way issues are sent in, not as objects.",
           "`test-result.urls.self` points at the case's ROW IN THE RUN, so its last path segment is the run row's id, not the id of the result just created. Use `test-result.id` for anything that addresses the result itself.",
@@ -6528,7 +6624,7 @@
                 105
               ]
             },
-            "description": "Forward-sync rule for a DYNAMIC run, at the TOP level of the body — not inside `test_run`. This does NOT select cases: it never back-fills existing ones, so a create whose only case-bearing key is `filters` returns 200 with an EMPTY run. Use `test_case_ids` or `selection` to put cases in the run, and send `filters` only in addition, when the user asked the run to stay in sync.\nSending a non-empty "
+            "description": "Forward-sync rule for a DYNAMIC run, at the TOP level of the body — not inside `test_run`. This does NOT select cases: it never back-fills existing ones, so a create whose only case-bearing key is `filters` returns 200 with an EMPTY run. Use `test_case_ids` to put cases in the run, and send `filters` only in addition, when the user asked the run to stay in sync.\nSending a non-empty "
           },
           {
             "name": "dynamic_filter",
@@ -6550,11 +6646,6 @@
           {
             "name": "auto_assign",
             "type": "boolean"
-          },
-          {
-            "name": "shared_selection",
-            "type": "object",
-            "description": "Selection of cases shared in from other projects. Top level, same as `selection`."
           },
           {
             "name": "run_state",
@@ -6656,23 +6747,6 @@
             "json_path": "/test_run/build_group_id"
           },
           {
-            "name": "select_all",
-            "type": "boolean",
-            "example": false,
-            "json_path": "/selection/select_all"
-          },
-          {
-            "name": "unique_test_case_count",
-            "type": "integer",
-            "example": 83,
-            "json_path": "/selection/unique_test_case_count"
-          },
-          {
-            "name": "folders",
-            "type": "object",
-            "json_path": "/selection/folders"
-          },
-          {
             "name": "trtc_configuration_mappings",
             "type": "array",
             "fields": [
@@ -6698,10 +6772,9 @@
         "intent": "Create a test run for a project",
         "guidance": [
           "Discovering cases does not put them in a run. Carry the case ids you found into this call — a create whose only case-bearing field is a filter rule succeeds and creates an EMPTY run.",
-          "run_state is required and is validated before the selection, so a bare 'invalid data' error means a bad run field, not a bad selection.",
+          "run_state is required and is validated before the case list, so a bare 'invalid data' error means a bad run field, not a bad case list.",
           "A filter rule also makes the run keep syncing as cases change, even if you did not ask for that. Create runs static unless the user explicitly wants a run that keeps updating.",
-          "Dynamic runs match on priority, status, category, owner, automation status, automation state, folder, tags and issues only. Creation and update dates are echoed back but never matched, so a 'last 7 days' dynamic run silently drops the date window and keeps collecting.",
-          "Preview the selection first if the count matters — it reports what the selection resolves to before anything is created."
+          "Dynamic runs match on priority, status, category, owner, automation status, automation state, folder, tags and issues only. Creation and update dates are echoed back but never matched, so a 'last 7 days' dynamic run silently drops the date window and keeps collecting."
         ],
         "returns": [
           "id",
@@ -8787,7 +8860,8 @@
           "The updated run comes back under `data.testrun` — one word, no underscore — with `data.project`, plus a TOP-LEVEL `skipped_test_case_ids` array listing cases the review gate refused to add. Check it: those cases are silently missing from the run.",
           "Backing-service client errors are returned as `{data: {success: false, error: <message>}}` with the 4xx status, so read `data.success` before reading `data.testrun`.",
           "Needs the test-run write permission, with the automation variant demanded on automation runs."
-        ]
+        ],
+        "disabled": true
       },
       {
         "name": "get_test_run_edit_selection",
@@ -8846,7 +8920,8 @@
           "The stored selection is NOT kept in step with bulk_update_test_run_test_cases or update_test_run: cases removed or added that way can still be listed here, or be missing, and a folder can still be stored as select-all. Before resending it, compare `selection.unique_test_case_count` with `test_run.test_cases_count` and the run's case listing; when they disagree, resending as-is re-adds removed cases and pulls in whole folders — rebuild the folders entries from the run's current cases, or avoid the full edit.",
           "Everything is under `data`, including `success` — there is no top-level `success` on this response. Closed runs can be read.",
           "A read only: it changes nothing and needs no permission beyond access to the project."
-        ]
+        ],
+        "disabled": true
       },
       {
         "name": "export_dashboard_analytics",
@@ -9024,7 +9099,7 @@
             "required": true
           }
         ],
-        "intent": "List the test cases that have been archived in a project — the source of the ids the bulk-retrieve (un-archive) call needs.",
+        "intent": "List the test cases that have been archived in a project.",
         "returns": [
           "success",
           "test_cases",
@@ -9048,7 +9123,7 @@
         "guidance": [
           "Plan-gated, and it fails OPEN-LOOKING: on a workspace that is not a paid plan this returns HTTP 200 with `{success:false, error:\"...\"}` and no test cases. Check `success`, not the status code, before concluding the archive is empty.",
           "Project-wide only — there is no folder scoping on this route. Each row carries its original folder path so you can tell where a case will be restored to.",
-          "Take the integer `id` of each row: that is what bulk-retrieve takes to un-archive them.",
+          "Take the integer `id` of each row. Un-archiving is not available through this surface.",
           "Paged with `p`; there is no per_page on this route, so walk pages until `info.next` is null.",
           "`cases_count` in the response is keyed by folder id, and on this route that key is null because no folder was scoped — read `info.count` for the total instead."
         ],
@@ -12839,6 +12914,7 @@
           }
         },
         "guidance": [
+          "HEAVY: `data.test_case.testcase_template` carries every custom-field definition in the workspace, so one case can come back as megabytes, and `exclude` does not remove it. For a case's fields use get_test_case; for step ids inside a run use list_test_run_test_cases with fetch_steps=true. Read this only when nothing lighter has what you need.",
           "The case is at `data.test_case`, and `success` is INSIDE `data` alongside it, not at the top level. `data.is_archived` tells you the case is archived rather than live.",
           "By default this returns counts, not the run results themselves. Pass `exclude` to switch into the lighter mode, and read the paginated runs-results / runs-issues endpoints when you need the actual rows.",
           "`include=folder_path` adds `data.test_case.folder_path` — the human-readable folder path. It is the only supported value.",
@@ -15106,7 +15182,7 @@
           "Archived SUB-plans are not listed; there is no include_sub_plans switch on this route. Only top-level archived plans come back.",
           "Rows are serialized exactly like the active listing (same fields, plus record_status: 'archived'), so anything that consumes the normal plan list works unchanged here.",
           "Page size is fixed at 30; page with `p` and stop using the `info` envelope. There is no `count` object on this response, unlike the active listing.",
-          "To put a plan back, pass its integer id to the bulk-retrieve capability."
+          "Restoring an archived plan is not available through this surface."
         ],
         "returns": [
           "success",
@@ -17423,68 +17499,7 @@
               "TC-2"
             ],
             "json_path": "/test_run/test_cases",
-            "description": "The run's COMPLETE intended case list, not a list to add. The partial-update call on this same path REPLACES membership rather than unioning it, and this full-replace call is no gentler: assume a case missing from the list is removed with its results and assignee. Send the run's existing case identifiers plus the new ones — or, to add cases, use bulk_update_test_run_test_cases with add_test_cases, which is truly additive."
-          },
-          {
-            "name": "include_all",
-            "type": "boolean",
-            "default": false,
-            "json_path": "/test_run/include_all",
-            "description": "Select every test case in the project. Overrides folder_ids and filter_test_cases when true."
-          },
-          {
-            "name": "folder_ids",
-            "type": "array",
-            "fields": [
-              {
-                "name": "folder_id",
-                "type": "integer"
-              }
-            ],
-            "json_path": "/test_run/folder_ids",
-            "description": "Folder IDs whose cases go into the run's selection. Assume the same replace semantics as test_cases, so combine it with the existing case identifiers rather than sending folders alone."
-          },
-          {
-            "name": "include_sub_folders",
-            "type": "boolean",
-            "default": false,
-            "json_path": "/test_run/include_sub_folders"
-          },
-          {
-            "name": "filter_test_cases",
-            "type": "object",
-            "fields": [
-              {
-                "name": "is_dynamic",
-                "type": "boolean"
-              },
-              {
-                "name": "priority",
-                "type": "array"
-              },
-              {
-                "name": "status",
-                "type": "array"
-              },
-              {
-                "name": "case_type",
-                "type": "array"
-              },
-              {
-                "name": "owner",
-                "type": "array"
-              },
-              {
-                "name": "tags",
-                "type": "array"
-              },
-              {
-                "name": "custom_fields",
-                "type": "object"
-              }
-            ],
-            "json_path": "/test_run/filter_test_cases",
-            "description": "Filter criteria used to resolve cases, and the only place is_dynamic is read. is_dynamic:true needs at least one other key here or the call 400s; is_dynamic:false turns a dynamic run static. Omitting is_dynamic leaves the run's current dynamic flag alone."
+            "description": "The run's COMPLETE intended case list, not a list to add. The partial-update call on this same path REPLACES membership rather than unioning it, and this full-replace call is no gentler: assume a case missing from the list is removed with its results and assignee. To add cases, send the run's existing case identifiers plus the new ones."
           },
           {
             "name": "configuration_map",
@@ -17501,16 +17516,6 @@
             ],
             "json_path": "/test_run/configuration_map",
             "description": "Per-case configuration assignment overlay: each entry is {test_case_id: \"TC-1\" or [\"TC-1\",\"TC-2\"], configuration_ids: [101,102]}. Unresolvable case or configuration IDs return 422. It is an overlay, not the case list — cases you list elsewhere are still included, with a null-configuration row."
-          },
-          {
-            "name": "filter_scope",
-            "type": "string",
-            "values": [
-              "global",
-              "within_folders"
-            ],
-            "json_path": "/test_run/filter_scope",
-            "description": "Accepted by the parameter filter but NOT honoured on either update path — the selection is always built in global mode here. Only create reads it."
           }
         ],
         "intent": "Rewrite a test run from a complete payload — every metadata field you leave out is reset, so the run ends up as whatever this one body says. Use the partial update instead when you only mean to change some fields.",
@@ -17518,8 +17523,8 @@
           "Two different operations share this path. This POST rebuilds the whole run payload; the PATCH applies only the keys you send. If you are renaming a run, closing it, or linking a plan, pick the PATCH.",
           "Omission is destructive here: no run_state resets the run to new_run, no test_plan_id/sub_test_plan_id unlinks the plan it was under, and no issues clears its linked defects. Read the run first and re-send its current values for anything you do not mean to change.",
           "An invalid run_state is not rejected on this call — it is silently coerced to new_run. The partial-update call on the same run returns 400 instead, so use that one if you want the error.",
-          "shared_test_cases and filter_scope are accepted by the parameter filter and then ignored on this path. Cross-project cases only land through the PATCH.",
-          "Case membership is REPLACED, not unioned: whatever test_cases / folder_ids / include_all resolve to should be treated as the run's whole case list. Always send the existing cases plus the new ones; a case left out loses its results.",
+          "shared_test_cases is accepted by the parameter filter and then ignored on this path. Cross-project cases only land through the PATCH.",
+          "Case membership is REPLACED, not unioned: the test_cases list you send should be treated as the run's whole case list. Always send the existing cases plus the new ones; a case left out loses its results.",
           "Send the fields flat. The `test_run` wrapper is added for you from each field's json_path, and sending your own `test_run` object is rejected before the call as an unknown body key.",
           "400 'invalid data' also covers an assignee email that cannot be resolved in this group — the run is left untouched in that case.",
           "There is no undo: test runs keep no version history, so a field this call clears cannot be restored.",
@@ -18507,10 +18512,11 @@
             "json_path": "/required/fields"
           },
           {
-            "name": "custom_fields",
+            "name": "required_custom_fields",
             "type": "string",
             "example": "121,119",
-            "json_path": "/required/custom_fields"
+            "json_path": "/required/custom_fields",
+            "description": "Comma-separated custom field ids to include in each returned row. Distinct from `custom_fields`, which filters by custom field values."
           },
           {
             "name": "result_custom_fields",
@@ -19209,7 +19215,8 @@
           "linked_projects",
           "linked_to_all_projects",
           "options"
-        ]
+        ],
+        "disabled": true
       },
       {
         "name": "update_custom_field_definition",
@@ -21227,68 +21234,7 @@
               "TC-2"
             ],
             "json_path": "/test_run/test_cases",
-            "description": "The run's COMPLETE intended case list — NOT a list to add. Any case already in the run and missing from this list is removed, with its run row, assignee and results; the run's own fields (owner, tags, description) are kept. To ADD cases, use bulk_update_test_run_test_cases with add_test_cases instead — it is the only truly additive call. If you must use this field, send the run's current case identifiers (list_test_run_test_cases) plus the new ones: retained cases then keep their run row id and assignee, and only the new cases are inserted."
-          },
-          {
-            "name": "include_all",
-            "type": "boolean",
-            "default": false,
-            "json_path": "/test_run/include_all",
-            "description": "Select every test case in the project. Overrides folder_ids and filter_test_cases when true."
-          },
-          {
-            "name": "folder_ids",
-            "type": "array",
-            "fields": [
-              {
-                "name": "folder_id",
-                "type": "integer"
-              }
-            ],
-            "json_path": "/test_run/folder_ids",
-            "description": "Folder IDs whose cases go into the run's selection. Assume the same replace semantics as test_cases, so combine it with the existing case identifiers rather than sending folders alone."
-          },
-          {
-            "name": "include_sub_folders",
-            "type": "boolean",
-            "default": false,
-            "json_path": "/test_run/include_sub_folders"
-          },
-          {
-            "name": "filter_test_cases",
-            "type": "object",
-            "fields": [
-              {
-                "name": "is_dynamic",
-                "type": "boolean"
-              },
-              {
-                "name": "priority",
-                "type": "array"
-              },
-              {
-                "name": "status",
-                "type": "array"
-              },
-              {
-                "name": "case_type",
-                "type": "array"
-              },
-              {
-                "name": "owner",
-                "type": "array"
-              },
-              {
-                "name": "tags",
-                "type": "array"
-              },
-              {
-                "name": "custom_fields",
-                "type": "object"
-              }
-            ],
-            "json_path": "/test_run/filter_test_cases",
-            "description": "Filter criteria used to resolve cases, and the only place is_dynamic is read. is_dynamic:true needs at least one other key here or the call 400s; is_dynamic:false turns a dynamic run static. Omitting is_dynamic leaves the run's current dynamic flag alone."
+            "description": "The run's COMPLETE intended case list — NOT a list to add. Any case already in the run and missing from this list is removed, with its run row, assignee and results; the run's own fields (owner, tags, description) are kept. There is no additive call on this surface, so to ADD cases send the run's current case identifiers (list_test_run_test_cases) plus the new ones: retained cases then keep their run row id and assignee, and only the new cases are inserted."
           },
           {
             "name": "configuration_map",
@@ -21305,16 +21251,6 @@
             ],
             "json_path": "/test_run/configuration_map",
             "description": "Per-case configuration assignment overlay: each entry is {test_case_id: \"TC-1\" or [\"TC-1\",\"TC-2\"], configuration_ids: [101,102]}. Unresolvable case or configuration IDs return 422. It is an overlay, not the case list — cases you list elsewhere are still included, with a null-configuration row."
-          },
-          {
-            "name": "filter_scope",
-            "type": "string",
-            "values": [
-              "global",
-              "within_folders"
-            ],
-            "json_path": "/test_run/filter_scope",
-            "description": "Accepted by the parameter filter but NOT honoured on either update path — the selection is always built in global mode here. Only create reads it."
           },
           {
             "name": "shared_test_cases",
@@ -21339,14 +21275,13 @@
             "description": "Only honoured on this partial-update call (and only for the literal values true/false); the full-replace call on the same run ignores it. It turns an existing manual run into an automation run — this is the only way to get one, since both run creates ignore the flag. The reply carries no is_automation, so confirm with the v1 run read."
           }
         ],
-        "intent": "Change just the fields you name on a test run — rename it, move its state on, link or unlink a test plan, attach configurations or a dynamic filter — leaving everything you omit untouched",
+        "intent": "Change just the fields you name on a test run — rename it, move its state on, link or unlink a test plan, attach configurations — leaving everything you omit untouched",
         "guidance": [
           "Two different operations share this path. This PATCH applies only the keys present in `test_run`; the POST rebuilds the whole payload and resets what you omit. This is the safe default for a targeted edit.",
           "Unlinking is explicit: send test_plan_id (or sub_test_plan_id) as null or \"\" to detach the plan. Omitting the key keeps the current link.",
           "run_state is validated here: an unknown value returns 400 echoing it. Both 'new_run' and 'new' are accepted. Omit the key to leave the state alone.",
-          "is_dynamic lives inside filter_test_cases and nowhere else. true needs at least one other criterion in the same object or the call 400s; false flips a dynamic run back to static; omitting it leaves the flag as it is.",
-          "Composition keys interact: sending only configurations re-reads the run's existing case selection so the case list survives, and sending selection keys without configurations re-reads the existing configuration list. Send neither and the run's composition is left completely untouched.",
-          "Case membership is REPLACED, not unioned: the selection you send becomes the run's whole case list, and any case missing from it is removed with its run row, assignee and results — with a 200. Only the run's own fields follow the partial rule (omitted owner, tags and description are kept). To add cases use bulk_update_test_run_test_cases (add_test_cases); if you use this call anyway, read the current cases and send existing + new, then re-read to confirm the count.",
+          "Composition keys interact: sending only configurations re-reads the run's existing case list so it survives, and sending test_cases without configurations re-reads the existing configuration list. Send neither and the run's composition is left completely untouched.",
+          "Case membership is REPLACED, not unioned: the test_cases list you send becomes the run's whole case list, and any case missing from it is removed with its run row, assignee and results — with a 200. Only the run's own fields follow the partial rule (omitted owner, tags and description are kept). To add cases, read the current cases and send existing + new, then re-read to confirm the count.",
           "Send the fields flat. The `test_run` wrapper is added for you from each field's json_path, and sending your own `test_run` object is rejected before the call as an unknown body key.",
           "There is no undo: test runs keep no version history, so an overwritten name, description or tag list cannot be restored.",
           "The updated run comes back at the top level as `testrun` — one word, no underscore, and no `data` envelope. This differs from the read endpoints, which use `test_run`.",
@@ -21456,6 +21391,9 @@
         "path": "/api/v1/projects/{project_id}/generic/attachments",
         "mode": "write",
         "entity": "attachment",
+        "encoding": "multipart",
+        "local_only": true,
+        "timeout_seconds": 120,
         "path_params": [
           {
             "name": "project_id",
@@ -21463,7 +21401,19 @@
             "required": true
           }
         ],
-        "intent": "Upload a file to a project and get back its blob id plus pre-signed view/download URLs — the first half of the attach flow, needed before a file can be linked to a test case, result or rich-text field",
+        "body": [
+          {
+            "name": "file",
+            "type": "file",
+            "required": true,
+            "form_name": "attachments[]",
+            "accept": [".png", ".jpg", ".jpeg", ".gif", ".webp", ".log", ".pdf", ".txt", ".md", ".doc", ".docx", ".csv", ".xls", ".xlsx", ".json", ".html", ".zip"],
+            "max_bytes": 52428800,
+            "description": "Path to the file on this machine, inside MCP_UPLOAD_BASE_DIR. One file per call.",
+            "example": "/Users/me/screenshots/login-step-3.png"
+          }
+        ],
+        "intent": "Upload a file from this machine — a screenshot, log or document — to a project and get back its blob id, the first half of the attach flow: pass the id to create_step_result to put the file on one step of a test run",
         "returns": [
           "id",
           "name",
@@ -21486,15 +21436,23 @@
             "$response": "Forbidden"
           }
         },
-        "guidance": [
-          "NOT INVOCABLE through this interface. The handler reads `attachments` as an array of uploaded FILES from a multipart form and streams their bytes to storage; a file cannot be expressed as a JSON argument, which is why this record carries no body parameter at all.",
-          "Worse than an error: with no files the handler takes the empty path and answers 200 with `generic_attachment: []`. A call from here looks like it succeeded and uploads nothing — do not report a successful upload on that response.",
-          "If you need a blob id, the file has to be uploaded out of band (the product UI, or a direct multipart request built by the caller). Once it exists, the blob id is what the test-case, test-result and step attach capabilities take.",
-          "On a real multipart upload the status is 200, not the 201 the spec claims, and the body is {generic_attachment: [...]}: `id` is the blob id to carry forward, `url` and `download_url` are pre-signed and expire after 30 minutes, and `size` is a HUMAN-READABLE string ('300 KB') rather than a byte count.",
-          "No type allowlist is enforced on this generic path; the only limit is 50 MB per file. SVG/HTML/XML uploads are served with a forced-download disposition rather than inline.",
-          "A single invalid file fails the whole request: every blob already written is deleted, and the 400 body reports only the LAST failing file's errors, under errors.message."
-        ],
-        "disabled": true
+        "guidance": {
+          "shared": [
+            "Answers 200 with {generic_attachment: [...]}. The entry's `id` is the blob id to carry forward — to attach a screenshot to one step of a test run, pass it as `attachments: [<id>]` to create_step_result. `url` and `download_url` are pre-signed and expire after 30 minutes, and `size` is a HUMAN-READABLE string ('300 KB') rather than a byte count.",
+            "ONE BLOB, ONE ATTACHMENT. A blob already attached somewhere is refused with 422 ('referenced elsewhere'), so upload a fresh copy for every step or result, even when it is the same screenshot.",
+            "A 200 whose generic_attachment list is EMPTY stored nothing — never report that as a successful upload.",
+            "Accepted: images (.png, .jpg, .jpeg, .gif, .webp), documents and logs (.log, .pdf, .txt, .md, .doc, .docx, .csv, .xls, .xlsx, .json, .html, .zip), up to 50 MB. HTML is served as a forced download rather than inline.",
+            "A file that fails validation deletes every blob written by that request, and the 400 reports the error under errors.message."
+          ],
+          "local": [
+            "The file must sit inside the directory MCP_UPLOAD_BASE_DIR names. When that is not set the upload is refused and nothing is sent: tell the user to set it to the folder holding their screenshots and restart the server.",
+            "When it is set but the file is somewhere else, the refusal names the directory the file has to be inside. Tell the user to move it there rather than trying another path. No part of the path may be a hidden folder.",
+            "The path is checked before anything is uploaded and before the user is asked to approve, so a refusal costs nothing and means the file was never read."
+          ],
+          "remote": [
+            "Not available on the hosted server, which cannot read files on the user's machine. Ask the user to attach the file in the Test Management UI, or to run the BrowserStack MCP server locally, where this upload works."
+          ]
+        }
       },
       {
         "name": "link_attachments_to_test_case",
@@ -21961,7 +21919,7 @@
           "BDD and step-based cases are mutually exclusive: steps on a BDD case are 422, feature/background/scenario on a non-BDD case are 422, and clearing feature or scenario to an empty string is 400.",
           "reviewers, send_for_review and review_status run a gate ladder (Team-Pro plan, the project's Review & Approve setting, 21 CFR Part 11) and are applied AFTER the case update has committed. A 502 with error_code reviewer_write_failed and test_case_updated true means the edit landed but the reviewer change did not — retry with only the reviewer field, never with the whole body.",
           "Changing anything here can move the case out of an approved review state, and reviewer removals send email immediately.",
-          "Sharing cannot be changed here. `is_shared` is checked before the write — sending it on a project without test-case sharing enabled returns 400 — and is then discarded, so the value never takes effect. Use the bulk edit to change sharing.",
+          "Sharing cannot be changed here. `is_shared` is checked before the write — sending it on a project without test-case sharing enabled returns 400 — and is then discarded, so the value never takes effect. Sharing cannot be changed through this surface.",
           "Four fields are entitlement-gated and are dropped without error when the workspace lacks the entitlement: `created_at` and `updated_at` need external-API timestamps, and `identifier` applies only to project-level-id workspaces. Read the case back if you need to confirm one landed.",
           "Parts of the echoed case are conditional, so test for the key rather than for an empty value: `feature`, `background` and `scenario` come back only on a Gherkin case (where `steps` is then an empty array), and `reviewers` and `review_status` appear only when the project has Review & Approve enabled on a Team-Pro plan. `issues`, `steps`, `custom_fields` and `attachments` come back as empty arrays when nothing is set — note that `attachments` is empty here, not missing, unlike the create response, and that editing a case never adds one: files are attached through the attachment upload capability."
         ],
@@ -22070,7 +22028,7 @@
         "intent": "File one test case in a different folder — use this to reorganise the tree, move a case out of an inbox/triage folder, or put a case where a run or plan expects to find it",
         "guidance": [
           "Within ONE project only: there is no destination-project field, and the case is looked up in the same project it is moved inside. A cross-project move is not available here.",
-          "One case per call. To move many, use the bulk move, which takes a selection under a `test_case` object and runs asynchronously past ~30 cases; this one is always synchronous and is the cleaner choice for a single case.",
+          "One case per call, always synchronous. To move several cases, call it once per case and check each result.",
           "The destination is a plain integer folder id and is NOT guessable — resolve it from the project's folder tree first. Nothing in this layer checks that the folder belongs to this project, so a stray id from another project is only caught (or not) downstream.",
           "Moving a case into the folder it is already in is accepted and returns 200 with the case unchanged. Unlike the v1 edit path, the same-folder value is not stripped before the write, so the upstream write still happens.",
           "Capture the case's current folder before you call if you may want to undo: the response reports only the NEW folder, and moving back means calling this again with the old id.",
@@ -27616,7 +27574,8 @@
           "500": {
             "$response": "InternalServerError"
           }
-        }
+        },
+        "disabled": true
       },
       {
         "name": "get_linked_test_case_selection",
@@ -49176,11 +49135,11 @@
           "Each blob/attachment row carries an integer id and a url (the file's location) — read the file from that url; there is no dedicated download endpoint.",
           "A file is attached in TWO steps: upload it to the project to get a numeric blob id, then link that id to the test case, result or step. The link calls take ids, never file content or filenames.",
           "A blob can be linked ONCE. Attaching one that is already referenced elsewhere fails the whole request; upload a separate copy for each place the file should appear.",
-          "Putting a NEW file into the product cannot be done through this interface at all — an agent can link an already-uploaded file, remove one, and read attachment metadata, but the upload itself has to happen in the product UI.",
+          "Uploading a NEW file works only on a local server: upload_generic_attachments reads it from MCP_UPLOAD_BASE_DIR and returns its blob id. The hosted server cannot read files on the caller's machine, so there the upload has to happen in the product UI.",
           "Removing an attachment purges the stored file, not just the link. There is no recycle bin for attachments and no undo.",
           "The view and download URLs handed back on upload are pre-signed and expire after about 30 minutes — fetch the file promptly or re-read the attachment to get a fresh one.",
           "The older per-test-case attachment reads return metadata only (id, filename, type, size) with no URL; the newer entity-attachment listing is the one that hands back a readable URL per file.",
-          "A file cannot be attached to a test case through this surface at all. The call that does it works, but it takes the file itself as a form upload, which this transport cannot send — the same reason the upload capabilities here accept no file and quietly do nothing. Attaching is done in the product, not here.",
+          "A file cannot be attached directly to a test case through this surface. The call that does it takes the file itself as a form upload and is not published; attach to a test case in the product. A file uploaded with upload_generic_attachments can go on a test run step via create_step_result.",
           "An empty attachment list is not evidence that nothing is attached; it is the expected result whenever the attaching was done elsewhere."
         ]
       },
@@ -49742,11 +49701,9 @@
         ],
         "key_facts": [
           "Bodies are wrapped in test_result; set status by NAME (status) or id (status_id) — use a real configured status (see statuses-and-states).",
-          "bulk-delete SUCCEEDS PARTIALLY and still returns 200. Authorisation is per id (author OR project admin); ids the caller may not delete come back in `skipped` — and BOTH lists are nested under a top-level `result` key, with `skipped` holding OBJECTS ({id, reason}) not bare ids, so read result.deleted_ids / result.skipped. Not as an error. ALWAYS compare deleted_ids against what you asked for and report the skipped ids — treating 200 as 'all deleted' will misreport.",
-          "bulk-delete needs a non-empty result_ids array (400 otherwise) of at most 300 ids (422 beyond) — batch bigger sets yourself.",
           "On the v2 surface a result's status is given by NAME (a status configured for the project, matched case-insensitively); the numeric status_id the v1 surface takes is not accepted there.",
-          "Logging a result APPENDS to a test case's result history in that run, so the previous outcome stays readable. A bulk status set REPLACES the case's current outcome in place instead — the overwritten status is not recoverable.",
-          "Bulk result writes are queued, not applied inline: a success response means accepted for processing. Per-case outcomes come back as ACCEPTED/FAILED, a partly-valid batch still answers 200 with success:false and status PARTIAL, and a bulk status set reports nothing per case at all — read the results back to confirm.",
+          "Logging a result APPENDS to a test case's result history in that run, so the previous outcome stays readable.",
+          "Multi-case result submissions are queued, not applied inline: a success response means accepted for processing. Per-case outcomes come back as ACCEPTED/FAILED, and a partly-valid batch still answers 200 with success:false and status PARTIAL — read the results back to confirm.",
           "A project can restrict which review statuses are allowed to log an execution result; cases outside that set are rejected with a REVIEW_STATUS_GATE error rather than being logged.",
           "Result attachments only attach on a multipart upload that carries the files alongside the JSON body; naming filenames in a plain JSON request is accepted and does nothing. Limits are 10 files per result, 100 per request and 50 MB per file, and a result description over 16 KB is truncated, not rejected.",
           "Amending the latest result edits it in place and keeps no prior copy of the amended values; logging a new result instead preserves the earlier outcome as its own entry in the case's history for that run.",
@@ -49990,12 +49947,10 @@
           "The newer v2 project surface addresses a test case by its TC-NNN identifier — or by its third-party identifier in workspaces that issue project-level ids — and does not accept the internal integer id; the older v1 surface is the reverse.",
           "Custom fields on a test case are addressed by their display NAME on the v2 surface and by numeric field id on the v1 surface; a name the project does not define is skipped without any error, so a typo reads back as a successful call that changed nothing.",
           "Priority, status and case type are per-project configurable values, not a fixed vocabulary: send the project's own display value (or its numeric id) and resolve the set from the project's system field values before writing.",
-          "Priority, status, case type and automation state are per-project configurable option sets. The single-case write paths accept either the numeric option id or the project's display name, but every BULK write requires the numeric id — a display name there is stored as a broken id with no error. Resolve the ids from the project's system field values first.",
+          "Priority, status, case type and automation state are per-project configurable option sets. The single-case write paths accept either the numeric option id or the project's display name. Resolve the ids from the project's system field values when in doubt.",
           "`status` is the exception on every path, single and bulk alike: it is only ever taken as a numeric option id, never resolved from a display name.",
           "A case's steps are only ever read from `test_case_steps`. A key called `steps` is legacy, is parsed as a JSON-encoded STRING, and turns a real JSON array into an empty step list — wiping the case's steps while still reporting success.",
           "`estimate` is a dead field: it is accepted on the write paths and then never stored, and every read serialises it as null. The estimate that actually persists is `estimated_duration_seconds`, in seconds, and it is not settable through any bulk edit.",
-          "Bulk operations switch to a background job above a size threshold that differs per operation — around 30 for a copy, 100 for an edit or move, 300 for a delete or restore. Past it the call returns an acknowledgement with a unique id instead of the result, so anything that reads the response body as the outcome is wrong for large selections.",
-          "Two bulk operations cannot touch the same cases at once: the second is refused with a 'TestCases in progress with another operation' error. That is a retry, not bad input.",
           "Archiving and un-archiving test cases, and listing the archive, are gated on a paid plan — and the refusal comes back as a SUCCESSFUL response carrying success:false, not as an error status.",
           "Whether deleting a case is recoverable depends on the workspace: where the Bin is enabled the case is moved there and can be restored, otherwise the delete is permanent. Either way the case's results and schedule links do not come back.",
           "Creating a case from a template is not automatic: when neither a template name nor a step type is sent, the write paths default to the plain-text template, which stores no steps at all and still reports success."
@@ -50061,8 +50016,7 @@
           "name IS REQUIRED ON EVERY PLAN UPDATE, including one that only touches test_runs. Omit it and the call is rejected with 400 {success: false, error: 'Invalid Update Params'} however valid the rest of the body is — the server's edit branch is gated on name being present. Read the plan first and echo its current name back unchanged. Only a pure plan_status transition and a reviewers-only edit are exempt. For example, {test_plan: {test_runs: [198]}} is a 400, and the same call with name added succeeds.",
           "Run ids in test_runs are the INTEGER uuid from a run read — NOT the run's id field, which is the TR-NNN string on every run endpoint (list, plan's run list, single detail alike). Identifiers are forwarded to the backing service uncoerced and fail upstream (observed 502 Upstream service error). Take uuid, never id.",
           "Linking a run MOVES it: a run belongs to at most one plan, so linking silently unlinks it from the plan that held it, with nothing in the 200 to say so. Read the runs' current membership first and tell the user which plans will lose runs.",
-          "test_runs accepts an id array OR a bulk-selection object {select_all, de_selected_ids, search_query}. select_all means 'the newest active runs', NOT 'everything matching' — and `filters` is accepted but SILENTLY IGNORED, so a filtered select_all links the whole recent set. Narrow with search_query (name/identifier substring) or send explicit ids.",
-          "bulk-archive / bulk-retrieve go ASYNC above the bulk threshold and return {success, async: true, unique_id} — the plans are NOT changed yet. Re-read to confirm; see async-jobs.",
+          "test_runs takes run ids only, as an array. The backend also accepts a selection object with select_all, but this surface refuses it.",
           "execution-trend is scoped by EXACTLY ONE of test_plan_id / test_run_id. Both → 400 'Provide either test_plan_id or test_run_id, not both'; neither → 400 'test_plan_id or test_run_id is required'.",
           "execution-trend and linked-sessions-chart-data return chart DATA. There is no insights-widget object to create, update, or delete in this profile.",
           "A plan's status only moves forward, one step at a time: new -> started -> completed. Once completed the plan is FROZEN — even a rename is refused with 'Cannot update completed test plan' — so complete it last.",
@@ -50151,7 +50105,7 @@
           "Dynamic runs match on nine fields only: priority, status, category, owner, automation_status, automation_state, folder, tags, issues. created_at/updated_at are stored and echoed on read but NEVER matched, so a 'last 7 days' dynamic run drops the date window and over-collects forever. Create runs static unless the user explicitly asks for sync.",
           "test_run.run_state is MANDATORY on create and edit (new_run | in_progress | under_review | rejected | done | closed). It is validated before the selection, so a bare 400 'invalid data' means a bad test_run field — NOT a bad selection shape.",
           "A run's `id` FIELD is the TR-NNN STRING, not the integer — on the project list, a plan's linked-run list and the single-run detail alike. The integer lives in `uuid` ({id: 'TR-90', uuid: 198}). Paths tolerate either form, which hides this; bodies and UI paths do not. Carrying `id` into a test plan's test_runs array sends a string that reaches the backing service uncoerced and 502s there. Take `uuid` whenever a run id leaves a read.",
-          "Full lifecycle is exposed: create, edit, assign, bulk-assign cases, bulk-edit results, clone, close, delete.",
+          "Create, assign, clone, close and delete are exposed. Bulk operations on a run (bulk case updates, bulk assign, bulk result edits) and the full edit form are not.",
           "A test run keeps NO version history and has no restore: unlike a test case, an edited name, cleared tag list or removed case cannot be recovered. Confirm before overwriting or removing.",
           "Removing a case from a run deletes the results recorded against it unless the caller explicitly asks to preserve them — the default is to discard.",
           "Changing which cases a run covers is always queued: the call returns an acceptance immediately and the run still shows the old case list for a moment. Re-read the run's cases to confirm, and do not retry on the acceptance.",
@@ -50162,9 +50116,8 @@
           "Creating a run does not populate it synchronously. The run exists as soon as the call succeeds, but its test cases are attached by background work, so an immediate read of the run's cases can come back empty or short. Re-read rather than retrying the create, which makes a second run.",
           "A run's name is optional at creation: leave it out and the run is named 'Test Run' plus today's date, which is how projects end up with several identically named runs.",
           "Marking a run as an automation run is not something a caller can do at creation — the flag is accepted and discarded, but it still decides which permission is demanded, so asking for it can be refused outright.",
-          "Rows in a run are per case-and-configuration pair, not per test case: a case covered by three configurations is three rows with the same case id and three different mapping ids. Every bulk operation on a run addresses those mapping ids, and passing the test case's own id instead returns success and changes nothing.",
+          "Rows in a run are per case-and-configuration pair, not per test case: a case covered by three configurations is three rows with the same case id and three different mapping ids. Every row-level operation on a run addresses those mapping ids, and passing the test case's own id instead returns success and changes nothing.",
           "Cloning a run copies NO test cases unless the caller explicitly asks for them. A clone requested without a case selection succeeds and produces an empty run, and the clone always starts in the new-run state with no configurations, owner or sync rule carried over.",
-          "Bulk changes inside a run switch from immediate to queued above 300 selected rows, and the queued form returns an acknowledgement with no data. The selected rows are locked while either form runs, so a second bulk operation touching any of them is refused as contention rather than queued behind it.",
           "Deleting a finished run needs a different permission from deleting one still in progress, so a role that can clear up working runs can be refused on completed ones.",
           "Discovering how many cases a selection really covers is a distinct read: it multiplies the cases by the configurations, so the number it returns is routinely far larger than the number of cases chosen.",
           "Editing a run requires resending its lifecycle state on every call, including edits that only change the name. A rejected edit that reports nothing more than 'invalid data' is almost always that missing state, not a bad case selection."

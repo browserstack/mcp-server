@@ -5,7 +5,7 @@ on:
 
 permissions:
   contents: read
-  id-token: write
+  actions: write
 
 jobs:
   publish-beta:
@@ -19,8 +19,7 @@ jobs:
       - name: "Set up Node.js"
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: 22.x
-          registry-url: "https://registry.npmjs.org/"
+          node-version: 24.22.3
 
       - name: "Install dependencies"
         run: npm ci
@@ -63,12 +62,23 @@ jobs:
           fi
           echo "Beta version $BETA_VERSION is available for release"
 
-      - name: "Update package.json with beta version"
-        run: |
-          npm version ${{ steps.get_version.outputs.version }} --no-git-tag-version
-
       - name: "Publish beta to NPM"
-        run: npm publish --tag beta --access public --provenance
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-          
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.get_version.outputs.version }}
+        run: |
+          RUN_ID=$(gh api -X POST "repos/$GITHUB_REPOSITORY/actions/workflows/publish.yml/dispatches" \
+            -f ref="$GITHUB_REF_NAME" -F return_run_details=true \
+            -f "inputs[ref]=$GITHUB_SHA" -f "inputs[version]=$VERSION" -f "inputs[tag]=beta" \
+            --jq .workflow_run_id)
+          PACKAGE="${{ steps.get_version.outputs.package }}@$VERSION"
+          echo "Publishing $PACKAGE: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$RUN_ID"
+          for _ in $(seq 12); do
+            gh run view "$RUN_ID" --repo "$GITHUB_REPOSITORY" --json status > /dev/null 2>&1 && break
+            sleep 5
+          done
+          if ! gh run watch "$RUN_ID" --repo "$GITHUB_REPOSITORY" --exit-status --interval 30 > /dev/null; then
+            gh run view "$RUN_ID" --repo "$GITHUB_REPOSITORY" --log-failed
+            exit 1
+          fi
+          echo "Published $PACKAGE"

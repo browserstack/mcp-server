@@ -1,3 +1,5 @@
+import { SessionType } from "../lib/constants.js";
+import { isNotFoundError } from "../lib/error.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
@@ -5,7 +7,14 @@ import logger from "../logger.js";
 import { BrowserStackConfig } from "../lib/types.js";
 import { fetchFromBrowserStackAPI, handleMCPError } from "../lib/utils.js";
 import { trackMCP } from "../lib/instrumentation.js";
-import { resolveHashedBuildId } from "./automate-utils/resolve-hashed-build-id.js";
+import {
+  isHashedBuildId,
+  NoSessionsError,
+  resolveHashedBuildId,
+} from "./automate-utils/resolve-hashed-build-id.js";
+import { mapHashedToTra } from "./automate-utils/resolve-tra-build-id.js";
+import { getRegionalHost } from "../lib/regional-host.js";
+import { wrapUntrusted } from "../lib/untrusted-content.js";
 
 // Tool function that fetches build insights from two APIs
 export async function fetchBuildInsightsTool(
@@ -13,23 +22,29 @@ export async function fetchBuildInsightsTool(
   config: BrowserStackConfig,
 ): Promise<CallToolResult> {
   try {
-    const buildUrl = `https://api-automation.browserstack.com/ext/v1/builds/${args.buildId}`;
-    const qualityGateUrl = `https://api-automation.browserstack.com/ext/v1/quality-gates/${args.buildId}`;
+    const inputId = args.buildId.trim();
+    let traBuildId = inputId;
+    let mappedSessionType: SessionType | undefined;
+    let fetched;
+    try {
+      fetched = await fetchInsightsData(traBuildId, config);
+    } catch (error) {
+      if (!isNotFoundError(error) || !isHashedBuildId(inputId)) throw error;
+      const mapped = await mapHashedToTra(inputId, error, config);
+      traBuildId = mapped.traBuildId;
+      mappedSessionType = mapped.sessionType;
+      fetched = await fetchInsightsData(traBuildId, config);
+    }
+    const { buildData, qualityData } = fetched;
 
-    // Quality gate data is optional — a failure there should not block build insights
-    const [buildData, qualityData] = await Promise.all([
-      fetchFromBrowserStackAPI(buildUrl, config),
-      fetchFromBrowserStackAPI(qualityGateUrl, config).catch((error) => {
-        logger.warn("Failed to fetch quality gate data", error);
-        return null;
-      }),
-    ]);
-
-    const { hashed_id, session_type } = await resolveInsightsHashedId(
-      args.buildId,
-      buildData,
-      config,
-    );
+    const { hashed_id, session_type, sessions } =
+      traBuildId === inputId
+        ? await resolveInsightsHashedId(traBuildId, buildData, config)
+        : {
+            hashed_id: inputId,
+            session_type: mappedSessionType,
+            sessions: undefined,
+          };
 
     // Select useful fields for users
     const insights = {
@@ -49,8 +64,10 @@ export async function fetchBuildInsightsTool(
       commit_sha: buildData.vcs_info?.sha,
       vcs_name: buildData.vcs_info?.name,
       quality_gate_result: qualityData?.quality_gate_result,
+      ...(traBuildId !== inputId ? { tra_build_id: traBuildId } : {}),
       ...(hashed_id ? { hashed_id } : {}),
       ...(session_type ? { session_type } : {}),
+      ...(sessions ? { sessions } : {}),
     };
 
     const qualityProfiles = qualityData?.quality_profiles?.map(
@@ -62,14 +79,16 @@ export async function fetchBuildInsightsTool(
 
     const qualityProfilesText =
       qualityProfiles && qualityProfiles.length > 0
-        ? `Quality Gate Profiles (respond only if explicitly requested): ${JSON.stringify(qualityProfiles, null, 2)}`
+        ? `Quality Gate Profiles (respond only if explicitly requested): ${wrapUntrusted("quality gate profiles", JSON.stringify(qualityProfiles, null, 2))}`
         : "No Quality Gate Profiles available.";
 
     return {
       content: [
         {
           type: "text",
-          text: "Build insights:\n" + JSON.stringify(insights, null, 2),
+          text:
+            "Build insights:\n" +
+            wrapUntrusted("build insights", JSON.stringify(insights, null, 2)),
         },
         { type: "text", text: qualityProfilesText },
       ],
@@ -78,6 +97,23 @@ export async function fetchBuildInsightsTool(
     logger.error("Error fetching build insights", error);
     throw error;
   }
+}
+
+async function fetchInsightsData(buildId: string, config: BrowserStackConfig) {
+  const host = getRegionalHost("automationApi");
+  const encoded = encodeURIComponent(buildId);
+  // Quality gate data is optional — a failure there should not block build insights
+  const [buildData, qualityData] = await Promise.all([
+    fetchFromBrowserStackAPI(`${host}/ext/v1/builds/${encoded}`, config),
+    fetchFromBrowserStackAPI(
+      `${host}/ext/v1/quality-gates/${encoded}`,
+      config,
+    ).catch((error) => {
+      logger.warn("Failed to fetch quality gate data", error);
+      return null;
+    }),
+  ]);
+  return { buildData, qualityData };
 }
 
 /**
@@ -89,7 +125,7 @@ async function resolveInsightsHashedId(
   observabilityBuildId: string,
   buildData: unknown,
   config: BrowserStackConfig,
-): Promise<{ hashed_id?: string; session_type?: string }> {
+): Promise<{ hashed_id?: string; session_type?: string; sessions?: string }> {
   const direct = extractHashedBuildId(buildData);
   if (direct) {
     return { hashed_id: direct };
@@ -101,6 +137,12 @@ async function resolveInsightsHashedId(
       session_type: resolved.sessionType,
     };
   } catch (error) {
+    if (error instanceof NoSessionsError) {
+      return {
+        sessions:
+          "none: results were uploaded (e.g. JUnit), so there are no Automate sessions, logs or video",
+      };
+    }
     logger.warn("Could not resolve hashed build id for build insights", error);
     return {};
   }
@@ -131,9 +173,11 @@ export default function addBuildInsightsTools(
 
   tools.fetchBuildInsights = server.tool(
     "fetchBuildInsights",
-    "Fetch build details and quality gate results. Includes hashed_id and session_type for listSessions.",
+    "Fetch build details and quality gate results for a TRA build. Includes hashed_id and session_type for listSessions.",
     {
-      buildId: z.string().describe("The build UUID of the BrowserStack build"),
+      buildId: z
+        .string()
+        .describe("TRA build id from listBuildId (Automate ids are mapped)."),
     },
     {
       title: "Fetch Build Insights",

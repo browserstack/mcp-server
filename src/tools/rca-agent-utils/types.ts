@@ -21,7 +21,7 @@ export interface TestRun {
 }
 
 // Trimmed per-test failure signature for downstream clustering.
-// Never carries full stack traces — error_summary is a single capped line.
+// Never carries full stack traces: error_summary is the error message plus one stack frame.
 export interface TestFailureSignature {
   category?: string;
   error_summary?: string;
@@ -70,6 +70,8 @@ export interface RCAResponse {
 }
 
 export interface BuildIdArgs {
-  browserStackProjectName: string;
-  browserStackBuildName: string;
+  browserStackProjectName?: string;
+  browserStackBuildName?: string;
+  buildNumber?: number;
+  buildUrl?: string;
 }

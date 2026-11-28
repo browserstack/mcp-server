@@ -8,6 +8,7 @@ import { trackMCP } from "../lib/instrumentation.js";
 import { BrowserStackConfig } from "../lib/types.js";
 import { isEnabled as capabilityRegistryEnabled } from "./capability-registry/config.js";
 import { versionString } from "../lib/version-keyword.js";
+import { CallerError } from "../lib/error.js";
 
 /**
  * Launches an App Live Session on BrowserStack.
@@ -23,36 +24,38 @@ export async function startAppLiveSession(
   config: BrowserStackConfig,
 ): Promise<CallToolResult> {
   if (!args.desiredPlatform) {
-    throw new Error("You must provide a desiredPlatform.");
+    throw new CallerError("You must provide a desiredPlatform.");
   }
 
   if (!args.appPath && !args.browserstackAppUrl) {
-    throw new Error("You must provide either appPath or browserstackAppUrl.");
+    throw new CallerError(
+      "You must provide either appPath or browserstackAppUrl.",
+    );
   }
 
   if (!args.desiredPhone) {
-    throw new Error("You must provide a desiredPhone.");
+    throw new CallerError("You must provide a desiredPhone.");
   }
 
   // Only validate app path if it's provided (not using browserstackAppUrl)
   if (args.appPath) {
     if (args.desiredPlatform === "android" && !args.appPath.endsWith(".apk")) {
-      throw new Error("You must provide a valid Android app path.");
+      throw new CallerError("You must provide a valid Android app path.");
     }
 
     if (args.desiredPlatform === "ios" && !args.appPath.endsWith(".ipa")) {
-      throw new Error("You must provide a valid iOS app path.");
+      throw new CallerError("You must provide a valid iOS app path.");
     }
 
     // check if the app path exists && is readable
     try {
       if (!fs.existsSync(args.appPath)) {
-        throw new Error("The app path does not exist.");
+        throw new CallerError("The app path does not exist.");
       }
       fs.accessSync(args.appPath, fs.constants.R_OK);
     } catch (error) {
       logger.error("The app path does not exist or is not readable: %s", error);
-      throw new Error("The app path does not exist or is not readable.");
+      throw new CallerError("The app path does not exist or is not readable.");
     }
   }
 
@@ -90,7 +93,8 @@ export default function addAppLiveTools(
   const description =
     "Open a manual App Live session for the user to operate by hand; the agent cannot drive it." +
     (capabilityRegistryEnabled()
-      ? " To tap, type or read the app yourself, use a mobiledevicecontrol session via invokeCapability."
+      ? " Use invokeCapability: mobiledevicecontrol to tap/type/read;" +
+        " applive list_apps to reuse an upload."
       : "");
 
   tools.runAppLiveSession = server.tool(
@@ -107,14 +111,18 @@ export default function addAppLiveTools(
       ),
       desiredPlatform: z
         .enum(["android", "ios"])
-        .describe(
-          "Which platform to run on, examples: 'android', 'ios'. Set this based on the app path provided.",
-        ),
+        .describe("Platform the app targets."),
       appPath: z
         .string()
+        .optional()
         .describe(
-          "Local .apk/.ipa path inside MCP_UPLOAD_BASE_DIR. Ask the user; never assume.",
+          "Local .apk/.ipa in MCP_UPLOAD_BASE_DIR. Check applive list_apps first;" +
+            " if already uploaded pass browserstackAppUrl.",
         ),
+      browserstackAppUrl: z
+        .string()
+        .optional()
+        .describe("bs:// app_url from applive list_apps."),
     },
     {
       title: "Run App Live Session",

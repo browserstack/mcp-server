@@ -7,12 +7,56 @@ const packageJson = require("../../package.json");
 import { apiClient } from "./apiClient.js";
 import globalConfig from "../config.js";
 import { redact } from "../tools/capability-registry/redact.js";
+import { stripUntrusted } from "./untrusted-content.js";
+import { isKnownProduct } from "../tools/capability-registry/config.js";
+import { accountRegion } from "./account-region.js";
+import { AxiosError } from "axios";
+import { HttpError } from "./error.js";
+import {
+  BLOCKED_STATUSES,
+  UpstreamScope,
+  withUpstreamScope,
+} from "./upstream-status.js";
+import {
+  AccountRegion,
+  currentRegionScope,
+  isRestrictedRegion,
+} from "./region-context.js";
 
 const INSTRUMENTATION_ENDPOINT = "https://api.browserstack.com/sdk/v1/event";
+
+/** This server's version: `mcp_version` here, `x-mcp-version` on registry calls. */
+export const MCP_VERSION: string = packageJson.version;
 
 export type ClientInfo = { name?: string; version?: string };
 
 export type ToolOutcome = "ok" | "error_result" | "threw";
+
+/**
+ * Who a failed call is attributed to. `caller`: the input or account was rejected (bad
+ * parameter, 4xx). `upstream`: the product API failed or was unreachable (5xx, 408, no
+ * answer). `mcp`: this server failed (threw, programming error, registry fault).
+ * `unknown`: a returned error with no evidence either way.
+ */
+export type FailureClass = "caller" | "upstream" | "mcp" | "unknown";
+
+/**
+ * Why a call got its failure_class, where the class alone would hide something the
+ * report needs: `blocked` (a caller fault that is entitlement, auth or a rate limit,
+ * reported as its own rate), `contract_drift` (the product rejected a request our own
+ * validation had accepted: the index or tool disagrees with the API), `region_probe`
+ * (the Test Management host probe, or the account's region lookup, failed before any
+ * product call), `central_auth` and
+ * `auth_scope` (a token could not be minted), `empty_error_result` (the tool reported
+ * failure with no text).
+ */
+export type FailureReason =
+  | "blocked"
+  | "contract_drift"
+  | "region_probe"
+  | "central_auth"
+  | "auth_scope"
+  | "empty_error_result";
 
 /**
  * Extra fields a caller may attach to its own row (the capability registry records what
@@ -44,12 +88,16 @@ interface MCPEventPayload {
     is_remote?: boolean;
     duration_ms?: number;
     outcome?: ToolOutcome;
+    failure_class?: FailureClass;
+    failure_reason?: FailureReason;
+    upstream_status?: number;
+    account_region?: AccountRegion;
   } & MCPEventExtras;
 }
 
 function baseProperties(toolName: string, clientInfo: ClientInfo) {
   return {
-    mcp_version: packageJson.version as string,
+    mcp_version: MCP_VERSION,
     tool_name: toolName,
     mcp_client: clientInfo?.name || "unknown",
     node_version: process.versions.node,
@@ -64,7 +112,74 @@ function errorProperties(error: unknown) {
   };
 }
 
+const USAGE_FIELDS = new Set([
+  "mcp_version",
+  "tool_name",
+  "mcp_client",
+  "node_version",
+  "is_remote",
+  "success",
+  "duration_ms",
+  "outcome",
+  "error_type",
+  "refusal_reason",
+  "product",
+  "capability",
+  "capability_method",
+  "capability_path",
+  "capability_mode",
+  "agent_match",
+  "results_returned",
+  "total_matched",
+  "truncated",
+  "weak_match",
+  "coverage",
+  "upstream_ok",
+  "upstream_status",
+  "failure_class",
+  "failure_reason",
+  "account_region",
+  "auth_failure_kind",
+  "probe_status",
+]);
+
+function forDataRegion(
+  props: MCPEventPayload["event_properties"],
+  account: AccountRegion | undefined,
+): MCPEventPayload["event_properties"] {
+  if (!isRestrictedRegion(account)) return props;
+  const keepsErrorText = account === "unknown";
+  return Object.fromEntries(
+    Object.entries(props).filter(
+      // A product name the agent typed is free text, so only a known product is kept.
+      ([key, value]) =>
+        (USAGE_FIELDS.has(key) &&
+          (key !== "product" || isKnownProduct(value))) ||
+        (keepsErrorText && key === "error_message"),
+    ),
+  ) as MCPEventPayload["event_properties"];
+}
+
 function sendEvent(event: MCPEventPayload, config?: any): void {
+  // Inside a tool call the region is already known; outside one, wait for the lookup.
+  const inCall = currentRegionScope();
+  const account = inCall ? inCall.account : accountRegion(config);
+  if (account instanceof Promise) {
+    account.then((region) => post(event, config, region)).catch(() => {});
+    return;
+  }
+  post(event, config, account);
+}
+
+function post(
+  event: MCPEventPayload,
+  config: any,
+  account: AccountRegion | undefined,
+): void {
+  event = {
+    ...event,
+    event_properties: forDataRegion(event.event_properties, account),
+  };
   let authHeader: string | undefined;
   if (config) {
     try {
@@ -156,7 +271,7 @@ function errorTextOf(result: unknown): string | undefined {
     )
     .filter(Boolean)
     .join(" ");
-  return redact(text);
+  return redact(stripUntrusted(text));
 }
 
 function isErrorResult(result: unknown): boolean {
@@ -167,9 +282,139 @@ function isErrorResult(result: unknown): boolean {
   );
 }
 
+/** The HTTP status an error carries; 0 when the request got no answer. */
+function statusOf(error: unknown): number | undefined {
+  if (error instanceof HttpError) return error.status;
+  if (error instanceof AxiosError) {
+    if (error.response) return error.response.status;
+    return error.request ? 0 : undefined;
+  }
+  // What Node's fetch rejects with when the request never got an answer.
+  if (error instanceof TypeError && error.message === "fetch failed") return 0;
+  return undefined;
+}
+
+// Registry refusals that are this server's fault; every other refusal is the caller's.
+const MCP_REFUSALS = new Set(["unexpected_error", "no_base_url"]);
+
+const PROGRAMMING_ERRORS = [TypeError, RangeError, ReferenceError, SyntaxError];
+
+/** 4xx that mean the account may not do this: entitlement, auth, rate limit. */
+
+/**
+ * 4xx that can only mean the product no longer serves the request as the tool or index
+ * describes it: the method, the resource or the media type changed. Contract drift, ours
+ * to fix. A 400 or 422 is deliberately NOT here: the server validates the shape of a
+ * request, not its values, and the body an agent writes for `invokeCapability` or a
+ * Test Management create is usually what the product is rejecting. Those stay the
+ * caller's; a handler that knows the request was fully validated sets `contract_drift`
+ * itself through its trackMCP extras.
+ */
+const DRIFT_STATUSES = new Set([405, 410, 415]);
+
+interface Attribution {
+  failure_class: FailureClass;
+  failure_reason?: FailureReason;
+}
+
+/** How a product's own answer is attributed, on either path. */
+function byStatus(status: number): Attribution | undefined {
+  if (status === 0 || status === 408 || status >= 500)
+    return { failure_class: "upstream" };
+  if (BLOCKED_STATUSES.has(status))
+    return { failure_class: "caller", failure_reason: "blocked" };
+  if (DRIFT_STATUSES.has(status))
+    return { failure_class: "mcp", failure_reason: "contract_drift" };
+  if (status >= 400) return { failure_class: "caller" };
+  return undefined;
+}
+
+/**
+ * The Test Management region probe. The other regions always answer 401 to an account
+ * that is not theirs, so the failure is the account's own (blocked: no product, bad
+ * credentials, rate-limited) only when every host refused it with a 401/402/403/429.
+ * If any host timed out or answered 5xx that host may have been the account's region,
+ * and the failure is the probe itself, which runs before every call and is this
+ * server's design. The US status is still logged as `probe_status`.
+ */
+function byProbe(everyHostBlocked: boolean): Attribution {
+  return everyHostBlocked
+    ? { failure_class: "caller", failure_reason: "blocked" }
+    : { failure_class: "mcp", failure_reason: "region_probe" };
+}
+
+/** A token could not be minted: whose problem depends on why. */
+function byTokenMint(kind: unknown): Attribution {
+  switch (kind) {
+    case "no_credentials":
+    case "refused_credentials":
+      return { failure_class: "caller", failure_reason: "blocked" };
+    case "refused_scope":
+      return { failure_class: "mcp", failure_reason: "auth_scope" };
+    default:
+      return { failure_class: "upstream", failure_reason: "central_auth" };
+  }
+}
+
+/**
+ * Attributes a failed call. Evidence is read in order: the registry's refusal reason,
+ * the region probe, an upstream outage, a programming error, a product failure the
+ * handler read off a 2xx (`markUpstreamFault`), a rejection of the caller's input
+ * (`CallerError`, `markCallerFault`), the product's 4xx, then whether the handler
+ * threw. A handler that knows better passes `failure_class` (and `failure_reason`) in
+ * its trackMCP extras, which win because extras are spread last onto the row.
+ *
+ * A completed capability invoke returns the product's 4xx/5xx as a normal result with
+ * `upstream_ok: false`; that row is attributed by its status like any other, so one
+ * field answers "did this call fail" on both paths.
+ */
+function failureClassOf(
+  outcome: ToolOutcome,
+  error: unknown,
+  status: number | undefined,
+  scope: UpstreamScope,
+  hasErrorText: boolean,
+  extras: MCPEventExtras | undefined,
+): Attribution | undefined {
+  if (outcome === "ok" && error === undefined) {
+    return extras?.upstream_ok === false && status !== undefined
+      ? byStatus(status)
+      : undefined;
+  }
+  const reason = extras?.refusal_reason;
+  if (typeof reason === "string") {
+    if (MCP_REFUSALS.has(reason)) return { failure_class: "mcp" };
+    if (reason === "region_probe_failed")
+      return byProbe(scope.probeBlocked === true);
+    if (reason === "token_mint_failed")
+      return byTokenMint(extras?.auth_failure_kind);
+    return { failure_class: "caller" };
+  }
+  if (scope.probeStatus !== undefined)
+    return byProbe(scope.probeBlocked === true);
+  if (status !== undefined && (status === 0 || status === 408 || status >= 500))
+    return { failure_class: "upstream" };
+  if (PROGRAMMING_ERRORS.some((kind) => error instanceof kind))
+    return { failure_class: "mcp" };
+  if (scope.upstreamFault === true) return { failure_class: "upstream" };
+  if (scope.callerFault === true)
+    return (status !== undefined && BLOCKED_STATUSES.has(status)) ||
+      scope.blocked === true
+      ? { failure_class: "caller", failure_reason: "blocked" }
+      : { failure_class: "caller" };
+  if (status !== undefined && status >= 400) return byStatus(status);
+  if (outcome === "threw") return { failure_class: "mcp" };
+  // A returned failure that says nothing is this server's defect: the tool knew it failed
+  // and gave the agent, and us, no reason.
+  if (outcome === "error_result" && !hasErrorText)
+    return { failure_class: "mcp", failure_reason: "empty_error_result" };
+  return { failure_class: "unknown" };
+}
+
 /**
  * Runs a tool handler and writes one MCPInstrumentation row when it settles: success,
- * duration_ms, outcome (ok / error_result / threw), error fields on failure.
+ * duration_ms, outcome (ok / error_result / threw), error fields on failure, the last
+ * upstream_status seen, and on a failure the failure_class it is attributed to.
  */
 export async function withToolCall<T>(
   toolName: string,
@@ -178,11 +423,14 @@ export async function withToolCall<T>(
   fn: () => Promise<T> | T,
 ): Promise<T> {
   const ctx: CallContext = { toolName, clientInfo: {}, config };
+  const upstream: UpstreamScope = {};
   const startedAt = performance.now();
   let outcome: ToolOutcome = "ok";
   let errorText: string | undefined;
   try {
-    const result = await callContext.run(ctx, fn);
+    const result = await withUpstreamScope(upstream, () =>
+      callContext.run(ctx, fn),
+    );
     if (isErrorResult(result)) {
       outcome = "error_result";
       // A returned failure never sets ctx.error, so the reason is read off the result.
@@ -202,6 +450,22 @@ export async function withToolCall<T>(
       } catch {
         /* client info is optional */
       }
+      // The error the handler reported is the cause; the last status seen is the fallback.
+      const upstreamStatus =
+        typeof ctx.extras?.upstream_status === "number"
+          ? ctx.extras.upstream_status
+          : (statusOf(ctx.error) ?? upstream.status);
+      const attribution = failureClassOf(
+        outcome,
+        ctx.error,
+        upstreamStatus,
+        upstream,
+        Boolean(errorText) || ctx.error !== undefined,
+        ctx.extras,
+      );
+      // Known inside a call once the lookup has answered; an enum, so it survives the
+      // restricted-region filter. Lets a failure be sliced by GRR region without a join.
+      const accountRegionNow = currentRegionScope()?.account;
       const event: MCPEventPayload = {
         event_type: "MCPInstrumentation",
         event_properties: {
@@ -209,6 +473,13 @@ export async function withToolCall<T>(
           success: ctx.error === undefined && outcome !== "threw",
           duration_ms: Math.max(0, Math.round(performance.now() - startedAt)),
           outcome,
+          ...(upstreamStatus !== undefined
+            ? { upstream_status: upstreamStatus }
+            : {}),
+          ...(attribution ?? {}),
+          ...(accountRegionNow !== undefined
+            ? { account_region: accountRegionNow }
+            : {}),
           ...(ctx.error !== undefined ? errorProperties(ctx.error) : {}),
           ...(outcome === "error_result" && ctx.error === undefined && errorText
             ? { error_message: errorText }

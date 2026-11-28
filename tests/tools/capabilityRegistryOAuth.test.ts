@@ -336,6 +336,54 @@ describe("a token the product rejects", () => {
     expect(transport).toHaveBeenCalledTimes(2);
   });
 
+  // web_accessibility signs in with Basic while its dashboard capabilities declare oauth2
+  // themselves; the replay used to check only the product's scheme and never fired for them.
+  it("replays for a capability whose own scheme is oauth2 under a Basic product", async () => {
+    const { invoke } =
+      await import("../../src/tools/capability-registry/resolve.js");
+    const statuses = [401, 200];
+    const transport = vi.fn(async () => ({
+      status: statuses.shift() ?? 200,
+      body: {},
+    }));
+
+    const result = await invoke(
+      { ...CAP, auth: { type: "oauth2" } } as never,
+      { path_params: {}, query: {}, body: {} },
+      "https://dash.example",
+      USER,
+      transport as never,
+      { type: "http", scheme: "basic" } as never,
+      "web_accessibility",
+    );
+
+    expect(result.ok).toBe(true);
+    expect(transport).toHaveBeenCalledTimes(2);
+  });
+
+  it("reads the bulk-review page signal (data.meta.nextPage) as more to come", async () => {
+    const { invoke } =
+      await import("../../src/tools/capability-registry/resolve.js");
+    const page = (nextPage: number | null) =>
+      vi.fn(async () => ({
+        status: 200,
+        body: { data: { meta: { totalCount: 3, currentPage: 1, nextPage } } },
+      }));
+    const run = (transport: ReturnType<typeof page>) =>
+      invoke(
+        CAP,
+        { path_params: {}, query: {}, body: {} },
+        "https://dash.example",
+        USER,
+        transport as never,
+        { type: "oauth2" },
+        "web_accessibility",
+      );
+
+    expect((await run(page(2))).completed).toBe(false);
+    expect((await run(page(null))).completed).toBe(true);
+  });
+
   it("gives up after one replay, so a wrong password cannot loop", async () => {
     const { invoke } =
       await import("../../src/tools/capability-registry/resolve.js");

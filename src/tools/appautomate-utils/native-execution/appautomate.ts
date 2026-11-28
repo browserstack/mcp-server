@@ -11,6 +11,8 @@ import {
   MAX_APP_UPLOAD_BYTES,
 } from "../../../lib/upload-validator.js";
 import appConfig from "../../../config.js";
+import { getRegionalHost } from "../../../lib/regional-host.js";
+import { CallerError } from "../../../lib/error.js";
 
 interface Device {
   device: string;
@@ -39,7 +41,7 @@ export function findMatchingDevice(
     const availableDevices = [
       ...new Set(devices.map((d) => d.display_name)),
     ].join(", ");
-    throw new Error(
+    throw new CallerError(
       `No devices found matching "${deviceName}". Available devices: ${availableDevices}`,
     );
   }
@@ -52,7 +54,7 @@ export function findMatchingDevice(
     const suggestions = [...new Set(matches.map((d) => d.display_name))].join(
       ", ",
     );
-    throw new Error(
+    throw new CallerError(
       `Alternative devices found: ${suggestions}. Please select one of these exact device names.`,
     );
   }
@@ -84,7 +86,7 @@ export function resolveVersion(
 
   const match = versions.find((v) => v === requestedVersion);
   if (!match) {
-    throw new Error(
+    throw new CallerError(
       `Version "${requestedVersion}" not found. Available versions: ${versions.join(", ")}`,
     );
   }
@@ -111,29 +113,33 @@ export function validateArgs(args: {
   } = args;
 
   if (!desiredPlatform || !desiredPhone) {
-    throw new Error(
+    throw new CallerError(
       "Missing required arguments: desiredPlatform and desiredPhone are required",
     );
   }
 
   if (!desiredPlatformVersion) {
-    throw new Error(
+    throw new CallerError(
       "Missing required arguments: desiredPlatformVersion is required",
     );
   }
 
   if (!appPath && !browserstackAppUrl) {
-    throw new Error("Either appPath or browserstackAppUrl must be provided");
+    throw new CallerError(
+      "Either appPath or browserstackAppUrl must be provided",
+    );
   }
 
   // Only validate app path format if appPath is provided
   if (appPath) {
     if (desiredPlatform === "android" && !appPath.endsWith(".apk")) {
-      throw new Error("You must provide a valid Android app path (.apk).");
+      throw new CallerError(
+        "You must provide a valid Android app path (.apk).",
+      );
     }
 
     if (desiredPlatform === "ios" && !appPath.endsWith(".ipa")) {
-      throw new Error("You must provide a valid iOS app path (.ipa).");
+      throw new CallerError("You must provide a valid iOS app path (.ipa).");
     }
   }
 }
@@ -156,7 +162,7 @@ export async function uploadApp(
   formData.append("file", fs.createReadStream(safePath));
 
   const response = await apiClient.post<UploadResponse>({
-    url: "https://api-cloud.browserstack.com/app-automate/upload",
+    url: `${getRegionalHost("appAutomateCloud")}/app-automate/upload`,
     headers: {
       ...formData.getHeaders(),
       Authorization:
@@ -218,7 +224,7 @@ export async function uploadEspressoApp(
 ): Promise<string> {
   return uploadFileToBrowserStack(
     appPath,
-    "https://api-cloud.browserstack.com/app-automate/espresso/v2/app",
+    `${getRegionalHost("appAutomateCloud")}/app-automate/espresso/v2/app`,
     "app_url",
     config,
     { allowedExtensions: [".apk", ".aab"] },
@@ -232,7 +238,7 @@ export async function uploadEspressoTestSuite(
 ): Promise<string> {
   return uploadFileToBrowserStack(
     testSuitePath,
-    "https://api-cloud.browserstack.com/app-automate/espresso/v2/test-suite",
+    `${getRegionalHost("appAutomateCloud")}/app-automate/espresso/v2/test-suite`,
     "test_suite_url",
     config,
     { allowedExtensions: [".apk"] },
@@ -246,7 +252,7 @@ export async function uploadXcuiApp(
 ): Promise<string> {
   return uploadFileToBrowserStack(
     appPath,
-    "https://api-cloud.browserstack.com/app-automate/xcuitest/v2/app",
+    `${getRegionalHost("appAutomateCloud")}/app-automate/xcuitest/v2/app`,
     "app_url",
     config,
     { allowedExtensions: [".ipa"] },
@@ -260,7 +266,7 @@ export async function uploadXcuiTestSuite(
 ): Promise<string> {
   return uploadFileToBrowserStack(
     testSuitePath,
-    "https://api-cloud.browserstack.com/app-automate/xcuitest/v2/test-suite",
+    `${getRegionalHost("appAutomateCloud")}/app-automate/xcuitest/v2/test-suite`,
     "test_suite_url",
     config,
     { allowedExtensions: [".zip"] },
@@ -271,6 +277,29 @@ export async function uploadXcuiTestSuite(
 export interface NativeBuildOptions {
   /** Run App Accessibility checks during the tests (the build API's `accessibility` flag). */
   accessibility?: boolean;
+  /** With accessibility on, also run Screen Reader Automation and report it. */
+  screenReader?: { linearNavigation?: boolean };
+}
+
+/** How long linear navigation may swipe through a screen, as the SR test configs use. */
+const LINEAR_NAVIGATION_TIMEOUT_MS = 300000;
+
+/** App Automate forwards these to the accessibility run only when accessibility is on. */
+function screenReaderOptions(
+  options: NativeBuildOptions,
+): Record<string, unknown> {
+  if (!options.accessibility || !options.screenReader) return {};
+  const linear = options.screenReader.linearNavigation
+    ? {
+        linearNavigation: true,
+        linearNavigationTimeout: LINEAR_NAVIGATION_TIMEOUT_MS,
+      }
+    : {};
+  return {
+    accessibilityOptions: {
+      screenReaderAutomation: { autoReport: true, ...linear },
+    },
+  };
 }
 
 function buildRequestBody(
@@ -286,6 +315,7 @@ function buildRequestBody(
     devices,
     project,
     ...(options.accessibility ? { accessibility: true } : {}),
+    ...screenReaderOptions(options),
   };
 }
 
@@ -302,7 +332,7 @@ export async function triggerEspressoBuild(
     "Basic " + Buffer.from(getBrowserStackAuth(config)).toString("base64");
 
   const response = await apiClient.post({
-    url: "https://api-cloud.browserstack.com/app-automate/espresso/v2/build",
+    url: `${getRegionalHost("appAutomateCloud")}/app-automate/espresso/v2/build`,
     headers: {
       Authorization: authHeader,
       "Content-Type": "application/json",
@@ -338,7 +368,7 @@ export async function triggerXcuiBuild(
   };
 
   const response = await apiClient.post({
-    url: "https://api-cloud.browserstack.com/app-automate/xcuitest/v2/build",
+    url: `${getRegionalHost("appAutomateCloud")}/app-automate/xcuitest/v2/build`,
     headers: {
       Authorization:
         "Basic " +

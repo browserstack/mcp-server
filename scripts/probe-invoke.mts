@@ -22,6 +22,7 @@
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
+import { readAnswer } from "../src/tools/capability-registry/answer.js";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const INDEX = `${ROOT}capability/tra.capability-index.json`;
@@ -119,7 +120,7 @@ async function main() {
       { name, product: "tra", ...a },
       {} as any,
     );
-    const payload = JSON.parse(result.content[0].text);
+    const payload = readAnswer(result);
     return {
       status: payload.http_response?.status ?? 0,
       body: payload.http_response?.body,

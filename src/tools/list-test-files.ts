@@ -3,11 +3,12 @@ import { storedPercyResults } from "../lib/inmemory-store.js";
 import { updateFileAndStep } from "./percy-snapshot-utils/utils.js";
 import { percyWebSetupInstructions } from "./sdk-utils/percy-web/handler.js";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import { CallerError } from "../lib/error.js";
 
 export async function addListTestFiles(): Promise<CallToolResult> {
   const storedResults = storedPercyResults.get();
   if (!storedResults) {
-    throw new Error(
+    throw new CallerError(
       "No Framework details found. Please call expandPercyVisualTesting first to fetch the framework details.",
     );
   }
@@ -38,7 +39,7 @@ export async function addListTestFiles(): Promise<CallToolResult> {
 
   // Validate that we have at least one test file
   if (testFiles.length === 0) {
-    throw new Error(
+    throw new CallerError(
       "No test files found. Please provide either specific file paths (files) or directory paths (dirs) containing test files.",
     );
   }

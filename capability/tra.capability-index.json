@@ -10,7 +10,14 @@
       "configuration",
       "schedule",
       "suite",
-      "result"
+      "result",
+      "tra",
+      "test reporting",
+      "test reporting and analytics",
+      "test observability",
+      "observability",
+      "triage",
+      "build summary"
     ],
     "summary": "BrowserStack Test Reporting & Analytics (TRA, aka Test Observability): ingest, investigate and report on automated test runs. A build groups the test runs of one CI/SDK execution; each run carries status, logs, errors, hooks and AI root-cause analysis. Everything is scoped to a project. Read builds and runs; filter and search them; manage dashboards, custom views and saved reports; configure quality gates, webhooks, notifications, CI triggers and integrations; and read stability, performance, flakiness and unique-error analytics. Tests are REPORTED here, not executed here - execution happens in your runner or another BrowserStack product and is pushed in via the SDK. Access-key auth reaches only the /ext/v1 external API; everything else needs a session or service credential. Each run records its result on the browser, device, OS and environment it ran on, under the app version and the build tags it was pushed with, and a failure can be linked to an issue. Saved reports can be scheduled. Destructive capabilities need explicit human approval.",
     "auth": {
@@ -12815,7 +12822,8 @@
           "Needs the caller's own BrowserStack username + Selenium access key, resolved server-side from the caller's user record; a caller whose record lacks them gets 400 'User details are not available'.",
           "Disabled entirely in the demo-sandbox environment.",
           "The body is optional \u2014 POST with no body queues the build's failures with no extra filtering."
-        ]
+        ],
+        "disabled": true
       },
       {
         "name": "get_test_rca_data",
@@ -13897,8 +13905,22 @@
           "While the build is still PENDING (or has no status yet) this returns HTTP 200 with an EMPTY `data` array, zeroed `aiRcaStats`/`commentCount`, and `message` = 'Failure Categories will be available after your build finishes'. That is a valid 200, not an error \u2014 check `message`/`data` before concluding there are no defects.",
           "Plan-locked builds return HTTP 403; an unknown uuid is BUILD_NOT_FOUND.",
           "Each `data` entry is a category with a `value` count and optional nested `categories` sub-buckets; `aiRcaStats.completedCount` is how many of these failures already have AI RCA.",
-          "Accepts the full FilterParamsV2 filter set plus arbitrary customParams; the breakdown reflects the applied filters."
-        ]
+          "Accepts the full FilterParamsV2 filter set plus arbitrary customParams; the breakdown reflects the applied filters.",
+          "The top-level category counts are the same as fetchBuildInsights' `failure_categories`. Call this only for the sub-category breakdown, `aiRcaStats` or `commentCount`.",
+          "Sub-categories with a zero count are returned too. `select` with fields `name` and `value` keeps only the top-level counts."
+        ],
+        "narrowable": {
+          "fields": [
+            "id",
+            "name",
+            "displayName",
+            "value",
+            "color",
+            "categories"
+          ],
+          "path": "data",
+          "note": "The endpoint has no field selection, so this narrowing is applied after the call. Fields `name` and `value` drop the nested sub-categories."
+        }
       },
       {
         "name": "get_build_failures_by_module",
@@ -14524,7 +14546,7 @@
             "name": "normalisedName",
             "type": "string",
             "required": true,
-            "description": "Project's normalised name."
+            "description": "Project's normalised name, or its display name as shown in TRA."
           }
         ],
         "query": [
@@ -14566,7 +14588,7 @@
           {
             "name": "dateRange",
             "type": "array",
-            "description": "Exactly two epoch-millisecond values [start, end] (@Size min=2,max=2).",
+            "description": "Exactly two epoch-millisecond values [start, end] (@Size min=2,max=2). Limits the listing to builds in that window.",
             "fields": [
               {
                 "name": "(item)",
@@ -14601,7 +14623,13 @@
           {
             "name": "state",
             "type": "string",
-            "description": "Build state filter (defaults to `active`)."
+            "description": "Build state filter. Defaults to `active`, which leaves out closed builds; `all` includes them.",
+            "values": [
+              "active",
+              "closed",
+              "all",
+              "deleted"
+            ]
           },
           {
             "name": "isArchived",
@@ -14618,9 +14646,43 @@
           "activeCount",
           "closedCount"
         ],
+        "narrowable": {
+          "fields": [
+            "uuid",
+            "id",
+            "name",
+            "originalName",
+            "buildNumber",
+            "buildRunId",
+            "status",
+            "displayStatus",
+            "startedAt",
+            "finishedAt",
+            "createdAt",
+            "duration",
+            "user",
+            "tags",
+            "source",
+            "origins",
+            "statusStats",
+            "issueTypeAggregate",
+            "historyAggregate",
+            "qualityGateStatus",
+            "testCaseCount",
+            "isArchived",
+            "ciBuildData",
+            "versionControlInfo"
+          ],
+          "path": "builds",
+          "note": "The endpoint has no field selection, so this narrowing is applied after the call."
+        },
         "guidance": [
-          "PREFERRED build listing for agents: newest-first, `pageLimit` sets the page size (keep it at or below 50 \u2014 each row is large and a big page overflows the tool output), `search` filters by build name, and rows carry buildNumber, `buildRunId` (CI run id), statusStats, historyAggregate (flaky / newFailure / alwaysFailing counts) and qualityGateStatus, so one call answers 'last N builds with status'.",
-          "Takes the project's NORMALISED NAME in the path, not a numeric id. Uses the same large filter object as the build-groups listing.",
+          "PREFERRED build listing for agents: newest-first, `pageLimit` sets the page size (keep it at or below 50), `search` filters by build name, and rows carry buildNumber, `buildRunId` (CI run id), statusStats, historyAggregate (flaky / newFailure / alwaysFailing counts) and qualityGateStatus, so one call answers 'last N builds with status'.",
+          "Takes the project's normalised name in the path, not a numeric id. The display name works as is (`My Project` and `My+Project` both resolve), so no project lookup is needed first. Uses the same large filter object as the build-groups listing.",
+          "For builds in a period ('today', 'last night', two dates) pass `dateRange` with the window in epoch milliseconds; it matches `startedAt` and includes both ends. One call lists every build in it, including several builds with the same name. `state` defaults to `active`, so closed builds are left out; pass `state` `all` to include them. listBuildId and getBuildId return only the latest build for one name and take no date.",
+          "Rows are ordered by the internal build id, which follows creation order: newest first by default, oldest first with `sortOrder` `Asc`. There is no sort by `startedAt`.",
+          "`activeCount`, `closedCount`, `manualBuildCount` and `automationBuildCount` count the whole filtered result and are sent on the first page only; later pages return null by design. Read them from page 1.",
+          "Each row is about 3.5 KB. `select` with `fields` keeps only the named fields on every row, for example name, buildNumber, startedAt, displayStatus, tags, statusStats, issueTypeAggregate and historyAggregate for a triage listing; `pagingParams` and the counts are kept. `where`, `distinct` and `limit` only see the returned page, not the whole project: filter on the server with `statuses`, `search` and `dateRange` instead.",
           "SIDE EFFECT: this call marks the project as subscribed for the calling user \u2014 a read that quietly changes the user's subscription state. It also applies the group's custom data-retention window for the duration of the request, so builds older than the retention window will not appear regardless of `dateRange`.",
           "Cursor pagination via `pagingParams` / `searchAfter`; page through until the paging params report no next cursor. `pageLimit` defaults to 10.",
           "Each build row is a rich BuildSummary (status, statusStats, run/session counts, quality-gate status, tags, etc.), not the trimmed external shape.",
@@ -15705,7 +15767,8 @@
           "500": {
             "$response": "InternalServerError"
           }
-        }
+        },
+        "disabled": true
       },
       {
         "name": "list_projects_for_sidebar",
@@ -18062,7 +18125,8 @@
           "500": {
             "$response": "InternalServerError"
           }
-        }
+        },
+        "disabled": true
       },
       {
         "name": "list_build_bstack_error_sessions",

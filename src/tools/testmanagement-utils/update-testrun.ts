@@ -5,6 +5,8 @@ import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { formatAxiosError } from "../../lib/error.js";
 import { BrowserStackConfig } from "../../lib/types.js";
 import { getTMBaseURL } from "../../lib/tm-base-url.js";
+import { wrapUntrusted } from "../../lib/untrusted-content.js";
+import { markCallerFault } from "../../lib/upstream-status.js";
 
 /**
  * Selection of test cases (with optional configurations) to add.
@@ -85,6 +87,7 @@ export async function updateTestRun(
   const hasMetadata = name !== undefined || run_state !== undefined;
 
   if (!hasTestCases && !hasMetadata) {
+    markCallerFault();
     return {
       content: [
         {
@@ -145,11 +148,12 @@ async function updateTestRunMetadata(
 
     const data = resp.data;
     if (!data.success) {
+      markCallerFault();
       return {
         content: [
           {
             type: "text",
-            text: `Failed to update test run: ${JSON.stringify(data)}`,
+            text: `Failed to update test run: ${wrapUntrusted("API response", JSON.stringify(data))}`,
           },
         ],
         isError: true,
@@ -162,7 +166,13 @@ async function updateTestRunMetadata(
           type: "text",
           text: `Successfully updated test run ${args.test_run_id}`,
         },
-        { type: "text", text: JSON.stringify(data.testrun || data, null, 2) },
+        {
+          type: "text",
+          text: wrapUntrusted(
+            "test run (structured data)",
+            JSON.stringify(data.testrun || data, null, 2),
+          ),
+        },
       ],
     };
   } catch (err) {
@@ -204,11 +214,12 @@ async function updateTestRunTestCases(
 
     const data = resp.data;
     if (!data.success) {
+      markCallerFault();
       return {
         content: [
           {
             type: "text",
-            text: `Failed to update test run test cases: ${JSON.stringify(data)}`,
+            text: `Failed to update test run test cases: ${wrapUntrusted("API response", JSON.stringify(data))}`,
           },
         ],
         isError: true,
@@ -223,7 +234,13 @@ async function updateTestRunTestCases(
           type: "text",
           text: `Queued test-case update for ${args.test_run_id} (added ${added.length}); changes apply asynchronously.`,
         },
-        { type: "text", text: JSON.stringify(data, null, 2) },
+        {
+          type: "text",
+          text: wrapUntrusted(
+            "test run update (structured data)",
+            JSON.stringify(data, null, 2),
+          ),
+        },
       ],
     };
   } catch (err) {

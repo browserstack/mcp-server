@@ -93,3 +93,109 @@ describe("TM plan descriptions are wrapped in every content block", () => {
     assertPayloadOnlyWrapped(res);
   });
 });
+
+// Stricter than "the block mentions UNTRUSTED": every occurrence of the payload
+// must sit between an opening marker and its matching closer.
+function assertEveryOccurrenceInside(text: string) {
+  const spans = [
+    ...text.matchAll(
+      /«UNTRUSTED [^»]+ ([0-9a-f]{12})»\n[\s\S]*?\n«END UNTRUSTED \1»/g,
+    ),
+  ].map((m) => [m.index!, m.index! + m[0].length]);
+  let at = text.indexOf(PAYLOAD);
+  expect(at).toBeGreaterThanOrEqual(0);
+  while (at >= 0) {
+    const pos = at;
+    expect(spans.some(([a, z]) => a < pos && pos < z)).toBe(true);
+    at = text.indexOf(PAYLOAD, at + 1);
+  }
+}
+
+const runsWithPayload = {
+  data: {
+    success: true,
+    test_runs: [
+      {
+        identifier: "TR-1",
+        name: PAYLOAD,
+        run_state: "new_run",
+        test_cases_count: 1,
+        assignee: PAYLOAD,
+      },
+    ],
+  },
+};
+
+describe("TM plan headers keep user-written names inside the boundary", () => {
+  it("getTestPlan wraps the plan name and the linked run list", async () => {
+    getMock.mockImplementation((opts: any = {}) => {
+      if ((opts?.url ?? "").includes("/test-runs"))
+        return Promise.resolve(runsWithPayload);
+      return Promise.resolve({
+        data: {
+          success: true,
+          test_plan: {
+            identifier: "TP-1",
+            name: PAYLOAD,
+            active_state: "active",
+            project_id: "PR-1",
+            created_at: "now",
+          },
+        },
+      });
+    });
+    const res: any = await getTestPlan(
+      { project_identifier: "PR-1", test_plan_identifier: "TP-1" },
+      config,
+    );
+    expect(res.content[0].text).toMatch(/^Test Plan TP-1: /);
+    assertEveryOccurrenceInside(res.content[0].text);
+    assertEveryOccurrenceInside(res.content[1].text);
+  });
+
+  it("getSubTestPlan wraps the name, tags, issues and the linked run list", async () => {
+    getMock.mockImplementation((opts: any = {}) => {
+      if ((opts?.url ?? "").includes("/test-runs"))
+        return Promise.resolve(runsWithPayload);
+      return Promise.resolve({
+        data: {
+          success: true,
+          sub_test_plan: {
+            identifier: "STP-1",
+            name: PAYLOAD,
+            active_state: "active",
+            project_id: "PR-1",
+            parent_plan_id: "TP-1",
+            created_at: "now",
+            tags: [PAYLOAD],
+            issues: [PAYLOAD],
+          },
+        },
+      });
+    });
+    const res: any = await getSubTestPlan(
+      {
+        project_identifier: "PR-1",
+        parent_test_plan_identifier: "TP-1",
+        sub_test_plan_identifier: "STP-1",
+      },
+      config,
+    );
+    expect(res.content[0].text).toMatch(/^Sub-Test-Plan STP-1: /);
+    assertEveryOccurrenceInside(res.content[0].text);
+    assertEveryOccurrenceInside(res.content[1].text);
+  });
+
+  it("wraps an unsuccessful API body echoed in an error", async () => {
+    getMock.mockResolvedValue({
+      data: { success: false, message: PAYLOAD },
+    });
+    const res: any = await getTestPlan(
+      { project_identifier: "PR-1", test_plan_identifier: "TP-1" },
+      config,
+    );
+    expect(res.isError).toBe(true);
+    expect(res.content[0].text).toMatch(/^Failed to fetch test plan: /);
+    assertEveryOccurrenceInside(res.content[0].text);
+  });
+});

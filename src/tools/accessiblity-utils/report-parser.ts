@@ -2,6 +2,7 @@ import { apiClient } from "../../lib/apiClient.js";
 import { parse } from "csv-parse/sync";
 import logger from "../../logger.js";
 import {
+  laterPagesOf,
   mostCommon,
   PAGE_CHARACTERS,
   pageOf,
@@ -109,11 +110,24 @@ type PaginatedResult = {
   duplicate_issues: number | null;
   /** Of those, the ones whose main issue could not be identified (counted only here). */
   unlinked_duplicates: number;
-  /** Issues hidden in the dashboard and left out; null when the export has no Issue status. */
+  /**
+   * Issues hidden, or marked "Not an issue", in the dashboard and left out; null when the
+   * export has no Issue status.
+   */
   hidden_issues: number | null;
   /** Set when the report was read for one page. */
   page?: PageSummary;
+  /** Set on the first page: the pages after it, each with the cursor that fetches it. */
+  later_pages?: { cursor: number; records: IssueRow[] }[];
+  /**
+   * Set when pages did not load: an error page was scanned in their place. Their rows are
+   * left out of everything above, as they are the error page's issues, not the page's.
+   */
+  error_pages?: ErrorPage[];
 };
+
+/** A page that did not load, and how many issues the error page in its place would have added. */
+export type ErrorPage = { url: string; issues: number };
 
 const DUPLICATE_COLUMN = "Duplicate Issue of";
 const NEEDS_REVIEW_COLUMN = "Needs review";
@@ -122,9 +136,15 @@ const BEST_PRACTICE_COLUMN = "Best practice";
 const ISSUE_LINK_COLUMN = "Issue link";
 const STATUS_COLUMN = "Issue status";
 
-/** An issue hidden in the dashboard, which leaves it out of its count. */
+/**
+ * An issue the dashboard leaves out of its count: hidden, or reviewed as "Not an issue"
+ * (Issue status `non-issue`). Counting the second kind made a Workflow Analyzer report read
+ * 110 issues and 20 critical where its dashboard shows 105 and 19.
+ */
+const EXCLUDED_STATUSES = new Set(["hidden", "non-issue"]);
+
 function isHidden(row: Record<string, string>): boolean {
-  return (row[STATUS_COLUMN] ?? "").trim().toLowerCase() === "hidden";
+  return EXCLUDED_STATUSES.has((row[STATUS_COLUMN] ?? "").trim().toLowerCase());
 }
 
 /** A grouped report marks a main issue `NA`; a duplicate carries its main issue's link. */
@@ -134,7 +154,7 @@ function isMainIssue(row: Record<string, string>): boolean {
 }
 
 /** A page address as the report writes it, give or take host case, trailing slash and hash. */
-function samePage(url: string): string {
+export function samePage(url: string): string {
   try {
     const u = new URL(url.trim());
     return `${u.protocol}//${u.host.toLowerCase()}${u.pathname.replace(/\/+$/, "")}${u.search}`;
@@ -157,8 +177,20 @@ function shortSnippet(snippet: string | undefined): string {
     : text;
 }
 
+// Exports write these flags as "Yes"/"No" or as "True"/"False" (Workflow Analyzer). Reading
+// only "Yes" dropped every needs-review flag from a Workflow Analyzer report, so an agent
+// answered "nothing needs review" for a report with 21 issues pending review.
+const YES_VALUES = new Set(["yes", "true"]);
+
 const isYes = (value: string | undefined) =>
-  (value ?? "").trim().toLowerCase() === "yes";
+  YES_VALUES.has((value ?? "").trim().toLowerCase());
+
+/**
+ * A review status a person has confirmed: "confirmed" in most exports, "Confirmed Issue" in
+ * the Workflow Analyzer one. Such an issue is a confirmed failure, not one awaiting review.
+ */
+export const isConfirmedReview = (status: string | undefined) =>
+  /^confirmed\b/.test((status ?? "").trim().toLowerCase());
 
 function recordOfRow(
   row: any,
@@ -260,7 +292,7 @@ function summaryOf(
     by_page: [...byPage.values()].sort((a, b) => b.count - a.count),
     // A needs-review issue a person has confirmed is a confirmed failure.
     needs_review: issues.filter(
-      (issue) => issue.needs_review && issue.needs_review !== "confirmed",
+      (issue) => issue.needs_review && !isConfirmedReview(issue.needs_review),
     ).length,
     best_practice: issues.filter(
       (issue) => rules[issue.issue_type]?.best_practice,
@@ -294,17 +326,31 @@ function pageWithRules(
         a.i - b.i,
     )
     .map(({ issue }) => withoutRuleText(issue, rules[issue.issue_type]));
-  const named = new Set<string>();
-  const page = pageOf(ordered, {
-    ...options,
-    extraLength: (row) => {
+  // A page names each rule's text once, counted against its length.
+  const ruleTextLength = () => {
+    const named = new Set<string>();
+    return (row: IssueRow) => {
       if (named.has(row.issue_type)) return 0;
       named.add(row.issue_type);
       return JSON.stringify(rules[row.issue_type] ?? {}).length;
-    },
+    };
+  };
+  const page = pageOf(ordered, {
+    ...options,
+    extraLength: ruleTextLength(),
   });
+  // The first page says what the saved false positives cover on the pages after it, so an
+  // agent that stops there, or reads the CSV, still removes them.
+  const later =
+    options.nextPage === 0 && page.next_page !== null
+      ? laterPagesOf(ordered, page, {
+          maxCharacterLength: options.maxCharacterLength,
+          extraLength: ruleTextLength,
+        })
+      : undefined;
   return {
     ...page,
+    ...(later ? { later_pages: later } : {}),
     rules: Object.fromEntries(
       [...new Set(page.records.map((r) => r.issue_type))].map((type) => [
         type,
@@ -427,6 +473,8 @@ export type RunIssue = {
   issue_type: string;
   severity: string;
   component: string;
+  /** The element's CSS selector, where the key is not made from it. */
+  selector?: string;
   affected_page: string;
   /** Found on an error page scanned in the page's place: the page did not load. */
   on_error_page?: true;
@@ -441,15 +489,56 @@ export type RunIssue = {
 const ERROR_PAGE_SNIPPET =
   /dashboard-privoxy-page|id="main-frame-error"|chrome-error:\/\/|class="neterror[" ]/i;
 
+/** Whether an issue's HTML snippet is from an error page scanned in place of a page that did not load. */
+export function onErrorPage(snippet: string | undefined): boolean {
+  return ERROR_PAGE_SNIPPET.test(snippet ?? "");
+}
+
+/**
+ * The report's rows without those of pages that did not load, and those pages. A page is one
+ * when any row under its address shows an error page (as compareIssues decides it), and all
+ * its rows are then the error page's: counted as the page's issues, they would say the page
+ * was checked. `issues` is how many of them the total would have counted.
+ */
+function setApartErrorPages(
+  rows: Record<string, string>[],
+  grouped: boolean,
+): { rows: Record<string, string>[]; error_pages: ErrorPage[] } {
+  const failed = new Map<string, ErrorPage>();
+  for (const row of rows) {
+    if (!onErrorPage(row["HTML snippet"])) continue;
+    const url = row["Affected page"] ?? "";
+    const key = samePage(url);
+    if (!failed.has(key)) failed.set(key, { url, issues: 0 });
+  }
+  if (failed.size === 0) return { rows, error_pages: [] };
+  const kept: Record<string, string>[] = [];
+  for (const row of rows) {
+    const page = failed.get(samePage(row["Affected page"] ?? ""));
+    if (!page) kept.push(row);
+    else if ((!grouped || isMainIssue(row)) && !isHidden(row)) page.issues++;
+  }
+  return { rows: kept, error_pages: [...failed.values()] };
+}
+
 /** A page whose earlier issues are all gone and new ones appeared: worth a second look. */
 const CHANGED_PAGE_MIN_ISSUES = 2;
 
-/** A report's main issues that the dashboard counts (not hidden), keyed for comparing runs. */
+/**
+ * A report's main issues that the dashboard counts (not hidden), keyed for comparing runs.
+ * In a grouped report an error page's issues on a second page are duplicates of those on the
+ * first, so those duplicates are kept too, marked: they show that page did not load either,
+ * and as their page is set apart they are never counted.
+ */
 export async function loadMainIssues(reportLink: string): Promise<RunIssue[]> {
   const { parsed, columns } = await loadReport(reportLink);
   const grouped = columns.includes(DUPLICATE_COLUMN);
   return parsed
-    .filter((row) => (!grouped || isMainIssue(row)) && !isHidden(row))
+    .filter(
+      (row) =>
+        (!grouped || isMainIssue(row) || onErrorPage(row["HTML snippet"])) &&
+        !isHidden(row),
+    )
     .map((row) => {
       const element = (row["CSS selector"] || row["Component"] || "").trim();
       return {
@@ -462,7 +551,7 @@ export async function loadMainIssues(reportLink: string): Promise<RunIssue[]> {
         severity: (row["Severity"] || "unknown").trim(),
         component: row["Component"],
         affected_page: row["Affected page"],
-        ...(ERROR_PAGE_SNIPPET.test(row["HTML snippet"] ?? "")
+        ...(onErrorPage(row["HTML snippet"])
           ? { on_error_page: true as const }
           : {}),
       };
@@ -491,8 +580,8 @@ function issuesByPage(
 }
 
 /**
- * Which issues of `current` are new since `base`, which of `base` are gone, and how many
- * remain, decided page by page. A page that did not load in one of the runs (an error page
+ * Which issues of `current` are new since `base`, which of `base` are gone, and which remain
+ * (`still_open`, as `current` has them; `retained` counts them), decided page by page. A page that did not load in one of the runs (an error page
  * was scanned under its address) is set apart. Not loaded in `current`: its earlier issues
  * were not checked again, so they are `not_checked` rather than resolved, and the error
  * page's issues are not new. Not loaded in `base`: the error page's issues are not resolved,
@@ -507,6 +596,7 @@ export function compareIssues(
   added: RunIssue[];
   resolved: RunIssue[];
   retained: number;
+  still_open: RunIssue[];
   not_checked: RunIssue[];
   failed_pages: string[];
   not_checked_earlier: RunIssue[];
@@ -517,12 +607,12 @@ export function compareIssues(
   const after = issuesByPage(current);
   const added: RunIssue[] = [];
   const resolved: RunIssue[] = [];
+  const stillOpen: RunIssue[] = [];
   const notChecked: RunIssue[] = [];
   const notCheckedEarlier: RunIssue[] = [];
   const failedPages: string[] = [];
   const failedPagesEarlier: string[] = [];
   const changedPages: string[] = [];
-  let retained = 0;
   for (const key of new Set([...before.keys(), ...after.keys()])) {
     const earlier = before.get(key);
     const later = after.get(key);
@@ -544,7 +634,9 @@ export function compareIssues(
     );
     added.push(...pageAdded);
     resolved.push(...pageResolved);
-    retained += (later?.issues.length ?? 0) - pageAdded.length;
+    stillOpen.push(
+      ...(later?.issues ?? []).filter((issue) => earlierKeys.has(issue.key)),
+    );
     if (
       earlier &&
       earlier.issues.length >= CHANGED_PAGE_MIN_ISSUES &&
@@ -557,7 +649,8 @@ export function compareIssues(
   return {
     added: sortBySeverity(added),
     resolved: sortBySeverity(resolved),
-    retained,
+    retained: stillOpen.length,
+    still_open: sortBySeverity(stillOpen),
     not_checked: sortBySeverity(notChecked),
     failed_pages: failedPages,
     not_checked_earlier: sortBySeverity(notCheckedEarlier),
@@ -574,12 +667,21 @@ export async function parseAccessibilityReportFromCSV(
     pageUrl,
   }: PaginationOptions = {},
 ): Promise<PaginatedResult> {
-  // 1) Download & parse
-  const { parsed, columns } = await loadReport(reportLink);
+  // 1) Download & parse, setting apart the pages that did not load
+  const loaded = await loadReport(reportLink);
+  const { columns } = loaded;
+  const { rows: parsed, error_pages } = setApartErrorPages(
+    loaded.parsed,
+    columns.includes(DUPLICATE_COLUMN),
+  );
 
   if (pageUrl) {
     const { all, page } = pageIssues(parsed, columns, pageUrl);
     const slice = pageWithRules(all, parsed, { maxCharacterLength, nextPage });
+    // Read for one page, only that page not loading matters.
+    const notLoaded = error_pages.filter(
+      (p) => samePage(p.url) === samePage(pageUrl),
+    );
     return {
       ...slice,
       total_issues: all.length,
@@ -587,6 +689,7 @@ export async function parseAccessibilityReportFromCSV(
       unlinked_duplicates: 0,
       hidden_issues: null,
       page,
+      ...(notLoaded.length ? { error_pages: notLoaded } : {}),
     };
   }
 
@@ -656,5 +759,6 @@ export async function parseAccessibilityReportFromCSV(
     hidden_issues: columns.includes(STATUS_COLUMN)
       ? mainRows.length - visibleMainRows.length
       : null,
+    ...(error_pages.length ? { error_pages } : {}),
   };
 }

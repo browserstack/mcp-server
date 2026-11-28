@@ -192,6 +192,19 @@ describe("capability registry telemetry", () => {
     expect(last.refusal_reason).toBe(expected);
   });
 
+  it("records an unknown entity on describeEntity as a refusal, like an unknown product", async () => {
+    const server = await buildServer();
+    const result = await call(server, "describeEntity", {
+      product: "tm",
+      entity: "no_such_entity",
+    });
+    expect(result.isError).toBe(true);
+    const last = (await rowsFor("describeEntity")).at(-1);
+    expect(last.success).toBe(false);
+    expect(last.refusal_reason).toBe("unknown_entity");
+    expect(last.product).toBe("tm");
+  });
+
   // Against the SHIPPED index, not the fixture: the fixture carries no `disabled` flags,
   // so it cannot produce this outcome at all. This is the likeliest refusal on the real
   // build — 46 of 244 capabilities are withheld — and it was landing in the generic

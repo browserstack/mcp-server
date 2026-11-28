@@ -1,4 +1,6 @@
 import { RCAState, RCATestCase, RCAResponse } from "./types.js";
+import { getRegionalHost } from "../../lib/regional-host.js";
+import { trackedFetch } from "../../lib/upstream-status.js";
 
 interface ScanProgressContext {
   sendNotification: (notification: any) => Promise<void>;
@@ -104,7 +106,7 @@ async function fetchInitialRCA(
   const url = baseUrl.replace("{testId}", testId.toString());
 
   try {
-    const response = await fetch(url, { headers });
+    const response = await trackedFetch(url, { headers });
 
     if (!response.ok) {
       return {
@@ -180,7 +182,7 @@ async function pollRCAResults(
         inProgressCases.map(async (tc) => {
           try {
             const pollUrl = baseUrl.replace("{testId}", tc.id.toString());
-            const response = await fetch(pollUrl, { headers });
+            const response = await trackedFetch(pollUrl, { headers });
             if (!response.ok) {
               const errorText = await response.text();
               tc.state = RCAState.LOG_FETCH_ERROR;
@@ -243,13 +245,13 @@ export async function getRCAData(
   testIds: number[],
   authString: string,
   context?: ScanProgressContext,
+  host = getRegionalHost("observabilityApi"),
 ): Promise<RCAResponse> {
   const pollInterval = 5000;
   const timeout = 40000;
   const initialDelay = 20000;
 
-  const baseUrl =
-    "https://api-observability.browserstack.com/ext/v1/testRun/{testId}/testRca";
+  const baseUrl = `${host}/ext/v1/testRun/{testId}/testRca`;
   const headers = {
     Authorization: `Basic ${Buffer.from(authString).toString("base64")}`,
     "Content-Type": "application/json",

@@ -2,8 +2,9 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { getFailureLogs } from '../../src/tools/get-failure-logs';
 import * as automate from '../../src/tools/failurelogs-utils/automate';
 import * as appAutomate from '../../src/tools/failurelogs-utils/app-automate';
-import { resolveAppAutomateBuildId } from '../../src/tools/failurelogs-utils/resolve-app-build-id';
+import { readAppAutomateSession } from '../../src/tools/failurelogs-utils/resolve-app-build-id';
 import { retrieveSessionVideo } from '../../src/tools/failurelogs-utils/video';
+import { detectSession } from '../../src/tools/automate-utils/resolve-hashed-build-id';
 
 vi.mock('../../src/config', () => ({
   __esModule: true,
@@ -18,7 +19,12 @@ vi.mock('../../src/lib/instrumentation', () => ({
 }));
 
 vi.mock('../../src/tools/failurelogs-utils/resolve-app-build-id', () => ({
-  resolveAppAutomateBuildId: vi.fn(),
+  readAppAutomateSession: vi.fn(),
+}));
+
+vi.mock('../../src/tools/automate-utils/resolve-hashed-build-id', async (importOriginal) => ({
+  ...(await importOriginal<any>()),
+  detectSession: vi.fn(),
 }));
 
 vi.mock('../../src/tools/failurelogs-utils/video', () => ({
@@ -52,7 +58,7 @@ vi.mock('../../src/tools/failurelogs-utils/app-automate', () => ({
   retrieveAppiumLogs: vi.fn(),
   retrieveCrashLogs: vi.fn(),
   filterDeviceFailures: vi.fn(() => []),
-  filterAppiumFailures: vi.fn(() => []),
+  summarizeAppiumFailures: vi.fn(() => ({ failures: [], totalLines: 0, omitted: 0 })),
   filterCrashFailures: vi.fn(() => []),
 }));
 
@@ -83,19 +89,55 @@ describe('BrowserStack Failure Logs', () => {
       }, mockServer)).rejects.toThrow('Session ID is required');
     });
 
-    it('should throw error if buildId is not provided and cannot be resolved for app-automate session', async () => {
+    it('should throw when the session is on neither product', async () => {
       const mockServer = { server: { getClientVersion: () => "test-version" } };
-      (resolveAppAutomateBuildId as any).mockResolvedValue(undefined);
+      (readAppAutomateSession as any).mockResolvedValue(undefined);
+      (detectSession as any).mockResolvedValue(undefined);
       await expect(getFailureLogs({
         sessionId: 'test-session',
         logTypes: ['deviceLogs'],
         sessionType: 'app-automate'
-      }, mockServer)).rejects.toThrow('Build ID is required for app-automate sessions');
+      }, mockServer)).rejects.toThrow('was not found on Automate or App Automate');
+    });
+
+    it('switches to automate when an "app-automate" session is really Automate', async () => {
+      const mockServer = { server: { getClientVersion: () => "test-version" } };
+      (readAppAutomateSession as any).mockResolvedValue(undefined);
+      (detectSession as any).mockResolvedValue({ sessionType: 'automate', hashedBuildId: 'h' });
+      vi.mocked(automate.retrieveSessionFailures).mockResolvedValue('session failures');
+
+      const result = await getFailureLogs({
+        sessionId: 'test-session',
+        logTypes: ['appiumLogs'],
+        sessionType: 'app-automate'
+      }, mockServer);
+
+      expect(result.isError).toBeFalsy();
+      expect(automate.retrieveSessionFailures).toHaveBeenCalledWith('test-session', mockServer);
+      const texts = result.content.map((c: any) => c.text).join('\n');
+      expect(texts).toContain('ran on automate, not app-automate');
+      expect(texts).toContain("fetched 'sessionLogs' instead");
+      expect(result.content[0].text).toContain('ran on automate');
+    });
+
+    it('ignores a TRA build id passed as the App Automate build id', async () => {
+      const mockServer = { server: { getClientVersion: () => "test-version" } };
+      (readAppAutomateSession as any).mockResolvedValue({ buildId: 'hashed-app-build' });
+      vi.mocked(appAutomate.retrieveDeviceLogs).mockResolvedValue('device logs');
+
+      await getFailureLogs({
+        sessionId: 'test-session',
+        buildId: 'zz00000000000000000000000000000000000003',
+        logTypes: ['deviceLogs'],
+        sessionType: 'app-automate'
+      }, mockServer);
+
+      expect(appAutomate.retrieveDeviceLogs).toHaveBeenCalledWith('test-session', 'hashed-app-build', mockServer, { throwOnNotFound: true });
     });
 
     it('should resolve buildId from the session when not provided', async () => {
       const mockServer = { server: { getClientVersion: () => "test-version" } };
-      (resolveAppAutomateBuildId as any).mockResolvedValue('resolved-build-id');
+      (readAppAutomateSession as any).mockResolvedValue({ buildId: 'resolved-build-id' });
       vi.mocked(appAutomate.retrieveDeviceLogs).mockResolvedValue('device logs');
 
       const result = await getFailureLogs({
@@ -104,18 +146,19 @@ describe('BrowserStack Failure Logs', () => {
         sessionType: 'app-automate'
       }, mockServer);
 
-      expect(resolveAppAutomateBuildId).toHaveBeenCalledWith('test-session', mockServer);
+      expect(readAppAutomateSession).toHaveBeenCalledWith('test-session', mockServer);
       expect(appAutomate.retrieveDeviceLogs).toHaveBeenCalledWith(
         'test-session',
         'resolved-build-id',
         mockServer,
-        undefined,
+        { throwOnNotFound: true },
       );
       expect(result.isError).toBeFalsy();
     });
 
-    it('should not resolve buildId when the caller supplies one', async () => {
+    it('keeps the build id the caller supplies', async () => {
       const mockServer = { server: { getClientVersion: () => "test-version" } };
+      (readAppAutomateSession as any).mockResolvedValue({ buildId: 'session-build-id' });
       vi.mocked(appAutomate.retrieveDeviceLogs).mockResolvedValue('device logs');
 
       await getFailureLogs({
@@ -125,13 +168,116 @@ describe('BrowserStack Failure Logs', () => {
         sessionType: 'app-automate'
       }, mockServer);
 
-      expect(resolveAppAutomateBuildId).not.toHaveBeenCalled();
       expect(appAutomate.retrieveDeviceLogs).toHaveBeenCalledWith(
         'test-session',
         'explicit-build-id',
         mockServer,
-        undefined,
+        { throwOnNotFound: true },
       );
+    });
+
+    describe('app under test', () => {
+      const app = {
+        id: 'com.browserstack.Sample-iOS',
+        version: '1.0',
+        filename: 'BStackSampleApp.ipa',
+      };
+      const appLine =
+        'App under test: com.browserstack.Sample-iOS (bundle id on iOS, package name on Android), version 1.0, uploaded as BStackSampleApp.ipa.';
+
+      it('names the app before the logs, from the same session read that finds the build', async () => {
+        const mockServer = { server: { getClientVersion: () => "test-version" } };
+        (readAppAutomateSession as any).mockResolvedValue({ buildId: 'b1', app });
+        vi.mocked(appAutomate.retrieveAppiumLogs).mockResolvedValue('appium logs');
+
+        const result = await getFailureLogs({
+          sessionId: 'test-session',
+          logTypes: ['appiumLogs'],
+          sessionType: 'app-automate'
+        }, mockServer);
+
+        expect(readAppAutomateSession).toHaveBeenCalledTimes(1);
+        expect(result.content.map((c: any) => c.text)).toEqual([appLine, 'appium logs']);
+      });
+
+      it('reads the session once for the app when the caller supplies the build id', async () => {
+        const mockServer = { server: { getClientVersion: () => "test-version" } };
+        (readAppAutomateSession as any).mockResolvedValue({ buildId: 'b1', app });
+        vi.mocked(appAutomate.retrieveAppiumLogs).mockResolvedValue('appium logs');
+
+        const result = await getFailureLogs({
+          sessionId: 'test-session',
+          buildId: 'explicit-build-id',
+          logTypes: ['appiumLogs'],
+          sessionType: 'app-automate'
+        }, mockServer);
+
+        expect(readAppAutomateSession).toHaveBeenCalledTimes(1);
+        expect(appAutomate.retrieveAppiumLogs).toHaveBeenCalledWith('test-session', 'explicit-build-id', mockServer, { throwOnNotFound: true });
+        expect(result.content[0].text).toBe(appLine);
+      });
+
+      it('fetches the logs without waiting for the app read', async () => {
+        const mockServer = { server: { getClientVersion: () => "test-version" } };
+        let finishRead: (value: unknown) => void = () => {};
+        (readAppAutomateSession as any).mockReturnValue(new Promise((resolve) => { finishRead = resolve; }));
+        vi.mocked(appAutomate.retrieveAppiumLogs).mockResolvedValue('appium logs');
+
+        const pending = getFailureLogs({
+          sessionId: 'test-session',
+          buildId: 'explicit-build-id',
+          logTypes: ['appiumLogs'],
+          sessionType: 'app-automate'
+        }, mockServer);
+        await vi.waitFor(() => expect(appAutomate.retrieveAppiumLogs).toHaveBeenCalled());
+        finishRead({ buildId: 'b1', app });
+
+        expect((await pending).content.map((c: any) => c.text)).toEqual([appLine, 'appium logs']);
+      });
+
+      it('takes the app from session detection without reading the session again', async () => {
+        const mockServer = { server: { getClientVersion: () => "test-version" } };
+        (detectSession as any).mockResolvedValue({ sessionType: 'app-automate', hashedBuildId: 'app-build', app });
+        vi.mocked(appAutomate.retrieveDeviceLogs).mockResolvedValue('device logs');
+
+        const result = await getFailureLogs({
+          sessionId: 'test-session',
+          logTypes: ['deviceLogs'],
+          sessionType: 'automate'
+        }, mockServer);
+
+        expect(readAppAutomateSession).not.toHaveBeenCalled();
+        expect(result.content[0].text).toContain(appLine);
+      });
+
+      it('returns the logs without the app when the session read fails', async () => {
+        const mockServer = { server: { getClientVersion: () => "test-version" } };
+        (readAppAutomateSession as any).mockRejectedValue(new Error('503'));
+        vi.mocked(appAutomate.retrieveAppiumLogs).mockResolvedValue('appium logs');
+
+        const result = await getFailureLogs({
+          sessionId: 'test-session',
+          buildId: 'explicit-build-id',
+          logTypes: ['appiumLogs'],
+          sessionType: 'app-automate'
+        }, mockServer);
+
+        expect(result.isError).toBeFalsy();
+        expect(result.content.map((c: any) => c.text)).toEqual(['appium logs']);
+      });
+
+      it('does not read the session for an Automate session', async () => {
+        const mockServer = { server: { getClientVersion: () => "test-version" } };
+        vi.mocked(automate.retrieveSessionFailures).mockResolvedValue('session failures');
+
+        await getFailureLogs({
+          sessionId: 'test-session',
+          logTypes: ['sessionLogs'],
+          sessionType: 'automate'
+        }, mockServer);
+
+        expect(readAppAutomateSession).not.toHaveBeenCalled();
+      });
     });
 
     it('should return error for invalid log types', async () => {
@@ -149,23 +295,67 @@ describe('BrowserStack Failure Logs', () => {
       }
     });
 
-    it('should return error when mixing session types', async () => {
+    it('follows the session to app-automate when app log types are asked of "automate"', async () => {
       const mockServer = { server: { getClientVersion: () => "test-version" } };
-      const automateResult = await getFailureLogs({
+      (detectSession as any).mockResolvedValue({ sessionType: 'app-automate', hashedBuildId: 'app-build' });
+      vi.mocked(appAutomate.retrieveDeviceLogs).mockResolvedValue('device logs');
+
+      const result = await getFailureLogs({
         sessionId: 'test-session',
         logTypes: ['deviceLogs'],
         sessionType: 'automate'
       }, mockServer);
 
-      const appAutomateResult = await getFailureLogs({
+      expect(result.isError).toBeFalsy();
+      expect(appAutomate.retrieveDeviceLogs).toHaveBeenCalledWith('test-session', 'app-build', mockServer, { throwOnNotFound: true });
+    });
+
+    it('fetches appiumLogs for sessionLogs and reports networkLogs as unavailable on an app session', async () => {
+      const mockServer = { server: { getClientVersion: () => "test-version" } };
+      (detectSession as any).mockResolvedValue({ sessionType: 'app-automate', hashedBuildId: 'app-build' });
+      vi.mocked(appAutomate.retrieveAppiumLogs).mockResolvedValue('appium logs');
+      vi.mocked(appAutomate.retrieveDeviceLogs).mockResolvedValue('device logs');
+
+      const result = await getFailureLogs({
         sessionId: 'test-session',
-        buildId: 'test-build',
-        logTypes: ['networkLogs'],
+        logTypes: ['sessionLogs', 'networkLogs'],
         sessionType: 'app-automate'
       }, mockServer);
 
-      expect(automateResult.isError).toBe(true);
-      expect(appAutomateResult.isError).toBe(true);
+      expect(result.isError).toBeFalsy();
+      expect(appAutomate.retrieveAppiumLogs).toHaveBeenCalledWith('test-session', 'app-build', mockServer, { throwOnNotFound: true });
+      expect(appAutomate.retrieveDeviceLogs).not.toHaveBeenCalled();
+      expect(automate.retrieveSessionFailures).not.toHaveBeenCalled();
+      const texts = result.content.map((c: any) => c.text).join('\n');
+      expect(texts).toContain("'networkLogs' is not available for app-automate sessions.");
+    });
+
+    it('reports a swapped or unavailable log type before the logs', async () => {
+      const mockServer = { server: { getClientVersion: () => "test-version" } };
+      (detectSession as any).mockResolvedValue({ sessionType: 'app-automate', hashedBuildId: 'app-build' });
+      vi.mocked(appAutomate.retrieveAppiumLogs).mockResolvedValue('appium logs');
+
+      const result = await getFailureLogs({
+        sessionId: 'test-session',
+        logTypes: ['sessionLogs', 'networkLogs'],
+        sessionType: 'app-automate'
+      }, mockServer);
+
+      const texts = result.content.map((c: any) => c.text);
+      expect(texts).toHaveLength(2);
+      expect(texts[0]).toContain("'sessionLogs' is not available for app-automate sessions; fetched 'appiumLogs' instead.");
+      expect(texts[0]).toContain("'networkLogs' is not available for app-automate sessions.");
+      expect(texts[1]).toBe('appium logs');
+    });
+
+    it('throws when mismatched log types name a session neither product knows', async () => {
+      const mockServer = { server: { getClientVersion: () => "test-version" } };
+      (detectSession as any).mockResolvedValue(undefined);
+      await expect(getFailureLogs({
+        sessionId: 'test-session',
+        logTypes: ['deviceLogs'],
+        sessionType: 'automate'
+      }, mockServer)).rejects.toThrow('was not found on Automate or App Automate');
     });
   });
 
@@ -263,14 +453,14 @@ describe('BrowserStack Failure Logs', () => {
         sessionType: 'app-automate'
       }, mockServer);
 
-      expect(appAutomate.retrieveDeviceLogs).toHaveBeenCalledWith(mockSessionId, mockBuildId, expect.anything(), undefined);
+      expect(appAutomate.retrieveDeviceLogs).toHaveBeenCalledWith(mockSessionId, mockBuildId, expect.anything(), { throwOnNotFound: true });
       if (result.content?.[0]?.type === 'text') {
         expect(result.content[0].text).toContain('Device Failures (1 found)');
         expect(result.content[0].text).toContain('Fatal Exception');
       }
     });
 
-    it('forwards deviceLogFilter as the fourth argument to retrieveDeviceLogs', async () => {
+    it('forwards deviceLogFilter in the options passed to retrieveDeviceLogs', async () => {
       const mockServer = { server: { getClientVersion: () => "test-version" } };
       await getFailureLogs({
         sessionId: mockSessionId,
@@ -280,7 +470,7 @@ describe('BrowserStack Failure Logs', () => {
         deviceLogFilter: 'analyticsInterceptor'
       }, mockServer);
 
-      expect(appAutomate.retrieveDeviceLogs).toHaveBeenCalledWith(mockSessionId, mockBuildId, mockServer, 'analyticsInterceptor');
+      expect(appAutomate.retrieveDeviceLogs).toHaveBeenCalledWith(mockSessionId, mockBuildId, mockServer, { throwOnNotFound: true, filter: 'analyticsInterceptor' });
     });
 
     it('should fetch appium logs successfully', async () => {
@@ -292,7 +482,7 @@ describe('BrowserStack Failure Logs', () => {
         sessionType: 'app-automate'
       }, mockServer);
 
-      expect(appAutomate.retrieveAppiumLogs).toHaveBeenCalledWith(mockSessionId, mockBuildId, expect.anything());
+      expect(appAutomate.retrieveAppiumLogs).toHaveBeenCalledWith(mockSessionId, mockBuildId, expect.anything(), { throwOnNotFound: true });
       if (result.content?.[0]?.type === 'text') {
         expect(result.content[0].text).toContain('Appium Failures (1 found)');
         expect(result.content[0].text).toContain('Element not found');
@@ -308,7 +498,7 @@ describe('BrowserStack Failure Logs', () => {
         sessionType: 'app-automate'
       }, mockServer);
 
-      expect(appAutomate.retrieveCrashLogs).toHaveBeenCalledWith(mockSessionId, mockBuildId, expect.anything());
+      expect(appAutomate.retrieveCrashLogs).toHaveBeenCalledWith(mockSessionId, mockBuildId, expect.anything(), { throwOnNotFound: true });
       if (result.content?.[0]?.type === 'text') {
         expect(result.content[0].text).toContain('Crash Failures (1 found)');
         expect(result.content[0].text).toContain('signal 11');
@@ -354,7 +544,6 @@ describe('BrowserStack Failure Logs', () => {
       });
 
       vi.mocked(appAutomate.filterDeviceFailures).mockReturnValue([]);
-      vi.mocked(appAutomate.filterAppiumFailures).mockReturnValue([]);
       vi.mocked(appAutomate.filterCrashFailures).mockReturnValue([]);
     });
 
@@ -396,13 +585,11 @@ console.error('Uncaught TypeError')
       vi.mocked(automate.filterSessionFailures).mockReturnValue(emptyResult);
       vi.mocked(automate.filterConsoleFailures).mockReturnValue(emptyResult);
       vi.mocked(appAutomate.filterDeviceFailures).mockReturnValue(emptyResult);
-      vi.mocked(appAutomate.filterAppiumFailures).mockReturnValue(emptyResult);
       vi.mocked(appAutomate.filterCrashFailures).mockReturnValue(emptyResult);
 
       expect(automate.filterSessionFailures('')).toEqual([]);
       expect(automate.filterConsoleFailures('')).toEqual([]);
       expect(appAutomate.filterDeviceFailures('')).toEqual([]);
-      expect(appAutomate.filterAppiumFailures('')).toEqual([]);
       expect(appAutomate.filterCrashFailures('')).toEqual([]);
     });
   });
@@ -434,14 +621,14 @@ console.error('Uncaught TypeError')
         sessionType: 'app-automate'
       }, mockServer);
 
-      expect(resolveAppAutomateBuildId).not.toHaveBeenCalled();
+      expect(readAppAutomateSession).not.toHaveBeenCalled();
       expect(retrieveSessionVideo).toHaveBeenCalledWith('sess-2', 'app-automate', mockServer);
       expect(result.isError).toBeFalsy();
     });
 
     it('resolves the build id once when video is mixed with a build-scoped log type', async () => {
       const mockServer = { server: { getClientVersion: () => "test-version" } };
-      (resolveAppAutomateBuildId as any).mockResolvedValue('resolved-build');
+      (readAppAutomateSession as any).mockResolvedValue({ buildId: 'resolved-build' });
 
       const result = await getFailureLogs({
         sessionId: 'sess-3',
@@ -449,8 +636,8 @@ console.error('Uncaught TypeError')
         sessionType: 'app-automate'
       }, mockServer);
 
-      expect(resolveAppAutomateBuildId).toHaveBeenCalledTimes(1);
-      expect(appAutomate.retrieveAppiumLogs).toHaveBeenCalledWith('sess-3', 'resolved-build', mockServer);
+      expect(readAppAutomateSession).toHaveBeenCalledTimes(1);
+      expect(appAutomate.retrieveAppiumLogs).toHaveBeenCalledWith('sess-3', 'resolved-build', mockServer, { throwOnNotFound: true });
       expect(retrieveSessionVideo).toHaveBeenCalledWith('sess-3', 'app-automate', mockServer);
       expect(result.content.map((c: any) => c.text)).toEqual([
         'Appium Failures (1 found)',

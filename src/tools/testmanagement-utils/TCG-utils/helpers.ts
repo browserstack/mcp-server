@@ -1,5 +1,4 @@
 import { DefaultFieldMaps } from "./types.js";
-import { randomUUID } from "node:crypto";
 
 /**
  * Build mappings for default fields for priority, status, and case type.
@@ -43,6 +42,8 @@ export function createTestCasePayload(
   const pri = tc.priority ?? "Medium";
   const stat = fieldMaps.status["active"];
   const ct = fieldMaps.caseType["functional"];
+  const aiTestCaseId = tc.id ?? tc.test_case_id;
+  const hasDetails = Array.isArray(tc.steps) && tc.steps.length > 0;
 
   return {
     attachments: [documentId],
@@ -53,7 +54,7 @@ export function createTestCasePayload(
     status: stat,
     case_type: ct,
     automation_status: "not_automated",
-    fetch_ai_test_case_details: true,
+    fetch_ai_test_case_details: !hasDetails,
     template: "test_case_steps",
     metadata: JSON.stringify({
       ai_prompt: {
@@ -61,7 +62,7 @@ export function createTestCasePayload(
         rich_text_id: null,
         scenario: scenarioId,
         test_case_count: tc.test_case_count || 1,
-        uuid: tc.uuid || randomUUID() || "unknown-uuid",
+        uuid: aiTestCaseId != null ? String(aiTestCaseId) : undefined,
         "x-bstack-traceRequestId": traceId,
       },
     }),

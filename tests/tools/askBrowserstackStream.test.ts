@@ -77,7 +77,6 @@ vi.mock("../../src/lib/apiClient.js", () => ({
   },
 }));
 
-
 describe("splitFrames", () => {
   it("returns complete frames and keeps the remainder", () => {
     const { frames, rest } = splitFrames("a\n\nb\n\npartial");
@@ -88,7 +87,7 @@ describe("splitFrames", () => {
   it("holds a frame that has not terminated yet", () => {
     // The single most likely real failure: an ask arrives split across two reads. If
     // this returned it early the JSON would be truncated and the ask lost.
-    const { frames, rest } = splitFrames("event: permission\ndata: {\"perm");
+    const { frames, rest } = splitFrames('event: permission\ndata: {"perm');
     expect(frames).toEqual([]);
     expect(rest).toBe('event: permission\ndata: {"perm');
   });
@@ -128,9 +127,9 @@ describe("parseFrame", () => {
   it("keeps a description containing JSON-escaped punctuation", () => {
     const frame =
       'event: permission\ndata: {"perm_id":"p","description":"Mark run \\"1043\\" done"}';
-    expect((parseFrame(frame)?.data as { description: string }).description).toBe(
-      'Mark run "1043" done',
-    );
+    expect(
+      (parseFrame(frame)?.data as { description: string }).description,
+    ).toBe('Mark run "1043" done');
   });
 });
 
@@ -153,15 +152,17 @@ describe("fetchAgentStreamTransport", () => {
   it("yields run, permission and result in order across chunk boundaries", async () => {
     // The frames are deliberately split mid-JSON and mid-frame, which is what a real
     // socket does and what a naive parser gets wrong.
-    const fetchMock = vi.fn().mockResolvedValue(
-      streamingResponse([
-        'event: run\ndata: {"run_id":"run-1"}\n',
-        '\nevent: permission\ndata: {"perm_id":"perm-1","product":"tm",',
-        '"mode":"ask-once","description":"Mark run 1043 complete"}\n\n',
-        ": keepalive\n\n",
-        'event: result\ndata: {"ok":true,"status":"ok"}\n\n',
-      ]),
-    );
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        streamingResponse([
+          'event: run\ndata: {"run_id":"run-1"}\n',
+          '\nevent: permission\ndata: {"perm_id":"perm-1","product":"tm",',
+          '"mode":"ask-once","description":"Mark run 1043 complete"}\n\n',
+          ": keepalive\n\n",
+          'event: result\ndata: {"ok":true,"status":"ok"}\n\n',
+        ]),
+      );
     vi.stubGlobal("fetch", fetchMock);
 
     const seen: Array<{ event: string; data: unknown }> = [];
@@ -212,9 +213,11 @@ describe("fetchAgentStreamTransport", () => {
   it("yields a trailing frame that never got its blank line", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn().mockResolvedValue(
-        streamingResponse(['event: result\ndata: {"ok":true}']),
-      ),
+      vi
+        .fn()
+        .mockResolvedValue(
+          streamingResponse(['event: result\ndata: {"ok":true}']),
+        ),
     );
     const seen = [];
     for await (const ev of fetchAgentStreamTransport()(
@@ -263,7 +266,10 @@ describe("fetchDeferredTransport", () => {
     // 120s was sized for a request that returned as soon as the run parked. Since the
     // converged gate the DECISION request carries everything after the approval, so the
     // old bound cut successful runs off partway and reported them as unreachable.
-    vi.stubGlobal("fetch", async () => ({ status: 200, json: async () => ({}) }));
+    vi.stubGlobal("fetch", async () => ({
+      status: 200,
+      json: async () => ({}),
+    }));
     await fetchDeferredTransport()(DECISION, {}, {} as never);
 
     expect(apiPosts.at(-1).timeout).toBe(WHOLE_RUN_TIMEOUT_MS);
@@ -272,9 +278,8 @@ describe("fetchDeferredTransport", () => {
   });
 
   it("turns a transport failure into an AskError, naming nothing internal", async () => {
-    const { AskError } = await import(
-      "../../src/tools/ask-browserstack/config.js"
-    );
+    const { AskError } =
+      await import("../../src/tools/ask-browserstack/config.js");
     vi.stubGlobal("fetch", async () => {
       throw new Error("ECONNREFUSED 10.0.0.1:443");
     });
@@ -308,13 +313,16 @@ describe("the relay never claims a person answered when none did", () => {
     // result carried BOTH "BrowserStack asked before each change and the answers are in
     // `approvals`" AND an approvals entry reading "refused: nobody was there to be
     // asked". Two sentences in one payload contradicting each other.
-    const { buildResult, RELAY_ON_NO_ANSWER_DETAIL, nobodyAnswered } = await import(
-      "../../src/tools/ask-browserstack/relay.js"
-    );
+    const { buildResult, RELAY_ON_NO_ANSWER_DETAIL, nobodyAnswered } =
+      await import("../../src/tools/ask-browserstack/relay.js");
 
     expect(
       nobodyAnswered([
-        { description: "Create folder.", decision: "deny", reason: "cancelled" },
+        {
+          description: "Create folder.",
+          decision: "deny",
+          reason: "cancelled",
+        },
       ]),
     ).toBe(true);
 
@@ -325,14 +333,24 @@ describe("the relay never claims a person answered when none did", () => {
           status: "blocked",
           answer: null,
           approvals: [
-            { description: "Create folder.", decision: "deny", reason: "cancelled",
-              applied: false },
+            {
+              description: "Create folder.",
+              decision: "deny",
+              reason: "cancelled",
+              applied: false,
+            },
           ],
           applied_before_stop: false,
           permission_relay: { used: true, reason: "" },
         },
       },
-      [{ description: "Create folder.", decision: "deny", reason: "cancelled" }],
+      [
+        {
+          description: "Create folder.",
+          decision: "deny",
+          reason: "cancelled",
+        },
+      ],
       "offered",
       "tm",
     );
@@ -347,9 +365,8 @@ describe("the relay never claims a person answered when none did", () => {
   it("still credits a real human answer", async () => {
     // The correction must not fire when somebody actually declined — "a person said no"
     // and "no person was there" call for different things from the reader.
-    const { buildResult, RELAY_ON_DETAIL, nobodyAnswered } = await import(
-      "../../src/tools/ask-browserstack/relay.js"
-    );
+    const { buildResult, RELAY_ON_DETAIL, nobodyAnswered } =
+      await import("../../src/tools/ask-browserstack/relay.js");
     expect(
       nobodyAnswered([
         { description: "x", decision: "deny", reason: "declined" },
@@ -361,8 +378,14 @@ describe("the relay never claims a person answered when none did", () => {
         status: 200,
         body: {
           status: "blocked",
-          approvals: [{ description: "x", decision: "deny", reason: "declined",
-                        applied: false }],
+          approvals: [
+            {
+              description: "x",
+              decision: "deny",
+              reason: "declined",
+              applied: false,
+            },
+          ],
           permission_relay: { used: true, reason: "" },
         },
       },
@@ -375,12 +398,14 @@ describe("the relay never claims a person answered when none did", () => {
 
   it("does not fire on an empty trail", async () => {
     // Nothing asked at all is a different state, already described correctly.
-    const { nobodyAnswered } = await import("../../src/tools/ask-browserstack/relay.js");
+    const { nobodyAnswered } =
+      await import("../../src/tools/ask-browserstack/relay.js");
     expect(nobodyAnswered([])).toBe(false);
   });
 
   it("does not fire when one ask was allowed", async () => {
-    const { nobodyAnswered } = await import("../../src/tools/ask-browserstack/relay.js");
+    const { nobodyAnswered } =
+      await import("../../src/tools/ask-browserstack/relay.js");
     expect(
       nobodyAnswered([
         { description: "a", decision: "allow", reason: "" },
@@ -397,9 +422,8 @@ describe("an auth outage is not a credential problem", () => {
     // BROWSERSTACK_ACCESS_KEY" — sending someone to audit env vars that had worked
     // minutes earlier. The reader asked "is preprod down?", which was right, and the
     // message argued against it.
-    const { AUTH_SERVER_ERROR_DETAIL, mintCentralToken } = await import(
-      "../../src/tools/ask-browserstack/central-oauth.js"
-    );
+    const { AUTH_SERVER_ERROR_DETAIL, mintCentralToken } =
+      await import("../../src/tools/ask-browserstack/central-oauth.js");
 
     for (const status of [500, 502, 503, 504]) {
       const transport = vi.fn(async () => ({ status, body: null }));
@@ -421,9 +445,8 @@ describe("an auth outage is not a credential problem", () => {
   it("still blames the credentials on a 401", async () => {
     // The split must not make a genuine rejection sound like an outage: those need
     // opposite actions from the reader.
-    const { mintCentralToken } = await import(
-      "../../src/tools/ask-browserstack/central-oauth.js"
-    );
+    const { mintCentralToken } =
+      await import("../../src/tools/ask-browserstack/central-oauth.js");
     const transport = vi.fn(async () => ({
       status: 401,
       body: { error: "invalid_client" },
@@ -448,17 +471,19 @@ describe("deferred — the two-call shape", () => {
   };
 
   it("parks on the first ask and hands back what the second call needs", async () => {
-    const { runDeferred } = await import(
-      "../../src/tools/ask-browserstack/deferred.js"
-    );
+    const { runDeferred } =
+      await import("../../src/tools/ask-browserstack/deferred.js");
     const transport = vi.fn(async () => ({
       status: 200,
       body: { status: "needs_approval", run_id: "run-1", asks: [ASK] },
     }));
     const result = await runDeferred(
-      "https://atlas.example/agent", HEADERS,
+      "https://atlas.example/agent",
+      HEADERS,
       { task: "make one", product: "tm" },
-      transport as never, "deferred", "tm",
+      transport as never,
+      "deferred",
+      "tm",
     );
     expect(result.status).toBe("needs_approval");
     expect(result.ok).toBe(false);
@@ -473,15 +498,21 @@ describe("deferred — the two-call shape", () => {
     // Points at a structured affordance WITHOUT naming one: the tool differs per
     // client, and a name here would be wrong everywhere else and would rot.
     expect(String(result.answer)).toContain("structured question");
-    expect(String(result.answer)).not.toMatch(/AskUserQuestion|Claude Code|elicit/i);
+    expect(String(result.answer)).not.toMatch(
+      /AskUserQuestion|Claude Code|elicit/i,
+    );
     // `next_step` carries the arguments, so "I did not know what to send" is not a
     // reason to improvise.
     expect(result.next_step?.call).toBe("askBrowserStackAI");
     expect(result.next_step?.params).toMatchObject({
-      product: "tm", run_id: "run-1", perm_id: ASK.perm_id,
+      product: "tm",
+      run_id: "run-1",
+      perm_id: ASK.perm_id,
     });
     expect(result.next_step?.params.decision).toContain("the user's answer");
-    expect(result.next_step?.instruction).toContain("AFTER the user has answered");
+    expect(result.next_step?.instruction).toContain(
+      "AFTER the user has answered",
+    );
   });
 
   it("a decision whose reply never came back is not reported as never sent", async () => {
@@ -489,15 +520,20 @@ describe("deferred — the two-call shape", () => {
     // everything from "it never arrived" to "the write landed and the answer was lost".
     // Reporting `not_reached` — "NOTHING WAS ASKED AND NOTHING WAS REFUSED" — is the
     // claim that gets the same change made a second time.
-    const { runResumed } = await import(
-      "../../src/tools/ask-browserstack/deferred.js"
-    );
+    const { runResumed } =
+      await import("../../src/tools/ask-browserstack/deferred.js");
     const post = vi.fn(async () => {
       throw new Error("socket hang up");
     });
     const result = await runResumed(
-      "https://atlas.example/agent", HEADERS, "run-1", ASK.perm_id, "allow",
-      post as never, "deferred", "tm",
+      "https://atlas.example/agent",
+      HEADERS,
+      "run-1",
+      ASK.perm_id,
+      "allow",
+      post as never,
+      "deferred",
+      "tm",
     );
     expect(result.permission_relay.reason).toBe("outcome_unknown");
     expect(result.permission_relay.reason).not.toBe("not_reached");
@@ -511,33 +547,40 @@ describe("deferred — the two-call shape", () => {
   });
 
   it("a read-only task still costs one call, not two", async () => {
-    const { runDeferred } = await import(
-      "../../src/tools/ask-browserstack/deferred.js"
-    );
+    const { runDeferred } =
+      await import("../../src/tools/ask-browserstack/deferred.js");
     const transport = vi.fn(async () => ({
       status: 200,
       body: { ok: true, status: "ok", answer: "you have 3 projects" },
     }));
     const result = await runDeferred(
-      "https://atlas.example/agent", HEADERS,
+      "https://atlas.example/agent",
+      HEADERS,
       { task: "list them", product: "tm" },
-      transport as never, "deferred", "tm",
+      transport as never,
+      "deferred",
+      "tm",
     );
     expect(result.status).toBe("ok");
     expect(result.run_id).toBeUndefined();
   });
 
   it("delivers the decision and returns the continuation, in ONE call", async () => {
-    const { runResumed } = await import(
-      "../../src/tools/ask-browserstack/deferred.js"
-    );
+    const { runResumed } =
+      await import("../../src/tools/ask-browserstack/deferred.js");
     const post = vi.fn(async () => ({
       status: 200,
       body: { ok: true, status: "ok", answer: "made it" },
     }));
     const result = await runResumed(
-      "https://atlas.example/agent", HEADERS, "run-1", ASK.perm_id, "allow",
-      post as never, "deferred", "tm",
+      "https://atlas.example/agent",
+      HEADERS,
+      "run-1",
+      ASK.perm_id,
+      "allow",
+      post as never,
+      "deferred",
+      "tm",
     );
     // ONE request, to the run's own endpoint, naming WHICH ask — and carrying the
     // product, because the run resumes on a fresh Agent that must be scoped first.
@@ -545,25 +588,44 @@ describe("deferred — the two-call shape", () => {
     expect(post).toHaveBeenCalledWith(
       "https://atlas.example/agent/run-1/permission",
       HEADERS,
-      { perm_id: ASK.perm_id, decision: "allow", reason: "", product: "tm" },
+      {
+        perm_id: ASK.perm_id,
+        decision: "allow",
+        reason: "",
+        product: "tm",
+        contract: 3,
+      },
     );
     expect(result.status).toBe("ok");
     expect(result.answer).toBe("made it");
   });
 
   it("parks AGAIN when the resumed run needs a second approval", async () => {
-    const { runResumed } = await import(
-      "../../src/tools/ask-browserstack/deferred.js"
-    );
-    const second = { ...ASK, perm_id: "perm-" + "d".repeat(32),
-                     description: "Adding the first test run" };
+    const { runResumed } =
+      await import("../../src/tools/ask-browserstack/deferred.js");
+    const second = {
+      ...ASK,
+      perm_id: "perm-" + "d".repeat(32),
+      description: "Adding the first test run",
+    };
     const post = vi.fn(async () => ({
       status: 200,
-      body: { ok: false, status: "needs_approval", run_id: "run-1", asks: [second] },
+      body: {
+        ok: false,
+        status: "needs_approval",
+        run_id: "run-1",
+        asks: [second],
+      },
     }));
     const result = await runResumed(
-      "https://atlas.example/agent", HEADERS, "run-1", ASK.perm_id, "allow",
-      post as never, "deferred", "tm",
+      "https://atlas.example/agent",
+      HEADERS,
+      "run-1",
+      ASK.perm_id,
+      "allow",
+      post as never,
+      "deferred",
+      "tm",
     );
     // Handed straight back, not answered here: each approval is a human's to give.
     expect(result.status).toBe("needs_approval");
@@ -572,13 +634,21 @@ describe("deferred — the two-call shape", () => {
   });
 
   it("a 404 says the approval did not apply, and never reads as one", async () => {
-    const { runResumed } = await import(
-      "../../src/tools/ask-browserstack/deferred.js"
-    );
-    const post = vi.fn(async () => ({ status: 404, body: { detail: "no such run" } }));
+    const { runResumed } =
+      await import("../../src/tools/ask-browserstack/deferred.js");
+    const post = vi.fn(async () => ({
+      status: 404,
+      body: { detail: "no such run" },
+    }));
     const result = await runResumed(
-      "https://atlas.example/agent", HEADERS, "run-1", ASK.perm_id, "allow",
-      post as never, "deferred", "tm",
+      "https://atlas.example/agent",
+      HEADERS,
+      "run-1",
+      ASK.perm_id,
+      "allow",
+      post as never,
+      "deferred",
+      "tm",
     );
     expect(result.status).toBe("error");
     expect(result.ok).toBe(false);
@@ -588,25 +658,30 @@ describe("deferred — the two-call shape", () => {
   });
 
   it("a denial is delivered as faithfully as an approval", async () => {
-    const { runResumed } = await import(
-      "../../src/tools/ask-browserstack/deferred.js"
-    );
+    const { runResumed } =
+      await import("../../src/tools/ask-browserstack/deferred.js");
     const post = vi.fn(async () => ({
-      status: 200, body: { ok: false, status: "blocked", error: "not approved" },
+      status: 200,
+      body: { ok: false, status: "blocked", error: "not approved" },
     }));
     await runResumed(
-      "https://atlas.example/agent", HEADERS, "run-1", ASK.perm_id, "deny",
-      post as never, "deferred", "tm",
+      "https://atlas.example/agent",
+      HEADERS,
+      "run-1",
+      ASK.perm_id,
+      "deny",
+      post as never,
+      "deferred",
+      "tm",
     );
-    expect((post.mock.calls[0] as never as unknown[])[2]).toMatchObject(
-      { decision: "deny" },
-    );
+    expect((post.mock.calls[0] as never as unknown[])[2]).toMatchObject({
+      decision: "deny",
+    });
   });
 
   it("a resume missing its arguments changes nothing and says which", async () => {
-    const { incompleteResume } = await import(
-      "../../src/tools/ask-browserstack/deferred.js"
-    );
+    const { incompleteResume } =
+      await import("../../src/tools/ask-browserstack/deferred.js");
     const result = incompleteResume();
     expect(result.ok).toBe(false);
     expect(String(result.error)).toContain("`perm_id`");

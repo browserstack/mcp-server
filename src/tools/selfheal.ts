@@ -1,3 +1,4 @@
+import { isNotFoundError } from "../lib/error.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
@@ -16,6 +17,9 @@ import logger from "../logger.js";
 import { trackMCP } from "../lib/instrumentation.js";
 import { BrowserStackConfig } from "../lib/types.js";
 import { NEEDS_SESSION_ID } from "./tool-handoff.js";
+import { isHashedBuildId } from "./automate-utils/resolve-hashed-build-id.js";
+import { mapHashedToTra } from "./automate-utils/resolve-tra-build-id.js";
+import { wrapUntrusted } from "../lib/untrusted-content.js";
 
 // Local helper: returns the server-configured BrowserStack credentials, or
 // null when either is missing. Lives here because the self-heal tools need
@@ -272,7 +276,10 @@ export async function fetchSelfHealSelectorTool(
             text:
               banner +
               "Self-heal selectors fetched successfully (sessionId log-parse mode):\n" +
-              JSON.stringify(selectors, null, 2) +
+              wrapUntrusted(
+                "self-heal selectors",
+                JSON.stringify(selectors, null, 2),
+              ) +
               (testCodeContext
                 ? "\n\nThe following test code was found for this session. " +
                   "Use it to understand the test intent and make more accurate " +
@@ -284,10 +291,18 @@ export async function fetchSelfHealSelectorTool(
       };
     }
 
-    const report = await fetchSelfHealingReportByBuild(
-      buildUuid!,
-      effectiveConfig,
-    );
+    let report;
+    try {
+      report = await fetchSelfHealingReportByBuild(buildUuid!, effectiveConfig);
+    } catch (error) {
+      if (!isNotFoundError(error) || !isHashedBuildId(buildUuid!)) throw error;
+      const { traBuildId } = await mapHashedToTra(
+        buildUuid!,
+        error,
+        effectiveConfig,
+      );
+      report = await fetchSelfHealingReportByBuild(traBuildId, effectiveConfig);
+    }
 
     // Extract unique session IDs from the healing report and fetch test code
     const sessionIds = Array.from(
@@ -315,7 +330,10 @@ export async function fetchSelfHealSelectorTool(
             "pass `healed_selectors[]` to `prepareSelfHealingPlan` so the " +
             "caller can apply the edits with its own file-editing " +
             "tools (this server never writes files).\n" +
-            JSON.stringify(report, null, 2) +
+            wrapUntrusted(
+              "self-healing report",
+              JSON.stringify(report, null, 2),
+            ) +
             (testCodeContext
               ? "\n\nThe following test code was found for sessions in this build. " +
                 "Use it to understand the test intent, locate the exact files " +
@@ -482,7 +500,10 @@ export async function prepareSelfHealingPlanTool(
             "No applicable locator pairs found in the provided sessions. " +
             "Every entry was missing values or had identical original/healed " +
             "locators.\n" +
-            JSON.stringify({ skipped }, null, 2),
+            wrapUntrusted(
+              "skipped locator pairs",
+              JSON.stringify({ skipped }, null, 2),
+            ),
         },
       ],
     };
@@ -543,7 +564,7 @@ export async function prepareSelfHealingPlanTool(
 
   const skippedNote =
     skipped.length > 0
-      ? `\n\n## Skipped locator pairs\n\n${JSON.stringify(skipped, null, 2)}`
+      ? `\n\n## Skipped locator pairs\n\n${wrapUntrusted("skipped locator pairs", JSON.stringify(skipped, null, 2))}`
       : "";
 
   return {
@@ -552,7 +573,7 @@ export async function prepareSelfHealingPlanTool(
         type: "text",
         text:
           warningBanner +
-          `${PLAN_INSTRUCTIONS}\n\n## Plan\n\n${JSON.stringify(plannedSessions, null, 2)}` +
+          `${PLAN_INSTRUCTIONS}\n\n## Plan\n\n${wrapUntrusted("self-healing plan", JSON.stringify(plannedSessions, null, 2))}` +
           skippedNote,
       },
     ],
@@ -581,7 +602,7 @@ export default function addSelfHealTools(
         .optional(),
       buildUuid: z
         .string()
-        .describe("Build UUID. Fetches the build's self-healing report.")
+        .describe("TRA build id (listBuildId). Fetches its healing report.")
         .optional(),
     },
     {

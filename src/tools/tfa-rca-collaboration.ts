@@ -30,6 +30,8 @@ import {
   fetchTestsInFailureTheme,
   ListTestsInFailureThemeArgs,
 } from "./tfa-rca-utils/build-failure-themes.js";
+import { bindAccountRegion } from "../lib/tool-latency.js";
+import { wrapUntrusted } from "../lib/untrusted-content.js";
 
 const TOOL_NAME = "tfaRcaTurn";
 const GET_RESULT_TOOL_NAME = "getTfaTurnResult";
@@ -63,7 +65,7 @@ export async function tfaRcaTurnTool(
     content: [
       {
         type: "text",
-        text: JSON.stringify(result, null, 2),
+        text: wrapUntrusted("RCA turn result", JSON.stringify(result, null, 2)),
       },
     ],
   };
@@ -79,7 +81,7 @@ export async function getTfaTurnResultTool(
     content: [
       {
         type: "text",
-        text: JSON.stringify(result, null, 2),
+        text: wrapUntrusted("RCA turn result", JSON.stringify(result, null, 2)),
       },
     ],
   };
@@ -94,7 +96,10 @@ export async function triggerRcaReportTool(
     content: [
       {
         type: "text",
-        text: JSON.stringify(glimpse, null, 2),
+        text: wrapUntrusted(
+          "RCA report glimpse",
+          JSON.stringify(glimpse, null, 2),
+        ),
       },
     ],
   };
@@ -109,7 +114,10 @@ export async function getBuildFailureThemesTool(
     content: [
       {
         type: "text",
-        text: JSON.stringify(result, null, 2),
+        text: wrapUntrusted(
+          "build failure themes",
+          JSON.stringify(result, null, 2),
+        ),
       },
     ],
   };
@@ -124,7 +132,10 @@ export async function listTestsInFailureThemeTool(
     content: [
       {
         type: "text",
-        text: JSON.stringify(result, null, 2),
+        text: wrapUntrusted(
+          "failure theme tests",
+          JSON.stringify(result, null, 2),
+        ),
       },
     ],
   };
@@ -294,5 +305,7 @@ export default function addTfaRcaCollaborationTools(
     },
   );
 
+  // Registered by the hosted wrapper after the server is built, so bind them here too.
+  bindAccountRegion(tools, config);
   return tools;
 }

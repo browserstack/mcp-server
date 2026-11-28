@@ -53,9 +53,9 @@ export interface Selection {
 }
 
 export interface Narrowing {
-  /** Rows the product sent. */
+  /** Rows the product sent — or, on a single record, the fields it carried. */
   from: number;
-  /** Rows being handed back. */
+  /** Rows being handed back — or, on a single record, the fields kept. */
   to: number;
   /** Echoed so the answer carries the question — a narrowed body is not self-describing. */
   by: Selection;
@@ -65,7 +65,7 @@ function isSelectionEmpty(selection: Selection): boolean {
   return (
     !selection.where &&
     !selection.distinct &&
-    !selection.fields &&
+    !selection.fields?.length &&
     selection.limit === undefined
   );
 }
@@ -83,11 +83,26 @@ function rowsAt(
   return Array.isArray(here) ? here : undefined;
 }
 
-/** The body with its array replaced, leaving every sibling key as the product sent it. */
+/** The one object inside a body, by the capability's declared path. */
+function recordAt(
+  body: unknown,
+  path: string | undefined,
+): Record<string, unknown> | undefined {
+  let here: unknown = body;
+  for (const step of (path ?? "").split(".").filter(Boolean)) {
+    if (typeof here !== "object" || here === null) return undefined;
+    here = (here as Record<string, unknown>)[step];
+  }
+  return typeof here === "object" && here !== null && !Array.isArray(here)
+    ? (here as Record<string, unknown>)
+    : undefined;
+}
+
+/** The body with its array (or record) replaced, leaving every sibling key as sent. */
 function withRows(
   body: unknown,
   path: string | undefined,
-  rows: unknown[],
+  rows: unknown,
 ): unknown {
   const steps = (path ?? "").split(".").filter(Boolean);
   if (steps.length === 0) return rows;
@@ -154,6 +169,20 @@ export function assertSelectable(
         "sent. describeCapability names the ones that do, under `narrowable`.",
     );
   const allowed = declared.fields;
+  if (declared.record) {
+    // ONE RECORD HAS NO ROWS. Refused by name rather than silently ignored: a `where`
+    // that did nothing would hand back the whole record and read as a match.
+    const rowOnly = [
+      selection.where ? "`where`" : undefined,
+      selection.distinct ? "`distinct`" : undefined,
+      selection.limit !== undefined ? "`limit`" : undefined,
+    ].filter((s): s is string => Boolean(s));
+    if (rowOnly.length > 0)
+      throw new InvocationError(
+        `this capability returns one record, not rows, so ${rowOnly.join(", ")} ` +
+          `cannot apply. Use \`fields\` to keep only the ones you need: ${allowed.join(", ")}.`,
+      );
+  }
   assertKnownFields(Object.keys(selection.where ?? {}), allowed, "`where`");
   assertKnownFields(selection.distinct ?? [], allowed, "`distinct`");
   assertKnownFields(selection.fields ?? [], allowed, "`fields`");
@@ -167,6 +196,24 @@ export function narrowResponse(
   if (!selection || isSelectionEmpty(selection)) return undefined;
   assertSelectable(capability, selection);
   const declared = capability.narrowable!;
+
+  if (declared.record) {
+    // A single record: keep the named fields, in the order they were asked for. A body
+    // that is not an object at the declared path is handed back whole, same as below.
+    const record = recordAt(body, declared.path);
+    if (!record) return undefined;
+    const kept = Object.fromEntries(
+      (selection.fields ?? []).map((field) => [field, record[field]]),
+    );
+    return {
+      body: withRows(body, declared.path, kept),
+      narrowing: {
+        from: Object.keys(record).length,
+        to: Object.keys(kept).length,
+        by: selection,
+      },
+    };
+  }
 
   const rows = rowsAt(body, declared.path);
   // A body that is not the shape the capability promised is handed back whole. Narrowing

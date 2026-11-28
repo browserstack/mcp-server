@@ -37,6 +37,13 @@ export class InvocationError extends Error {
    * whether withholding it was the right call.
    */
   withheld?: boolean;
+  /**
+   * Set when the refusal is a failed token mint, with central auth's classification of
+   * why. The message already says it in prose; the field keeps it countable: refused
+   * credentials are the caller's, a refused scope is our provisioning, an unreachable
+   * auth server is the platform's.
+   */
+  authKind?: string;
 }
 
 /** The file inside a product subdirectory, for the earlier nested layout. */
@@ -78,7 +85,19 @@ export function endpointKey(method: string, path: string): string {
  */
 export function isDisabled(capability: Capability): boolean {
   if (capability.disabled) return true;
+  if (isWriteWithheld(capability)) return true;
   return Boolean(capability.local_only) && Boolean(appConfig.REMOTE_MCP);
+}
+
+/** CAPABILITY_REGISTRY_READ_ONLY=true withholds every capability that is not a read. */
+export function isReadOnly(): boolean {
+  return (
+    (process.env.CAPABILITY_REGISTRY_READ_ONLY || "").toLowerCase() === "true"
+  );
+}
+
+function isWriteWithheld(capability: Capability): boolean {
+  return isReadOnly() && capability.mode !== "read";
 }
 
 /**
@@ -90,7 +109,7 @@ export function isDisabled(capability: Capability): boolean {
  * question it was asked.
  */
 export function isReferenceOnly(capability: Capability): boolean {
-  if (capability.disabled) return false;
+  if (capability.disabled || isWriteWithheld(capability)) return false;
   return Boolean(capability.local_only) && Boolean(appConfig.REMOTE_MCP);
 }
 

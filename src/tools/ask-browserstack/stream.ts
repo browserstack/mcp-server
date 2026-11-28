@@ -27,6 +27,7 @@ import { apiClient } from "../../lib/apiClient.js";
 import logger from "../../logger.js";
 import { AskError } from "./config.js";
 import type { AgentRequest, PermissionAsk } from "./types.js";
+import { trackedFetch } from "../../lib/upstream-status.js";
 
 /** One SSE frame, already parsed. `data` is whatever JSON the frame carried. */
 export interface StreamEvent {
@@ -63,10 +64,12 @@ export const EVENT_RESULT = "result";
  * Bump only when a change leaves an older client unable to COMPLETE the exchange —
  * not merely unaware of a new field.
  */
-export const RELAY_CONTRACT = 2;
+// 3: agents and conversation continuity. An older server reads it as 2.
+export const RELAY_CONTRACT = 3;
 
 /** Atlas's `f"perm-{uuid.uuid4().hex}"`, and nothing else. */
-export const PERM_ID_PATTERN = /^perm-[0-9a-f]{32}$/;
+// `wf-` is an approval asked by an agent.
+export const PERM_ID_PATTERN = /^(perm|wf)-[0-9a-f]{32}$/;
 
 /**
  * Read an ask out of a `permission` frame's data, or return null.
@@ -121,6 +124,8 @@ export interface DecisionBody {
   decision: string;
   reason: string;
   product: string;
+  /** Echoed so a resume keeps the wire the run started on. */
+  contract?: number;
 }
 
 /**
@@ -193,7 +198,7 @@ export function fetchAgentStreamTransport(
         try {
           let response: Response;
           try {
-            response = await fetch(url, {
+            response = await trackedFetch(url, {
               method: "POST",
               headers: { ...headers, Accept: "text/event-stream" },
               body: JSON.stringify(body),

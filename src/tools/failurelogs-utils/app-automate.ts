@@ -23,12 +23,17 @@ export interface AppLogOptions {
   throwOnNotFound?: boolean;
 }
 
+export interface DeviceLogOptions extends AppLogOptions {
+  /** Return lines containing this keyword (case-insensitive) instead of crash-only output. */
+  filter?: string;
+}
+
 // DEVICE LOGS
 export async function retrieveDeviceLogs(
   sessionId: string,
   buildId: string,
   config: BrowserStackConfig,
-  options: AppLogOptions = {},
+  options: DeviceLogOptions = {},
 ): Promise<string> {
   const url = `${getRegionalHost("appAutomateApi")}/app-automate/builds/${encodePathSegment(buildId, "buildId")}/sessions/${encodePathSegment(sessionId, "sessionId")}/devicelogs`;
   const authString = getBrowserStackAuth(config);
@@ -56,6 +61,15 @@ export async function retrieveDeviceLogs(
     typeof response.data === "string"
       ? response.data
       : JSON.stringify(response.data);
+
+  const keyword = options.filter?.trim();
+  if (keyword) {
+    const lines = filterLinesByKeywords(logText, [keyword.toLowerCase()]);
+    return lines.length > 0
+      ? `Device Logs matching "${keyword}" (${lines.length} found):\n${wrapUntrusted("device logs", JSON.stringify(lines, null, 2))}`
+      : `No device log lines matching "${keyword}"`;
+  }
+
   const logs = filterDeviceFailures(logText);
   return logs.length > 0
     ? `Device Failures (${logs.length} found):\n${wrapUntrusted("device logs", JSON.stringify(logs, null, 2))}`

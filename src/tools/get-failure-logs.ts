@@ -70,6 +70,7 @@ export async function getFailureLogs(
     buildId?: string;
     logTypes: LogType[];
     sessionType: SessionTypeValues;
+    deviceLogFilter?: string;
   },
   config: BrowserStackConfig,
 ): Promise<CallToolResult> {
@@ -250,6 +251,7 @@ export async function getFailureLogs(
           response = await appLogs(logType, () =>
             retrieveDeviceLogs(args.sessionId, buildId!, config, {
               throwOnNotFound: true,
+              filter: args.deviceLogFilter,
             }),
           );
           results.push({ type: "text", text: response });
@@ -338,6 +340,12 @@ export default function registerGetFailureLogs(
           ]),
         )
         .describe("The types of logs to fetch."),
+      deviceLogFilter: z
+        .string()
+        .optional()
+        .describe(
+          "deviceLogs only: case-insensitive text; return only lines containing it, instead of error lines.",
+        ),
     },
     {
       title: "Get Failure Logs",

@@ -460,6 +460,19 @@ describe('BrowserStack Failure Logs', () => {
       }
     });
 
+    it('forwards deviceLogFilter in the options passed to retrieveDeviceLogs', async () => {
+      const mockServer = { server: { getClientVersion: () => "test-version" } };
+      await getFailureLogs({
+        sessionId: mockSessionId,
+        buildId: mockBuildId,
+        logTypes: ['deviceLogs'],
+        sessionType: 'app-automate',
+        deviceLogFilter: 'analyticsInterceptor'
+      }, mockServer);
+
+      expect(appAutomate.retrieveDeviceLogs).toHaveBeenCalledWith(mockSessionId, mockBuildId, mockServer, { throwOnNotFound: true, filter: 'analyticsInterceptor' });
+    });
+
     it('should fetch appium logs successfully', async () => {
       const mockServer = { server: { getClientVersion: () => "test-version" } };
       const result = await getFailureLogs({
